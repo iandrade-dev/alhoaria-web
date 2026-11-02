@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ShoppingBag, MapPin, Clock, Flame } from "lucide-react";
+import { ShoppingBag, MapPin, Clock, Flame, Sparkles } from "lucide-react";
 import { useCart } from "@/store/useCart";
 
 export default function Header() {
@@ -85,6 +85,10 @@ export default function Header() {
         {/* Navigation & Cart button */}
         <div className="flex items-center gap-3 sm:gap-4">
           <nav className="hidden sm:flex items-center gap-6 text-sm font-medium text-osso-muted">
+            <a href="#monte-ao-vivo" className="text-ouro hover:text-macarico transition-colors flex items-center gap-1 font-semibold">
+              <Sparkles className="w-3.5 h-3.5 text-macarico" />
+              Monte em 3D
+            </a>
             <a href="#cardapio" className="hover:text-osso transition-colors">
               Cardápio
             </a>

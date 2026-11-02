@@ -5,6 +5,7 @@ import CartDrawer from "@/components/CartDrawer";
 import Footer from "@/components/Footer";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://alhoaria-web.vercel.app"),
   title: "Alhoaria — Lanches no Pão de Alho · Palhoça e São José",
   description:
     "Sanduíches artesanais no pão de alho recheados com costela 6h, queijo gratinado no maçarico, burgers, Mac Cheese e chopp Lohn. Pedra Branca e Kobrasol.",

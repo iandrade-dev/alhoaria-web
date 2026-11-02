@@ -1,8 +1,9 @@
 import React from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Flame, ArrowRight, Sparkles, Utensils, MessageCircle } from "lucide-react";
+import { Flame, ArrowRight, Sparkles, Utensils, MessageCircle, Layers } from "lucide-react";
 import Hero3D from "@/components/Hero3D";
+import SandwichKitchen from "@/components/SandwichKitchen";
 import MenuSection from "@/components/MenuSection";
 import LohnSection from "@/components/LohnSection";
 import UnitsSection from "@/components/UnitsSection";
@@ -133,6 +134,9 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* Live 3D Sandwich Assembly Kitchen with Physics */}
+      <SandwichKitchen />
 
       {/* Main Interactive Menu */}
       <MenuSection />
