@@ -3,6 +3,7 @@ import "./globals.css";
 import Header from "@/components/Header";
 import CartDrawer from "@/components/CartDrawer";
 import Footer from "@/components/Footer";
+import StickyCartBar from "@/components/StickyCartBar";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://alhoaria-web.vercel.app"),
@@ -29,10 +30,10 @@ export const metadata: Metadata = {
     siteName: "Alhoaria",
     images: [
       {
-        url: "/refs/menu-header.jpg",
-        width: 1200,
-        height: 630,
-        alt: "Alhoaria Pão de Alho de Costela",
+        url: "/assets/posters/alhoaria-costela-hero-w1600.webp",
+        width: 1600,
+        height: 1600,
+        alt: "Pão de alho da Costela, aberto, com costela desfiada e queijo",
       },
     ],
     locale: "pt_BR",
@@ -47,11 +48,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR" className="scroll-smooth">
-      <body className="bg-carvao text-osso antialiased min-h-screen flex flex-col selection:bg-macarico selection:text-white">
+      <body className="flex min-h-screen flex-col bg-carvao text-osso antialiased selection:bg-macarico selection:text-carvao">
         <Header />
         <main className="flex-1">{children}</main>
-        <CartDrawer />
         <Footer />
+        <StickyCartBar />
+        <CartDrawer />
       </body>
     </html>
   );

@@ -1,66 +1,77 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import Image from "next/image";
-import { X, Check, Plus, Minus, Flame, Box, ShoppingBag } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { X } from "lucide-react";
 import { MenuItem } from "./ProductCard";
 import { useCart } from "@/store/useCart";
+import { formatBRL } from "@/lib/money";
+import FoodMedia from "./FoodMedia";
+import DrawerDialog from "./DrawerDialog";
+import { useNarrowScreen } from "./useNarrowScreen";
 
 interface ProductDrawerProps {
   item: MenuItem | null;
   onClose: () => void;
 }
 
+const choiceClass = (active: boolean, tone: "macarico" | "ouro") =>
+  `flex min-h-11 cursor-pointer items-center rounded border px-3 py-2 text-left text-sm font-semibold focus-within:border-osso ${
+    active
+      ? tone === "ouro"
+        ? "border-ouro bg-ouro/10 text-osso"
+        : "border-macarico bg-macarico/15 text-osso"
+      : "border-carvao-borda bg-carvao-leve text-osso"
+  }`;
+
 export default function ProductDrawer({ item, onClose }: ProductDrawerProps) {
   const { addItem } = useCart();
+  const narrow = useNarrowScreen();
+  const [shown, setShown] = useState<MenuItem | null>(item);
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState("");
-
-  // Mac Cheese configurator states
-  const [selectedPasta, setSelectedPasta] = useState<string>("");
-  const [selectedSauce, setSelectedSauce] = useState<string>("");
+  const [selectedPasta, setSelectedPasta] = useState("");
+  const [selectedSauce, setSelectedSauce] = useState("");
   const [selectedProteins, setSelectedProteins] = useState<string[]>([]);
 
   useEffect(() => {
-    if (item) {
-      setQuantity(1);
-      setNotes("");
-      if (item.options?.pasta?.[0]) setSelectedPasta(item.options.pasta[0]);
-      if (item.options?.sauce?.[0]) setSelectedSauce(item.options.sauce[0]);
-      setSelectedProteins([]);
-    }
+    if (!item) return;
+    setShown(item);
+    setQuantity(1);
+    setNotes("");
+    setSelectedPasta(item.options?.pasta?.[0] ?? "");
+    setSelectedSauce(item.options?.sauce?.[0] ?? "");
+    setSelectedProteins([]);
   }, [item]);
 
-  if (!item) return null;
+  const current = item ?? shown;
+  if (!current) return null;
 
-  // Calculate dynamic unit price
-  let currentUnitPrice = item.price;
-  if (item.isConfigurable && item.options?.proteins) {
-    const proteinSum = selectedProteins.reduce((sum, pName) => {
-      const match = item.options?.proteins?.find((p) => p.name === pName);
+  let currentUnitPrice = current.price;
+  if (current.isConfigurable && current.options?.proteins) {
+    currentUnitPrice += selectedProteins.reduce((sum, proteinName) => {
+      const match = current.options?.proteins?.find((protein) => protein.name === proteinName);
       return sum + (match?.price || 0);
     }, 0);
-    currentUnitPrice += proteinSum;
   }
   const totalPrice = currentUnitPrice * quantity;
 
   const toggleProtein = (proteinName: string) => {
-    if (selectedProteins.includes(proteinName)) {
-      setSelectedProteins(selectedProteins.filter((p) => p !== proteinName));
-    } else {
-      setSelectedProteins([...selectedProteins, proteinName]);
-    }
+    setSelectedProteins((currentNames) =>
+      currentNames.includes(proteinName)
+        ? currentNames.filter((name) => name !== proteinName)
+        : [...currentNames, proteinName]
+    );
   };
 
   const handleAddToCart = () => {
     addItem({
-      itemId: item.id,
-      name: item.name,
+      itemId: current.id,
+      name: current.name,
       unitPrice: currentUnitPrice,
       quantity,
-      image: item.image,
+      image: current.image,
       notes: notes.trim(),
-      configuration: item.isConfigurable
+      configuration: current.isConfigurable
         ? {
             pasta: selectedPasta,
             sauce: selectedSauce,
@@ -72,219 +83,184 @@ export default function ProductDrawer({ item, onClose }: ProductDrawerProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4 overflow-y-auto">
-      {/* Backdrop click to dismiss */}
-      <div className="fixed inset-0" onClick={onClose} />
+    <DrawerDialog
+      open={item !== null}
+      onClose={onClose}
+      labelledBy="product-drawer-title"
+      placement={narrow ? "sheet" : "center"}
+    >
+      <div className="flex items-center justify-between border-b border-carvao-borda px-4 py-2">
+        <h2
+          id="product-drawer-title"
+          className="font-display text-lg uppercase tracking-wide text-osso"
+        >
+          {current.name}
+        </h2>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Fechar"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded text-osso-muted"
+        >
+          <X className="h-5 w-5" aria-hidden />
+        </button>
+      </div>
 
-      {/* Drawer Card */}
-      <div className="relative w-full sm:max-w-xl max-h-[90vh] bg-carvao border border-carvao-borda rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col z-10 animate-in slide-in-from-bottom-8 duration-300">
-        {/* Header bar / Close */}
-        <div className="sticky top-0 z-20 flex items-center justify-between px-5 py-3.5 bg-carvao/95 border-b border-carvao-borda backdrop-blur-md">
-          <div className="flex items-center gap-2">
-            <span className="font-display uppercase text-base text-osso tracking-wide">
-              Detalhes do Item
-            </span>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-white/10 text-osso-muted hover:text-osso transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-5 sm:px-5">
+        <div className="relative h-56 overflow-hidden rounded-xl border border-carvao-borda bg-madeira-escura sm:h-64">
+          <FoodMedia
+            src={current.image}
+            name={current.name}
+            alt={current.image ? current.name : ""}
+            fill
+            sizes="(max-width: 640px) 100vw, 576px"
+            className="object-cover"
+          />
         </div>
 
-        {/* Scrollable Content */}
-        <div className="p-5 sm:p-6 overflow-y-auto space-y-6">
-          {/* Item Image with Torch Badge */}
-          <div className="relative w-full h-56 sm:h-64 rounded-2xl overflow-hidden bg-black/60 border border-carvao-borda">
-            <Image
-              src={item.image}
-              alt={item.name}
-              fill
-              className="object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-carvao via-transparent to-transparent opacity-90" />
-            <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
-              <span className="px-3 py-1 rounded-full bg-carvao/90 border border-ouro/40 text-xs font-semibold text-ouro backdrop-blur-md flex items-center gap-1.5">
-                <Flame className="w-3.5 h-3.5 text-macarico" />
-                Receita Artesanal da Casa
-              </span>
-            </div>
+        <p className="text-sm leading-relaxed text-osso-muted">{current.description}</p>
+
+        {current.ingredients && current.ingredients.length > 0 && (
+          <div className="rounded-lg border border-carvao-borda bg-carvao-leve p-4">
+            <h3 className="text-sm font-semibold text-osso">Vai no lanche</h3>
+            <ul className="mt-2 space-y-1 text-sm text-osso">
+              {current.ingredients.map((ingredient) => (
+                <li key={ingredient}>{ingredient}</li>
+              ))}
+            </ul>
           </div>
+        )}
 
-          {/* Title & Description */}
-          <div>
-            <h2 className="font-display text-2xl sm:text-3xl uppercase tracking-wide text-osso mb-2">
-              {item.name}
-            </h2>
-            <p className="text-sm text-osso-muted leading-relaxed">
-              {item.description}
-            </p>
-          </div>
+        {current.isConfigurable && current.options && (
+          <div className="space-y-5 border-t border-carvao-borda pt-5">
+            <h3 className="font-display text-lg uppercase tracking-wide text-osso">
+              Monte o seu mac cheese
+            </h3>
 
-          {/* "Vai no lanche" Ingredient Checklist */}
-          {item.ingredients && item.ingredients.length > 0 && (
-            <div className="bg-carvao-leve border border-carvao-borda p-4 rounded-2xl space-y-2.5">
-              <h4 className="text-xs uppercase font-bold tracking-wider text-ouro flex items-center gap-1.5">
-                <Check className="w-4 h-4 text-queijo" />
-                Vai no Lanche
-              </h4>
-              <ul className="space-y-1.5">
-                {item.ingredients.map((ing, i) => (
-                  <li
-                    key={i}
-                    className="text-xs sm:text-sm text-osso flex items-center gap-2"
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-macarico" />
-                    <span>{ing}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+            {current.options.pasta && (
+              <fieldset>
+                <legend className="mb-2 text-sm font-semibold text-osso-muted">Massa</legend>
+                <div className="grid grid-cols-2 gap-2">
+                  {current.options.pasta.map((pasta) => (
+                    <label key={pasta} className={choiceClass(selectedPasta === pasta, "macarico")}>
+                      <input
+                        type="radio"
+                        name="massa"
+                        value={pasta}
+                        checked={selectedPasta === pasta}
+                        onChange={() => setSelectedPasta(pasta)}
+                        className="sr-only"
+                      />
+                      {pasta}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
 
-          {/* Mac Cheese Customizer */}
-          {item.isConfigurable && item.options && (
-            <div className="space-y-5 border-t border-carvao-borda pt-5">
-              <h3 className="font-display text-lg uppercase tracking-wide text-osso">
-                Monte o seu Mac Cheese
-              </h3>
+            {current.options.sauce && (
+              <fieldset>
+                <legend className="mb-2 text-sm font-semibold text-osso-muted">Molho</legend>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  {current.options.sauce.map((sauce) => (
+                    <label key={sauce} className={choiceClass(selectedSauce === sauce, "ouro")}>
+                      <input
+                        type="radio"
+                        name="molho"
+                        value={sauce}
+                        checked={selectedSauce === sauce}
+                        onChange={() => setSelectedSauce(sauce)}
+                        className="sr-only"
+                      />
+                      {sauce}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
 
-              {/* Step 1: Pasta */}
-              {item.options.pasta && (
+            {current.options.proteins && (
+              <fieldset>
+                <legend className="mb-2 text-sm font-semibold text-osso-muted">
+                  Proteína extra (opcional)
+                </legend>
                 <div className="space-y-2">
-                  <label className="text-xs uppercase font-bold tracking-wider text-osso-muted">
-                    1. Escolha a Massa
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {item.options.pasta.map((pasta) => (
-                      <button
-                        key={pasta}
-                        onClick={() => setSelectedPasta(pasta)}
-                        className={`p-3 rounded-xl border text-left text-xs sm:text-sm font-semibold transition-all ${
-                          selectedPasta === pasta
-                            ? "bg-macarico/10 border-macarico text-macarico"
-                            : "bg-carvao-leve border-carvao-borda text-osso hover:border-white/20"
+                  {current.options.proteins.map((protein) => {
+                    const checked = selectedProteins.includes(protein.name);
+                    return (
+                      <label
+                        key={protein.name}
+                        className={`flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded border px-3 py-2 text-sm focus-within:border-osso ${
+                          checked
+                            ? "border-macarico bg-macarico/15 text-osso"
+                            : "border-carvao-borda bg-carvao-leve text-osso"
                         }`}
                       >
-                        {pasta}
-                      </button>
-                    ))}
-                  </div>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleProtein(protein.name)}
+                          className="sr-only"
+                        />
+                        <span className="font-semibold">{protein.name}</span>
+                        <span className="font-semibold tabular-nums text-ouro">
+                          + R$ {formatBRL(protein.price)}
+                        </span>
+                      </label>
+                    );
+                  })}
                 </div>
-              )}
-
-              {/* Step 2: Sauce */}
-              {item.options.sauce && (
-                <div className="space-y-2">
-                  <label className="text-xs uppercase font-bold tracking-wider text-osso-muted">
-                    2. Escolha o Molho Cremoso
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    {item.options.sauce.map((sauce) => (
-                      <button
-                        key={sauce}
-                        onClick={() => setSelectedSauce(sauce)}
-                        className={`p-3 rounded-xl border text-left text-xs sm:text-sm font-semibold transition-all ${
-                          selectedSauce === sauce
-                            ? "bg-ouro/10 border-ouro text-ouro"
-                            : "bg-carvao-leve border-carvao-borda text-osso hover:border-white/20"
-                        }`}
-                      >
-                        {sauce}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Step 3: Additional Proteins */}
-              {item.options.proteins && (
-                <div className="space-y-2">
-                  <label className="text-xs uppercase font-bold tracking-wider text-osso-muted">
-                    3. Proteínas Adicionais (Opcional)
-                  </label>
-                  <div className="space-y-2">
-                    {item.options.proteins.map((protein) => {
-                      const isSelected = selectedProteins.includes(protein.name);
-                      return (
-                        <div
-                          key={protein.name}
-                          onClick={() => toggleProtein(protein.name)}
-                          className={`p-3 rounded-xl border flex items-center justify-between text-xs sm:text-sm cursor-pointer transition-all ${
-                            isSelected
-                              ? "bg-macarico/15 border-macarico text-osso"
-                              : "bg-carvao-leve border-carvao-borda text-osso-muted hover:border-white/20"
-                          }`}
-                        >
-                          <span className="font-medium text-osso">
-                            {protein.name}
-                          </span>
-                          <span className="text-ouro font-bold tabular-nums">
-                            + R$ {protein.price.toFixed(2).replace(".", ",")}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Observations Input */}
-          <div className="space-y-2 border-t border-carvao-borda pt-5">
-            <label className="text-xs uppercase font-bold tracking-wider text-osso-muted">
-              Observações do Pedido
-            </label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Ex: sem cebola, molho à parte, bem passado..."
-              rows={2}
-              className="w-full bg-carvao-leve border border-carvao-borda rounded-xl p-3 text-sm text-osso placeholder:text-osso-muted/50 focus:outline-none focus:border-macarico transition-colors"
-            />
+              </fieldset>
+            )}
           </div>
-        </div>
+        )}
 
-        {/* Footer Action Bar */}
-        <div className="sticky bottom-0 z-20 px-5 py-4 bg-carvao border-t border-carvao-borda flex items-center justify-between gap-4">
-          {/* Quantity Stepper */}
-          <div className="flex items-center gap-3 bg-carvao-leve border border-carvao-borda rounded-xl p-1.5">
-            <button
-              onClick={() => setQuantity(Math.max(1, quantity - 1))}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-osso hover:bg-white/10 active:scale-90 transition-colors"
-              aria-label="Diminuir quantidade"
-            >
-              <Minus className="w-4 h-4" />
-            </button>
-            <span className="w-6 text-center font-bold text-sm text-osso tabular-nums">
-              {quantity}
-            </span>
-            <button
-              onClick={() => setQuantity(quantity + 1)}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-osso hover:bg-white/10 active:scale-90 transition-colors"
-              aria-label="Aumentar quantidade"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Submit Button */}
-          <button
-            onClick={handleAddToCart}
-            className="flex-1 flex items-center justify-between px-5 py-3.5 rounded-xl bg-macarico hover:bg-macarico-glow text-white font-bold text-sm transition-all shadow-macarico-glow active:scale-[0.98]"
-          >
-            <span className="flex items-center gap-2">
-              <ShoppingBag className="w-4 h-4" />
-              Adicionar
-            </span>
-            <span className="tabular-nums font-sans">
-              R$ {totalPrice.toFixed(2).replace(".", ",")}
-            </span>
-          </button>
+        <div className="border-t border-carvao-borda pt-5">
+          <label htmlFor="item-notes" className="mb-2 block text-sm font-semibold text-osso-muted">
+            Observação
+          </label>
+          <textarea
+            id="item-notes"
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            placeholder="Ex.: sem cebola, molho à parte"
+            rows={2}
+            className="w-full rounded border border-carvao-borda bg-carvao-leve p-3 text-base text-osso placeholder:text-osso-muted focus:outline-none focus-visible:border-macarico"
+          />
         </div>
       </div>
-    </div>
+
+      <div className="flex items-center gap-3 border-t border-carvao-borda px-4 py-3">
+        <div className="flex items-center rounded border border-carvao-borda bg-carvao-leve">
+          <button
+            type="button"
+            onClick={() => setQuantity((value) => Math.max(1, value - 1))}
+            aria-label={`Diminuir quantidade de ${current.name}`}
+            className="inline-flex min-h-11 min-w-11 items-center justify-center text-lg text-osso-muted"
+          >
+            −
+          </button>
+          <span className="w-6 text-center text-sm font-semibold tabular-nums text-osso">
+            {quantity}
+          </span>
+          <button
+            type="button"
+            onClick={() => setQuantity((value) => value + 1)}
+            aria-label={`Aumentar quantidade de ${current.name}`}
+            className="inline-flex min-h-11 min-w-11 items-center justify-center text-lg text-osso-muted"
+          >
+            +
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={handleAddToCart}
+          className="flex min-h-11 flex-1 items-center justify-between rounded bg-macarico px-4 text-sm font-semibold text-carvao"
+        >
+          <span>Colocar na sacola</span>
+          <span className="tabular-nums">R$ {formatBRL(totalPrice)}</span>
+        </button>
+      </div>
+    </DrawerDialog>
   );
 }

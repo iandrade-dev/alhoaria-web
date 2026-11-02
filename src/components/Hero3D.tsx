@@ -1,13 +1,10 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import * as THREE from "three";
-import { Flame, RotateCcw, Sparkles } from "lucide-react";
 
 export default function Hero3D() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [isHovered, setIsHovered] = useState(false);
-  const [torchActive, setTorchActive] = useState(true);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -27,7 +24,9 @@ export default function Hero3D() {
     // Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const mobile = window.matchMedia("(max-width: 767px)").matches;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, mobile ? 1.5 : 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -268,43 +267,55 @@ export default function Hero3D() {
     window.addEventListener("touchend", onPointerUp);
 
     let animationFrameId: number;
+    let playing = true;
+    let inView = true;
+    const syncPlaying = () => {
+      playing = document.visibilityState === "visible" && inView;
+    };
+    const observer = new IntersectionObserver((entries) => {
+      inView = entries.some((entry) => entry.isIntersecting);
+      syncPlaying();
+    });
+    observer.observe(container);
+    document.addEventListener("visibilitychange", syncPlaying);
 
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
+      if (!playing) return;
 
-      // Smooth auto-rotation when user is not dragging
-      if (!isDragging) {
-        targetRotationY += 0.0028; // ~16 deg/s
+      if (!reduceMotion && !isDragging) {
+        targetRotationY += 0.0028;
       }
 
       currentRotationY += (targetRotationY - currentRotationY) * 0.07;
       foodGroup.rotation.y = currentRotationY;
 
-      // Floating breath
-      foodGroup.position.y = Math.sin(Date.now() * 0.0018) * 0.04;
+      if (!reduceMotion) {
+        foodGroup.position.y = Math.sin(Date.now() * 0.0018) * 0.04;
 
-      // Animate Steam
-      const pos = steamGeo.attributes.position.array as Float32Array;
-      for (let i = 0; i < steamCount; i++) {
-        pos[i * 3 + 1] += steamSpeeds[i];
-        pos[i * 3] += Math.sin(Date.now() * 0.002 + i) * 0.0015;
-        if (pos[i * 3 + 1] > 2.2) {
-          pos[i * 3 + 1] = 0.85;
-          pos[i * 3] = (Math.random() - 0.5) * 0.7;
-          pos[i * 3 + 2] = (Math.random() - 0.5) * 0.7;
+        const pos = steamGeo.attributes.position.array as Float32Array;
+        for (let i = 0; i < steamCount; i++) {
+          pos[i * 3 + 1] += steamSpeeds[i];
+          pos[i * 3] += Math.sin(Date.now() * 0.002 + i) * 0.0015;
+          if (pos[i * 3 + 1] > 2.2) {
+            pos[i * 3 + 1] = 0.85;
+            pos[i * 3] = (Math.random() - 0.5) * 0.7;
+            pos[i * 3 + 2] = (Math.random() - 0.5) * 0.7;
+          }
         }
+        steamGeo.attributes.position.needsUpdate = true;
       }
-      steamGeo.attributes.position.needsUpdate = true;
 
-      // Torch flame wave effect during load
-      torchTimer += 0.02;
-      if (torchTimer < 3.0) {
-        const torchGlow = Math.sin(torchTimer * 2.5) * 4.0 + 7.0;
-        torchLight.intensity = Math.max(2.0, torchGlow);
-        cheeseMat.emissive.setHex(0x552200);
-        cheeseMat.emissiveIntensity = Math.abs(Math.sin(torchTimer * 3)) * 0.45;
-      } else {
-        cheeseMat.emissiveIntensity = 0.12;
+      if (!reduceMotion) {
+        torchTimer += 0.02;
+        if (torchTimer < 3.0) {
+          const torchGlow = Math.sin(torchTimer * 2.5) * 4.0 + 7.0;
+          torchLight.intensity = Math.max(2.0, torchGlow);
+          cheeseMat.emissive.setHex(0x552200);
+          cheeseMat.emissiveIntensity = Math.abs(Math.sin(torchTimer * 3)) * 0.45;
+        } else {
+          cheeseMat.emissiveIntensity = 0.12;
+        }
       }
 
       renderer.render(scene, camera);
@@ -325,6 +336,8 @@ export default function Hero3D() {
 
     return () => {
       cancelAnimationFrame(animationFrameId);
+      observer.disconnect();
+      document.removeEventListener("visibilitychange", syncPlaying);
       window.removeEventListener("resize", handleResize);
       dom.removeEventListener("mousedown", onPointerDown);
       window.removeEventListener("mousemove", onPointerMove);
@@ -340,34 +353,11 @@ export default function Hero3D() {
   }, []);
 
   return (
-    <div
-      className="relative w-full h-[480px] sm:h-[560px] lg:h-[620px] rounded-3xl overflow-hidden bg-gradient-to-b from-[#120e0b] via-[#0d0a08] to-carvao border border-carvao-borda shadow-2xl flex items-center justify-center cursor-grab active:cursor-grabbing select-none"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      {/* 3D Canvas Mount */}
-      <div ref={containerRef} className="absolute inset-0 w-full h-full" />
-
-      {/* Floating Badges & Interactions */}
-      <div className="absolute top-4 left-4 z-10 flex items-center gap-2">
-        <span className="px-3 py-1 text-xs font-semibold uppercase tracking-wider text-macarico bg-macarico/10 border border-macarico/30 rounded-full flex items-center gap-1.5 backdrop-blur-md">
-          <Flame className="w-3.5 h-3.5 animate-pulse" />
-          Gratinado no Maçarico
-        </span>
-        <span className="hidden sm:inline-flex px-3 py-1 text-xs font-medium text-osso-muted bg-carvao/80 border border-carvao-borda rounded-full backdrop-blur-md">
-          Costela 6 Horas
-        </span>
-      </div>
-
-      {/* Bottom Hint */}
-      <div className="absolute bottom-4 inset-x-0 mx-auto w-fit z-10 flex items-center gap-2 px-4 py-1.5 bg-carvao/85 border border-white/10 rounded-full text-xs text-osso-muted backdrop-blur-md shadow-lg pointer-events-none transition-opacity duration-300">
-        <RotateCcw className="w-3.5 h-3.5 text-ouro animate-spin" style={{ animationDuration: "8s" }} />
-        <span>Arraste para girar em 360°</span>
-      </div>
-
-      {/* Warm Ambient Glow Backdrops */}
-      <div className="absolute -top-24 -right-24 w-72 h-72 bg-macarico/15 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-20 -left-20 w-80 h-80 bg-queijo/10 rounded-full blur-3xl pointer-events-none" />
+    <div className="relative flex h-[420px] w-full cursor-grab select-none items-center justify-center overflow-hidden rounded-xl border border-carvao-borda bg-carvao active:cursor-grabbing sm:h-[520px] lg:h-[560px]">
+      <div ref={containerRef} className="absolute inset-0 h-full w-full" />
+      <p className="pointer-events-none absolute bottom-3 left-3 text-sm font-semibold text-osso-muted">
+        Arraste para girar
+      </p>
     </div>
   );
 }

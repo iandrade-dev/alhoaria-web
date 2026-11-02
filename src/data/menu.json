@@ -19,7 +19,8 @@
       "open_min": 30,
       "close_hour": 24,
       "close_min": 0,
-      "phone": "+55 48 99970-2016"
+      "phone": "+55 48 99970-2016",
+      "whatsapp": "5548999702016"
     },
     {
       "id": "kobrasol",
@@ -31,7 +32,8 @@
       "open_min": 30,
       "close_hour": 24,
       "close_min": 0,
-      "phone": "+55 48 99970-2016"
+      "phone": "+55 48 99970-2016",
+      "whatsapp": "5548999702016"
     },
     {
       "id": "praia-de-fora",
@@ -42,21 +44,45 @@
     }
   ],
   "categories": [
-    { "id": "sanduiches", "label": "Sanduíches", "tag": "NO PÃO DE ALHO" },
-    { "id": "combos", "label": "Combos", "tag": "ECONOMIZE" },
-    { "id": "burgers", "label": "Burgers", "tag": "LANÇAMENTO" },
-    { "id": "pizzalho", "label": "Pizzalho", "tag": "PIZZA NO PÃO" },
-    { "id": "porcoes", "label": "Porções", "tag": "PETISCOS" },
-    { "id": "mac-cheese", "label": "Mac Cheese", "tag": "MONTE O SEU" },
-    { "id": "lohn", "label": "Chopp Lohn", "tag": "ARTESANAL" },
-    { "id": "bebidas", "label": "Bebidas", "tag": "GELADAS" }
+    {
+      "id": "sanduiches",
+      "label": "Sanduíches"
+    },
+    {
+      "id": "combos",
+      "label": "Combos"
+    },
+    {
+      "id": "burgers",
+      "label": "Burgers"
+    },
+    {
+      "id": "pizzalho",
+      "label": "Pizzalho"
+    },
+    {
+      "id": "porcoes",
+      "label": "Porções"
+    },
+    {
+      "id": "mac-cheese",
+      "label": "Mac Cheese"
+    },
+    {
+      "id": "lohn",
+      "label": "Chopp Lohn"
+    },
+    {
+      "id": "bebidas",
+      "label": "Bebidas"
+    }
   ],
   "items": [
     {
       "id": "costela",
       "category": "sanduiches",
       "name": "A Costela!",
-      "price": 44.90,
+      "price": 44.9,
       "description": "Costela bovina cozida lentamente por 6 horas, desfiada na brasa, servida com pasta de alho exclusiva e coberta com queijo gratinado no maçarico.",
       "ingredients": [
         "Pão especial artesanal tostado",
@@ -65,7 +91,7 @@
         "Creme artesanal de queijo",
         "Mussarela dourada no maçarico"
       ],
-      "image": "/refs/menu-header.jpg",
+      "image": "/assets/posters/alhoaria-costela-hero-w1024.webp",
       "isHero": true,
       "has3D": true
     },
@@ -73,7 +99,7 @@
       "id": "frango",
       "category": "sanduiches",
       "name": "Frango!",
-      "price": 33.90,
+      "price": 33.9,
       "description": "Suculento filé de sobrecoxa marinado em tempero de ervas e alho, com creme de queijo e casquinha gratinada na hora.",
       "ingredients": [
         "Pão especial artesanal",
@@ -82,13 +108,13 @@
         "Creme de queijo artesanal",
         "Mussarela gratinada"
       ],
-      "image": "/refs/menu-item-5.jpg"
+      "image": "/assets/posters/alhoaria-ingrediente-filling_frango-w1024.webp"
     },
     {
       "id": "mr-alcatra",
       "category": "sanduiches",
       "name": "Mr. Alcatra!",
-      "price": 48.90,
+      "price": 48.9,
       "description": "Tiras macias de alcatra nobre salteadas na chapa quente, pasta de alho especial e avalanche de queijo maçaricado.",
       "ingredients": [
         "Pão especial artesanal",
@@ -97,13 +123,13 @@
         "Creme de queijo artesanal",
         "Mussarela gratinada"
       ],
-      "image": "/refs/menu-header.jpg"
+      "image": "/assets/posters/alhoaria-ingrediente-filling_alcatra-w1024.webp"
     },
     {
       "id": "brocolis-queijo",
       "category": "sanduiches",
       "name": "Brócolis & Queijo!",
-      "price": 33.90,
+      "price": 33.9,
       "description": "A opção vegetariana suculenta: brócolis frescos salteados no azeite de alho, fondue de queijo e gratinado crocante.",
       "ingredients": [
         "Pão especial artesanal",
@@ -112,13 +138,13 @@
         "Fondue de queijo",
         "Mussarela gratinada"
       ],
-      "image": "/refs/menu-item-5.jpg"
+      "image": "/assets/posters/alhoaria-ingrediente-filling_brocolis-w1024.webp"
     },
     {
       "id": "pulled-pork",
       "category": "sanduiches",
       "name": "Pulled Pork!",
-      "price": 35.90,
+      "price": 35.9,
       "description": "Pernil desfiado cozido 4 horas com especiarias e raspas cítricas, úmido e generoso no pão de alho recheado.",
       "ingredients": [
         "Pão especial artesanal",
@@ -127,13 +153,13 @@
         "Creme de queijo artesanal",
         "Mussarela gratinada no fogo"
       ],
-      "image": "/refs/menu-header.jpg"
+      "image": "/assets/posters/alhoaria-ingrediente-filling_pork-w1024.webp"
     },
     {
       "id": "dogalho",
       "category": "sanduiches",
       "name": "Dogalho",
-      "price": 26.90,
+      "price": 26.9,
       "description": "Pão brioche selado na manteiga de alho, 2 salsichas especiais, ketchup, mostarda, fondue 4 queijos, mussarela e batata palha fininha.",
       "ingredients": [
         "Pão brioche selado",
@@ -143,7 +169,7 @@
         "Mussarela gratinada",
         "Batata palha super crocante"
       ],
-      "image": "/refs/menu-item-7.jpg",
+      "image": "/assets/posters/alhoaria-dogalho-w1024.webp",
       "has3D": true
     },
     {
@@ -152,213 +178,232 @@
       "name": "Clássico + Bebida",
       "price": 45.72,
       "description": "1 Sanduíche de Pão de Alho à sua escolha + 1 Refrigerante em lata gelado.",
-      "image": "/refs/menu-header.jpg"
+      "image": ""
     },
     {
       "id": "trio-alhoaria",
       "category": "combos",
       "name": "Trio Alhoaria",
-      "price": 55.90,
+      "price": 55.9,
       "description": "1 Sanduíche no pão de alho + Porção de Batata crocante com creme de queijo + 1 Bebida.",
-      "image": "/refs/menu-item-5.jpg"
+      "image": "/assets/photos/menu-item-5-w1024.webp"
     },
     {
       "id": "trio-casal",
       "category": "combos",
       "name": "Trio Casal",
-      "price": 75.90,
+      "price": 75.9,
       "description": "2 Lanches especiais à escolha + 1 Porção de acompanhamento + 2 Bebidas geladas.",
-      "image": "/refs/menu-item-4.jpg"
+      "image": ""
     },
     {
       "id": "trio-dogalho",
       "category": "combos",
       "name": "Trio Dogalho",
-      "price": 36.90,
+      "price": 36.9,
       "description": "1 Dogalho completo com fondue 4 queijos + Porção de batatas fritas + 1 Bebida.",
-      "image": "/refs/menu-item-1.jpg"
+      "image": "/assets/photos/menu-item-1-w1024.webp"
     },
     {
       "id": "duplo-pizzalho-pureza",
       "category": "combos",
       "name": "Duplo Pizzalho + Pureza 1,5L",
-      "price": 99.90,
+      "price": 99.9,
       "description": "2 Pizzalhos médios bem recheados com borda de alho tostada + 1 Guaraná Pureza 1,5L catarinense geladão.",
-      "image": "/refs/menu-item-2.jpg"
+      "image": "/assets/photos/menu-item-2-w1024.webp"
     },
     {
       "id": "burger-classico",
       "category": "burgers",
       "name": "Burger Clássico",
-      "price": 16.00,
+      "price": 16.0,
       "description": "Blend artesanal 150g no ponto, queijo derretido, maionese de alho defumada no pão brioche amanteigado.",
-      "image": "/refs/menu-item-6.jpg",
+      "image": "",
       "has3D": true
     },
     {
       "id": "burger-salada",
       "category": "burgers",
       "name": "Burger Salada",
-      "price": 16.90,
+      "price": 16.9,
       "description": "Blend 150g suculento, queijo, fatias de tomate caipira, alface americana fresca e maionese de alho defumada.",
-      "image": "/refs/menu-item-6.jpg"
+      "image": ""
     },
     {
       "id": "burger-onio",
       "category": "burgers",
       "name": "Burger Onio",
-      "price": 28.90,
+      "price": 28.9,
       "description": "Blend 150g, onion rings crocantes por cima do queijo derretido, maionese de alho defumada no brioche.",
-      "image": "/refs/menu-item-6.jpg",
+      "image": "",
       "has3D": true
     },
     {
       "id": "pizzalho-4",
       "category": "pizzalho",
       "name": "Pizzalho 4 Pedaços",
-      "price": 34.90,
+      "price": 34.9,
       "startingPrice": true,
       "description": "Massa artesanal de pão de alho gratinada com molho da casa, muito queijo e recheio no maçarico.",
-      "image": "/refs/menu-item-8.jpg"
+      "image": ""
     },
     {
       "id": "pizzalho-6",
       "category": "pizzalho",
       "name": "Pizzalho 6 Pedaços",
-      "price": 44.90,
+      "price": 44.9,
       "startingPrice": true,
       "description": "O tamanho perfeito para 2 pessoas. Queijo puxento e borda crocante amanteigada.",
-      "image": "/refs/menu-item-3.jpg"
+      "image": ""
     },
     {
       "id": "pizzalho-8",
       "category": "pizzalho",
       "name": "Pizzalho 8 Pedaços (2 Sabores)",
-      "price": 69.90,
+      "price": 69.9,
       "startingPrice": true,
       "description": "Para a galera: 8 pedaços generosos permitindo dividir em até 2 sabores favoritos.",
-      "image": "/refs/menu-item-8.jpg"
+      "image": ""
     },
     {
       "id": "pizzalho-calabresa-6",
       "category": "pizzalho",
       "name": "Pizzalho Calabresa 6 Fatias",
-      "price": 45.90,
+      "price": 45.9,
       "description": "Base crocante de pão de alho, molho de tomate, calabresa fatiada fina, cebola e orégano fresco.",
-      "image": "/refs/menu-item-3.jpg"
+      "image": ""
     },
     {
       "id": "dadinho-tapioca",
       "category": "porcoes",
       "name": "Dadinho de Tapioca",
-      "price": 29.90,
+      "price": 29.9,
       "startingPrice": true,
       "description": "Cubos dourados e crocantes de tapioca com queijo de coalho (6 a 8 unidades) + potinho de geleia de pimenta.",
-      "image": "/refs/menu-header.jpg"
+      "image": ""
     },
     {
       "id": "batata-rustica",
       "category": "porcoes",
       "name": "Batata Rústica Temperada",
-      "price": 24.90,
+      "price": 24.9,
       "startingPrice": true,
       "description": "Cortes rústicos com casca, temperados com sal grosso, alecrim e alho frito crocante.",
-      "image": "/refs/menu-item-5.jpg"
+      "image": ""
     },
     {
       "id": "batata-frita",
       "category": "porcoes",
       "name": "Batata Frita Tradicional",
-      "price": 19.90,
+      "price": 19.9,
       "startingPrice": true,
       "description": "Fritas douradas sequinhas, com toque especial de sal com ervas.",
-      "image": "/refs/menu-item-1.jpg"
+      "image": ""
     },
     {
       "id": "onion-rings",
       "category": "porcoes",
       "name": "Onion Rings Crocantes",
-      "price": 29.90,
+      "price": 29.9,
       "startingPrice": true,
       "description": "Anéis de cebola selecionados empanados na farinha especial, dourados e sequinhos.",
-      "image": "/refs/menu-item-6.jpg"
+      "image": ""
     },
     {
       "id": "isca-frango",
       "category": "porcoes",
       "name": "Isca de Frango + Batata",
-      "price": 39.90,
+      "price": 39.9,
       "startingPrice": true,
       "description": "Tiras de peito e sobrecoxa marinadas, empanadas na hora, servidas com batata frita e molho de alho.",
-      "image": "/refs/menu-item-5.jpg"
+      "image": ""
     },
     {
       "id": "mac-cheese-monte",
       "category": "mac-cheese",
       "name": "Mac Cheese Alhoaria (Monte o Seu)",
-      "price": 19.90,
+      "price": 19.9,
       "isConfigurable": true,
       "description": "Tigela fumegante: escolha sua massa, o molho artesanal e finalize com proteínas à sua escolha e casca de queijo no fogo.",
       "options": {
-        "pasta": ["Penne Rigate", "Espaguete Italiano"],
-        "sauce": ["4 Queijos Artesanal", "Cheddar Defumado da Casa", "Alho & Azeite Dourado"],
+        "pasta": [
+          "Penne Rigate",
+          "Espaguete Italiano"
+        ],
+        "sauce": [
+          "4 Queijos Artesanal",
+          "Cheddar Defumado da Casa",
+          "Alho & Azeite Dourado"
+        ],
         "proteins": [
-          { "name": "Costela Bovina 6h Desfiada", "price": 14.90 },
-          { "name": "Pulled Pork (Pernil 4h)", "price": 12.90 },
-          { "name": "Filé de Sobrecoxa Grelhada", "price": 9.90 },
-          { "name": "Bacon Crocante em Cubos", "price": 7.90 }
+          {
+            "name": "Costela Bovina 6h Desfiada",
+            "price": 14.9
+          },
+          {
+            "name": "Pulled Pork (Pernil 4h)",
+            "price": 12.9
+          },
+          {
+            "name": "Filé de Sobrecoxa Grelhada",
+            "price": 9.9
+          },
+          {
+            "name": "Bacon Crocante em Cubos",
+            "price": 7.9
+          }
         ]
       },
-      "image": "/refs/menu-item-5.jpg",
+      "image": "/assets/posters/alhoaria-mac-cheese-w1024.webp",
       "has3D": true
     },
     {
       "id": "chopp-lohn-caneca",
       "category": "lohn",
       "name": "Caneca Chopp Lohn 500ml",
-      "price": 9.90,
+      "price": 9.9,
       "description": "Chopp puro malte artesanal catarinense servido em caneca congelada.",
-      "image": "/refs/menu-header.jpg"
+      "image": ""
     },
     {
       "id": "chopp-lohn-1l",
       "category": "lohn",
       "name": "Growler Chopp Lohn 1 Litro",
-      "price": 15.00,
+      "price": 15.0,
       "description": "1 litro de chopp artesanal fresco recém-tirado para curtir em casa.",
-      "image": "/refs/menu-header.jpg"
+      "image": ""
     },
     {
       "id": "lohn-lager-600",
       "category": "lohn",
       "name": "Lohn Lager 600ml",
-      "price": 12.00,
+      "price": 12.0,
       "description": "Cerveja Pilsen/Lager artesanal leve, dourada e equilibrada.",
-      "image": "/refs/menu-header.jpg"
+      "image": ""
     },
     {
       "id": "pureza-15",
       "category": "bebidas",
       "name": "Guaraná Pureza 1,5L",
-      "price": 11.00,
+      "price": 11.0,
       "description": "O autêntico refrigerante de guaraná de Rancho Queimado (SC), trincando de gelado.",
-      "image": "/refs/menu-item-2.jpg"
+      "image": ""
     },
     {
       "id": "refrigerante-lata",
       "category": "bebidas",
       "name": "Refrigerante Lata 350ml",
-      "price": 6.50,
+      "price": 6.5,
       "description": "Coca-Cola Original, Coca Zero, Guaraná Antarctica ou Sprite.",
-      "image": "/refs/menu-item-1.jpg"
+      "image": ""
     },
     {
       "id": "soda-italiana",
       "category": "bebidas",
       "name": "Soda Italiana Artesanal",
-      "price": 14.90,
+      "price": 14.9,
       "description": "Bebida gaseificada com xarope natural de maçã verde, morango ou tangerina.",
-      "image": "/refs/menu-header.jpg"
+      "image": ""
     }
   ]
 }

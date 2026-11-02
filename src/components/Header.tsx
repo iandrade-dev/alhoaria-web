@@ -1,43 +1,28 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ShoppingBag, MapPin, Clock, Flame, Sparkles } from "lucide-react";
+import { ShoppingBag } from "lucide-react";
 import { useCart } from "@/store/useCart";
+import { useCartHydrated } from "@/store/useCartHydrated";
+import { getOpeningStatus } from "@/lib/opening-hours";
 
 export default function Header() {
-  const { getTotalItems, setIsCartOpen } = useCart();
-  const [totalItems, setTotalItems] = useState(0);
+  const setIsCartOpen = useCart((state) => state.setIsCartOpen);
+  const totalItems = useCart((state) =>
+    state.items.reduce((sum, item) => sum + item.quantity, 0)
+  );
+  const hydrated = useCartHydrated();
+  const count = hydrated ? totalItems : 0;
+  const [statusLabel, setStatusLabel] = useState("Seg a sáb · 18:30 às 00:00");
   const [isOpenNow, setIsOpenNow] = useState(false);
 
   useEffect(() => {
-    setTotalItems(getTotalItems());
-  }, [getTotalItems]);
-
-  useEffect(() => {
-    // Check operating hours: Mon-Sat 18:30 - 00:00 (America/Sao_Paulo)
     const checkHours = () => {
-      const now = new Date();
-      // UTC to BRT (UTC-3)
-      const utc = now.getTime() + now.getTimezoneOffset() * 60000;
-      const brt = new Date(utc - 3600000 * 3);
-      const day = brt.getDay(); // 0 is Sunday
-      const hour = brt.getHours();
-      const min = brt.getMinutes();
-      const totalMin = hour * 60 + min;
-
-      // Closed Sunday (0)
-      if (day === 0) {
-        setIsOpenNow(false);
-        return;
-      }
-      // 18:30 is 18*60 + 30 = 1110. Closes at midnight (1440)
-      if (totalMin >= 1110 || totalMin < 30) {
-        setIsOpenNow(true);
-      } else {
-        setIsOpenNow(false);
-      }
+      const status = getOpeningStatus();
+      setIsOpenNow(status.open);
+      setStatusLabel(status.label);
     };
     checkHours();
     const interval = setInterval(checkHours, 60000);
@@ -45,71 +30,63 @@ export default function Header() {
   }, []);
 
   return (
-    <header className="sticky top-0 z-40 w-full bg-carvao/90 backdrop-blur-md border-b border-carvao-borda">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-        {/* Brand / Logo */}
-        <Link href="/" className="flex items-center gap-3.5 group">
-          <div className="relative w-12 h-12 rounded-full overflow-hidden border-2 border-white/20 group-hover:border-macarico transition-colors bg-black flex-shrink-0">
+    <header className="sticky top-0 z-40 w-full border-b border-carvao-borda bg-carvao">
+      <div className="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-3 px-4 py-2 sm:px-6 lg:px-8">
+        <Link href="/" className="flex min-w-0 items-center gap-3">
+          <span className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full border border-carvao-borda bg-black">
             <Image
-              src="/refs/logo-anota.jpg"
-              alt="Alhoaria Logo"
+              src="/assets/photos/logo-anota-w320.webp"
+              alt="Selo Alhoaria"
               width={48}
               height={48}
               className="object-cover"
-              priority
             />
-          </div>
-          <div>
-            <span className="font-display text-2xl tracking-wide uppercase text-osso group-hover:text-macarico transition-colors flex items-center gap-1.5">
-              ALHOARIA
+          </span>
+          <span className="min-w-0">
+            <span className="block font-display text-2xl uppercase tracking-wide text-osso">
+              Alhoaria
             </span>
-            <p className="text-[11px] uppercase tracking-wider text-osso-muted font-medium -mt-1">
-              Lanches no Pão de Alho
-            </p>
-          </div>
+            <span className="block truncate text-sm font-semibold text-osso-muted">
+              Lanches no pão de alho
+            </span>
+          </span>
         </Link>
 
-        {/* Operating status badge */}
-        <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-carvao-leve border border-carvao-borda text-xs">
-          <span
-            className={`w-2 h-2 rounded-full ${
-              isOpenNow ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
-            }`}
-          />
-          <span className="text-osso font-medium">
-            {isOpenNow ? "Aberto agora" : "Abre às 18:30"}
-          </span>
-          <span className="text-osso-muted">· Seg a Sáb até 00h</span>
-        </div>
+        <p
+          className={`hidden text-sm font-semibold md:block ${
+            isOpenNow ? "text-ouro" : "text-osso"
+          }`}
+        >
+          {statusLabel}
+        </p>
 
-        {/* Navigation & Cart button */}
-        <div className="flex items-center gap-3 sm:gap-4">
-          <nav className="hidden sm:flex items-center gap-6 text-sm font-medium text-osso-muted">
-            <a href="#monte-ao-vivo" className="text-ouro hover:text-macarico transition-colors flex items-center gap-1 font-semibold">
-              <Sparkles className="w-3.5 h-3.5 text-macarico" />
+        <div className="flex items-center gap-4">
+          <nav className="hidden items-center gap-5 text-sm font-semibold text-osso-muted sm:flex">
+            <a href="#monte-ao-vivo" className="hover:text-osso">
               Monte em 3D
             </a>
-            <a href="#cardapio" className="hover:text-osso transition-colors">
+            <a href="#cardapio" className="hover:text-osso">
               Cardápio
             </a>
-            <a href="#unidades" className="hover:text-osso transition-colors">
+            <a href="#unidades" className="hover:text-osso">
               Unidades
             </a>
-            <a href="#chopp-lohn" className="hover:text-osso transition-colors">
+            <a href="#chopp-lohn" className="hover:text-osso">
               Chopp Lohn
             </a>
           </nav>
 
           <button
+            type="button"
             onClick={() => setIsCartOpen(true)}
-            className="relative flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-macarico text-white font-medium hover:bg-macarico-glow transition-all shadow-macarico-glow active:scale-95"
-            aria-label="Ver sacola de pedidos"
+            className="inline-flex min-h-11 items-center gap-2 rounded bg-macarico px-3 font-semibold text-carvao"
+            aria-label={count > 0 ? `Ver sacola, ${count} ${count === 1 ? "item" : "itens"}` : "Ver sacola"}
           >
-            <ShoppingBag className="w-5 h-5" />
-            <span className="hidden sm:inline font-semibold text-sm">Sacola</span>
-            {totalItems > 0 && (
-              <span className="px-2 py-0.5 text-xs font-bold bg-carvao text-ouro rounded-full border border-ouro/40 animate-bounce">
-                {totalItems}
+            <ShoppingBag className="h-5 w-5" aria-hidden />
+            <span className="hidden sm:inline">Sacola</span>
+            {count > 0 && (
+              <span className="rounded bg-carvao px-1.5 text-sm font-semibold tabular-nums text-ouro">
+                {count}
               </span>
             )}
           </button>

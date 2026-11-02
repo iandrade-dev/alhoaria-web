@@ -1,108 +1,97 @@
 "use client";
 
-import React from "react";
-import { MapPin, Clock, Phone, Navigation, Sparkles } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { MapPin } from "lucide-react";
 import menuData from "@/data/menu.json";
+import { getOpeningStatus } from "@/lib/opening-hours";
+import { unitShortName } from "@/lib/order-message";
 
 export default function UnitsSection() {
+  const [statusLabel, setStatusLabel] = useState("Seg a sáb · 18:30 às 00:00");
+  const [isOpenNow, setIsOpenNow] = useState(false);
+
+  useEffect(() => {
+    const check = () => {
+      const status = getOpeningStatus();
+      setIsOpenNow(status.open);
+      setStatusLabel(status.label);
+    };
+    check();
+    const interval = setInterval(check, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
-    <section id="unidades" className="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto border-t border-carvao-borda">
-      <div className="text-center max-w-2xl mx-auto mb-14">
-        <span className="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-semibold uppercase tracking-wider text-ouro mb-3 inline-block">
-          Presença Física
-        </span>
-        <h2 className="font-display text-3xl sm:text-4xl uppercase tracking-wide text-osso mb-3">
-          Nossas Unidades
+    <section id="unidades" className="border-t border-carvao-borda">
+      <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
+        <h2 className="font-display text-3xl uppercase tracking-wide text-osso sm:text-4xl">
+          Nossas unidades
         </h2>
-        <p className="text-sm sm:text-base text-osso-muted">
-          Passe para retirar no balcão ou peça para entrega quentinha na sua casa.
+        <p className="mt-2 max-w-xl text-sm text-osso-muted sm:text-base">
+          Retira no balcão ou pede pra chegar quente em casa.
         </p>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {menuData.units.map((unit) => {
-          if (unit.is_coming_soon) {
-            return (
-              <div
-                key={unit.id}
-                className="relative bg-gradient-to-b from-carvao-leve to-carvao border border-dashed border-carvao-borda rounded-3xl p-6 sm:p-8 flex flex-col justify-between overflow-hidden"
-              >
-                <div>
-                  <div className="flex items-center gap-2 mb-4">
-                    <span className="px-2.5 py-1 rounded-full bg-macarico/15 text-macarico border border-macarico/30 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
-                      <Sparkles className="w-3 h-3" />
-                      Em Breve
-                    </span>
-                  </div>
-                  <h3 className="font-display text-2xl uppercase tracking-wide text-osso mb-2">
-                    {unit.name}
+        <ul className="mt-8 divide-y divide-carvao-borda border-y border-carvao-borda">
+          {menuData.units.map((unit) => {
+            if ("is_coming_soon" in unit && unit.is_coming_soon) {
+              return (
+                <li key={unit.id} className="py-6">
+                  <h3 className="font-display text-2xl uppercase tracking-wide text-osso">
+                    {unitShortName(unit.name)}: em breve
                   </h3>
-                  <p className="text-xs sm:text-sm text-osso-muted leading-relaxed mb-6">
-                    {unit.teaser}
+                  {"teaser" in unit && unit.teaser && (
+                    <p className="mt-2 max-w-xl text-sm text-osso-muted">{unit.teaser}</p>
+                  )}
+                  <a
+                    href={`https://wa.me/${menuData.brand.whatsapp_default}?text=${encodeURIComponent(
+                      "Oi, Alhoaria! Quero saber quando a unidade Praia de Fora abre."
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-4 inline-flex min-h-11 items-center rounded border border-carvao-borda bg-carvao-leve px-4 text-sm font-semibold text-osso"
+                  >
+                    Me avise na abertura
+                  </a>
+                </li>
+              );
+            }
+
+            return (
+              <li key={unit.id} className="grid gap-3 py-6 md:grid-cols-[1fr_auto] md:items-end">
+                <div>
+                  <h3 className="font-display text-2xl uppercase tracking-wide text-osso">
+                    {unitShortName(unit.name)}
+                  </h3>
+                  <p className={`mt-1 text-sm font-semibold ${isOpenNow ? "text-ouro" : "text-osso"}`}>
+                    {statusLabel}
                   </p>
+                  {"address" in unit && unit.address && (
+                    <p className="mt-3 flex items-start gap-2 text-sm text-osso-muted">
+                      <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-osso-muted" aria-hidden />
+                      <span>{unit.address}</span>
+                    </p>
+                  )}
+                  {"hours" in unit && unit.hours && (
+                    <p className="mt-1 text-sm text-osso-muted">{unit.hours}</p>
+                  )}
+                  {"phone" in unit && unit.phone && (
+                    <p className="mt-1 text-sm text-osso-muted">{unit.phone}</p>
+                  )}
                 </div>
-
-                <a
-                  href={`https://wa.me/${menuData.brand.whatsapp_default}?text=${encodeURIComponent(
-                    "Oi, Alhoaria! Quero saber quando a unidade Praia de Fora vai abrir!"
-                  )}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full py-2.5 px-4 rounded-xl bg-white/5 hover:bg-white/10 text-osso text-xs font-semibold border border-white/10 text-center transition-colors"
-                >
-                  Me avise na abertura
-                </a>
-              </div>
+                {"maps_url" in unit && unit.maps_url && (
+                  <a
+                    href={unit.maps_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-h-11 items-center text-sm font-semibold text-osso"
+                  >
+                    Como chegar
+                  </a>
+                )}
+              </li>
             );
-          }
-
-          return (
-            <div
-              key={unit.id}
-              className="bg-carvao-leve border border-carvao-borda rounded-3xl p-6 sm:p-8 flex flex-col justify-between hover:border-ouro/40 transition-colors shadow-lg"
-            >
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <span className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    Atendimento Ativo
-                  </span>
-                </div>
-
-                <h3 className="font-display text-2xl uppercase tracking-wide text-osso mb-3">
-                  {unit.name}
-                </h3>
-
-                <div className="space-y-3 text-xs sm:text-sm text-osso-muted mb-8">
-                  <div className="flex items-start gap-2.5">
-                    <MapPin className="w-4 h-4 text-ouro flex-shrink-0 mt-0.5" />
-                    <span>{unit.address}</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <Clock className="w-4 h-4 text-queijo flex-shrink-0" />
-                    <span>{unit.hours}</span>
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <Phone className="w-4 h-4 text-macarico flex-shrink-0" />
-                    <span>{unit.phone}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-2.5">
-                <a
-                  href={unit.maps_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-white/10 hover:bg-white/15 text-osso text-xs font-bold transition-all"
-                >
-                  <Navigation className="w-4 h-4 text-ouro" />
-                  <span>Como Chegar (Google Maps)</span>
-                </a>
-              </div>
-            </div>
-          );
-        })}
+          })}
+        </ul>
       </div>
     </section>
   );

@@ -18,7 +18,6 @@ const config: Config = {
         ouro: "#E8B84A",
         queijo: "#F0C75E",
         macarico: "#FF6A1A",
-        "macarico-glow": "#FF8C42",
         madeira: "#5C3D2E",
         "madeira-escura": "#241812",
       },
@@ -27,8 +26,6 @@ const config: Config = {
         sans: ["Inter", "sans-serif"],
       },
       boxShadow: {
-        "macarico-glow": "0 0 25px -5px rgba(255, 106, 26, 0.4)",
-        "queijo-glow": "0 0 20px -3px rgba(240, 199, 94, 0.35)",
         "card-dark": "0 8px 32px 0 rgba(0, 0, 0, 0.6)",
       },
       animation: {

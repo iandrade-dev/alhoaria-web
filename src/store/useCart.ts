@@ -80,6 +80,10 @@ export const useCart = create<CartStore>()(
     }),
     {
       name: "alhoaria-cart-storage",
+      partialize: (state) => ({
+        items: state.items,
+        selectedUnit: state.selectedUnit,
+      }),
     }
   )
 );

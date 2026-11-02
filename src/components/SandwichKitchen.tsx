@@ -1,326 +1,293 @@
 "use client";
 
 import React, { useState } from "react";
-import Image from "next/image";
-import { RotateCcw, Check, ShoppingBag, Sparkles, Flame } from "lucide-react";
 import KitchenCanvas from "./KitchenCanvas";
 import { useCart } from "@/store/useCart";
+import menuData from "@/data/menu.json";
+import { formatBRL } from "@/lib/money";
+import FoodMedia from "./FoodMedia";
 
-export const fillings = [
+const fillings = [
   {
     id: "costela",
+    menuId: "costela",
     root: "filling_costela",
-    name: "Costela 6 Horas",
     detail: "Cozida por 6 horas. Desfiada, bem suculenta.",
-    price: 44.9,
-    image: "/assets/posters/alhoaria-ingrediente-filling_costela-w320.webp",
   },
   {
     id: "frango",
+    menuId: "frango",
     root: "filling_frango",
-    name: "Frango Marinado",
     detail: "Sobrecoxa dourada, macia por dentro.",
-    price: 33.9,
-    image: "/assets/posters/alhoaria-ingrediente-filling_frango-w320.webp",
   },
   {
     id: "alcatra",
+    menuId: "mr-alcatra",
     root: "filling_alcatra",
-    name: "Mr. Alcatra",
     detail: "Tiras de alcatra nobre para uma fome caprichada.",
-    price: 48.9,
-    image: "/assets/posters/alhoaria-ingrediente-filling_alcatra-w320.webp",
   },
   {
     id: "brocolis",
+    menuId: "brocolis-queijo",
     root: "filling_brocolis",
-    name: "Brócolis & Queijo",
     detail: "Verde, cremoso e vegetariano no alho e azeite.",
-    price: 33.9,
-    image: "/assets/posters/alhoaria-ingrediente-filling_brocolis-w320.webp",
   },
   {
     id: "pork",
+    menuId: "pulled-pork",
     root: "filling_pork",
-    name: "Pulled Pork",
-    detail: "Pernil de 4 horas. Desmanchando no pão especial.",
-    price: 35.9,
-    image: "/assets/posters/alhoaria-ingrediente-filling_pork-w320.webp",
+    detail: "Pernil de 4 horas. Desmanchando no pão.",
   },
-];
+] as const;
 
-export const toppings = [
+const toppings = [
   {
     root: "stage_garlic",
-    name: "Pasta de Alho da Casa",
-    detail: "O nosso ponto de partida exclusivo.",
+    name: "Pasta de alho da casa",
+    detail: "O ponto de partida.",
     without: "pasta de alho",
   },
   {
     root: "stage_cream",
-    name: "Creme Artesanal de Queijo",
-    detail: "Bem cremoso, do jeito que tem que ser.",
+    name: "Creme de queijo",
+    detail: "Cremoso, do jeito da casa.",
     without: "creme de queijo",
   },
   {
     root: "stage_gratin",
-    name: "Queijo Gratinado no Maçarico",
-    detail: "Douradinho no fogo na sua frente.",
+    name: "Queijo gratinado no maçarico",
+    detail: "Dourado no fogo, na sua frente.",
     without: "queijo gratinado",
   },
 ];
 
+function menuProduct(menuId: string) {
+  const item = menuData.items.find((entry) => entry.id === menuId);
+  if (!item) throw new Error(`Item ausente no cardápio: ${menuId}`);
+  return item;
+}
+
 export default function SandwichKitchen() {
-  const [tab, setTab] = useState<"Pão" | "Recheio" | "Pastas & queijo">("Recheio");
-  const [filling, setFilling] = useState<string>("costela");
+  const [tab, setTab] = useState<"Pão" | "Recheio" | "Pastas e queijo">("Recheio");
+  const [filling, setFilling] = useState<(typeof fillings)[number]["id"]>("costela");
   const [extras, setExtras] = useState<string[]>([
     "stage_garlic",
     "stage_cream",
     "stage_gratin",
   ]);
-  const [replay, setReplay] = useState<number>(0);
-  const [status, setStatus] = useState<string>(
-    "Escolha o recheio. A gente monta na sua frente."
-  );
+  const [replay, setReplay] = useState(0);
+  const [status, setStatus] = useState("Escolha o recheio. A gente monta na sua frente.");
+  const { addItem } = useCart();
 
-  const { addItem, setIsCartOpen } = useCart();
-
-  const selectedFilling = fillings.find((f) => f.id === filling) || fillings[0];
+  const selected = fillings.find((entry) => entry.id === filling) ?? fillings[0];
+  const product = menuProduct(selected.menuId);
 
   const selection = [
     "stage_bread",
     ...(extras.includes("stage_garlic") ? ["stage_garlic"] : []),
-    selectedFilling.root,
-    ...extras.filter((e) => e !== "stage_garlic"),
+    selected.root,
+    ...extras.filter((extra) => extra !== "stage_garlic"),
   ];
 
   const toggleExtra = (root: string) => {
-    setExtras((prev) =>
-      prev.includes(root) ? prev.filter((id) => id !== root) : [...prev, root]
+    setExtras((current) =>
+      current.includes(root) ? current.filter((id) => id !== root) : [...current, root]
     );
   };
 
   const handleAddToCart = () => {
     const withoutList = toppings
-      .filter((t) => !extras.includes(t.root))
-      .map((t) => t.without);
+      .filter((topping) => !extras.includes(topping.root))
+      .map((topping) => topping.without);
 
     addItem({
-      itemId: selectedFilling.id,
-      name: `Pão de Alho — ${selectedFilling.name}`,
-      unitPrice: selectedFilling.price,
+      itemId: product.id,
+      name: product.name,
+      unitPrice: product.price,
       quantity: 1,
-      image: selectedFilling.image,
-      notes: withoutList.length ? `Sem ${withoutList.join(", ")}` : undefined,
+      image: product.image,
+      notes: withoutList.length ? `sem ${withoutList.join(", ")}` : undefined,
     });
-    setIsCartOpen(true);
   };
 
+  const tabClass = (active: boolean) =>
+    `min-h-11 rounded px-3 text-sm font-semibold ${
+      active ? "bg-macarico text-carvao" : "border border-carvao-borda bg-carvao text-osso"
+    }`;
+
   return (
-    <section id="monte-ao-vivo" className="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto border-t border-carvao-borda">
-      {/* Intro Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
+    <section
+      id="monte-ao-vivo"
+      className="mx-auto max-w-7xl border-t border-carvao-borda px-4 py-14 sm:px-6 sm:py-20 lg:px-8"
+    >
+      <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <div className="flex items-center gap-2 mb-3">
-            <span className="px-3 py-1 rounded-full bg-macarico/15 border border-macarico/30 text-macarico text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5" />
-              Bancada 3D do Chef
-            </span>
-          </div>
-          <h2 className="font-display text-3xl sm:text-5xl uppercase tracking-wide text-osso">
-            Sua fome. Suas escolhas.
+          <h2 className="font-display text-3xl uppercase tracking-wide text-osso sm:text-5xl">
+            Monta o teu aí
           </h2>
-          <p className="text-sm sm:text-base text-osso-muted mt-2 max-w-xl">
-            Acompanhe o chef montando o seu lanche camada por camada em 3D com física real.
+          <p className="mt-2 max-w-xl text-sm text-osso-muted sm:text-base">
+            O chef monta camada por camada.
           </p>
         </div>
-
-        {/* Live Status Pill & Replay */}
         <div className="flex flex-wrap items-center gap-3">
-          <div className="px-4 py-2 rounded-2xl bg-carvao-leve border border-carvao-borda text-xs text-osso font-medium flex items-center gap-2 shadow-sm">
-            <span className="w-2 h-2 rounded-full bg-macarico animate-pulse" />
-            <span>{status}</span>
-          </div>
-
+          <p className="text-sm font-semibold text-osso">{status}</p>
           <button
             type="button"
-            onClick={() => setReplay((r) => r + 1)}
-            className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-white/5 hover:bg-white/10 text-osso text-xs font-bold border border-white/10 transition-colors"
+            onClick={() => setReplay((value) => value + 1)}
+            className="inline-flex min-h-11 items-center rounded border border-carvao-borda bg-carvao-leve px-4 text-sm font-semibold text-osso"
           >
-            <RotateCcw className="w-3.5 h-3.5 text-ouro" />
-            <span>Ver montagem de novo</span>
+            Ver de novo
           </button>
         </div>
       </div>
 
-      {/* Main Grid: 3D Canvas + Interactive Panel */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left: 3D Kitchen Canvas with Physics */}
-        <div className="lg:col-span-7 w-full">
-          <KitchenCanvas
-            selection={selection}
-            replayKey={replay}
-            onStatus={setStatus}
-          />
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
+        <div className="lg:col-span-7">
+          <KitchenCanvas selection={selection} replayKey={replay} onStatus={setStatus} />
         </div>
 
-        {/* Right: Choices & Steps Panel */}
-        <div className="lg:col-span-5 bg-carvao-leve border border-carvao-borda rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl">
+        <div className="space-y-5 rounded-lg border border-carvao-borda bg-carvao-leve p-4 sm:p-6 lg:col-span-5">
           <div>
             <h3 className="font-display text-2xl uppercase tracking-wide text-osso">
               O que vai no seu?
             </h3>
-            <p className="text-xs text-osso-muted">
-              Escolha o recheio e personalize as pastas à vontade.
-            </p>
+            <p className="text-sm text-osso-muted">Recheio e pastas, do seu jeito.</p>
           </div>
 
-          {/* Navigation Tabs */}
-          <div className="flex items-center gap-2 border-b border-carvao-borda pb-4">
-            {(["Pão", "Recheio", "Pastas & queijo"] as const).map((t) => (
+          <div className="flex flex-wrap gap-2 border-b border-carvao-borda pb-4">
+            {(["Pão", "Recheio", "Pastas e queijo"] as const).map((name) => (
               <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
-                  tab === t
-                    ? "bg-macarico text-white shadow-macarico-glow"
-                    : "bg-carvao text-osso-muted hover:text-osso border border-carvao-borda"
-                }`}
+                key={name}
+                type="button"
+                onClick={() => setTab(name)}
+                aria-pressed={tab === name}
+                className={tabClass(tab === name)}
               >
-                {t}
+                {name}
               </button>
             ))}
           </div>
 
-          {/* Tab 1: Pão */}
           {tab === "Pão" && (
-            <div className="space-y-4">
-              <p className="text-xs text-osso-muted">
-                Nosso pão especial artesanal é o ponto central de toda receita.
+            <div>
+              <h4 className="font-display text-base uppercase text-osso">Pão da casa</h4>
+              <p className="mt-1 text-sm text-osso-muted">
+                Crosta dourada, selada na manteiga de alho, miolo macio.
               </p>
-              <div className="p-4 rounded-2xl bg-carvao border border-carvao-borda flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-ouro/10 border border-ouro/30 flex items-center justify-center flex-shrink-0">
-                  <Flame className="w-6 h-6 text-ouro" />
-                </div>
-                <div>
-                  <h4 className="font-display text-base uppercase text-osso">
-                    Pão Artesanal Especial
-                  </h4>
-                  <p className="text-xs text-osso-muted">
-                    Crosta dourada e crocante, selada com manteiga de alho e miolo macio.
-                  </p>
-                </div>
-              </div>
             </div>
           )}
 
-          {/* Tab 2: Recheio */}
           {tab === "Recheio" && (
-            <div className="space-y-3">
-              <p className="text-xs text-osso-muted">
-                Escolha o recheio principal. O chef coloca na hora:
-              </p>
-              <div className="space-y-2.5">
-                {fillings.map((f) => {
-                  const isSelected = filling === f.id;
+            <fieldset>
+              <legend className="mb-2 text-sm font-semibold text-osso-muted">Recheio</legend>
+              <div className="space-y-2">
+                {fillings.map((entry) => {
+                  const menuItem = menuProduct(entry.menuId);
+                  const isSelected = filling === entry.id;
                   return (
-                    <div
-                      key={f.id}
-                      onClick={() => setFilling(f.id)}
-                      className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${
+                    <label
+                      key={entry.id}
+                      className={`flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded border p-2 focus-within:border-osso ${
                         isSelected
-                          ? "bg-macarico/15 border-macarico text-osso shadow-md"
-                          : "bg-carvao border-carvao-borda text-osso-muted hover:border-white/20"
+                          ? "border-macarico bg-macarico/15"
+                          : "border-carvao-borda bg-carvao"
                       }`}
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="relative w-10 h-10 rounded-xl overflow-hidden bg-black flex-shrink-0">
-                          <Image
-                            src={f.image}
-                            alt={f.name}
+                      <input
+                        type="radio"
+                        name="recheio"
+                        value={entry.id}
+                        checked={isSelected}
+                        onChange={() => setFilling(entry.id)}
+                        className="sr-only"
+                      />
+                      <span className="flex min-w-0 items-center gap-3">
+                        <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-madeira-escura">
+                          <FoodMedia
+                            src={menuItem.image}
+                            name={menuItem.name}
+                            alt=""
                             fill
+                            sizes="44px"
                             className="object-cover"
                           />
-                        </div>
-                        <div>
-                          <h4 className="font-display text-sm uppercase text-osso">
-                            {f.name}
-                          </h4>
-                          <p className="text-[11px] text-osso-muted line-clamp-1">
-                            {f.detail}
-                          </p>
-                        </div>
-                      </div>
-                      <span className="font-sans font-bold text-sm text-ouro tabular-nums">
-                        R$ {f.price.toFixed(2).replace(".", ",")}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block font-display text-sm uppercase text-osso">
+                            {menuItem.name}
+                          </span>
+                          <span className="block text-sm text-osso-muted">{entry.detail}</span>
+                        </span>
                       </span>
-                    </div>
+                      <span className="shrink-0 text-sm font-semibold tabular-nums text-ouro">
+                        R$ {formatBRL(menuItem.price)}
+                      </span>
+                    </label>
                   );
                 })}
               </div>
-            </div>
+            </fieldset>
           )}
 
-          {/* Tab 3: Pastas & Queijo */}
-          {tab === "Pastas & queijo" && (
-            <div className="space-y-3">
-              <p className="text-xs text-osso-muted">
-                Ingredientes tradicionais inclusos (clique para remover se desejar):
-              </p>
-              <div className="space-y-2.5">
-                {toppings.map((top) => {
-                  const isChecked = extras.includes(top.root);
+          {tab === "Pastas e queijo" && (
+            <fieldset>
+              <legend className="mb-2 text-sm font-semibold text-osso-muted">
+                Pastas e queijo
+              </legend>
+              <div className="space-y-2">
+                {toppings.map((topping) => {
+                  const checked = extras.includes(topping.root);
                   return (
-                    <div
-                      key={top.root}
-                      onClick={() => toggleExtra(top.root)}
-                      className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${
-                        isChecked
-                          ? "bg-queijo/10 border-queijo/50 text-osso"
-                          : "bg-carvao border-carvao-borda text-osso-muted/60 opacity-60"
+                    <label
+                      key={topping.root}
+                      className={`flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded border p-3 focus-within:border-osso ${
+                        checked
+                          ? "border-queijo bg-queijo/10"
+                          : "border-carvao-borda bg-carvao"
                       }`}
                     >
-                      <div>
-                        <h4 className="font-display text-sm uppercase text-osso">
-                          {top.name}
-                        </h4>
-                        <p className="text-[11px] text-osso-muted">
-                          {top.detail}
-                        </p>
-                      </div>
-                      <div
-                        className={`w-6 h-6 rounded-lg flex items-center justify-center border transition-all ${
-                          isChecked
-                            ? "bg-queijo border-queijo text-black font-bold"
-                            : "border-carvao-borda bg-carvao"
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleExtra(topping.root)}
+                        className="sr-only"
+                      />
+                      <span>
+                        <span
+                          className={`block font-display text-sm uppercase ${
+                            checked ? "text-osso" : "text-osso-muted line-through"
+                          }`}
+                        >
+                          {topping.name}
+                        </span>
+                        <span className="block text-sm text-osso-muted">{topping.detail}</span>
+                      </span>
+                      <span
+                        aria-hidden
+                        className={`h-4 w-4 shrink-0 border ${
+                          checked ? "border-queijo bg-queijo" : "border-osso-muted"
                         }`}
-                      >
-                        {isChecked && <Check className="w-4 h-4" />}
-                      </div>
-                    </div>
+                      />
+                    </label>
                   );
                 })}
               </div>
-            </div>
+            </fieldset>
           )}
 
-          {/* Summary & Add to Cart */}
-          <div className="pt-4 border-t border-carvao-borda flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between gap-4 border-t border-carvao-borda pt-4">
             <div>
-              <span className="block text-[10px] uppercase font-bold tracking-wider text-osso-muted">
-                Total do Lanche
-              </span>
-              <span className="font-sans font-bold text-2xl text-ouro tabular-nums">
-                R$ {selectedFilling.price.toFixed(2).replace(".", ",")}
+              <span className="block text-sm font-semibold text-osso-muted">Total do lanche</span>
+              <span className="text-2xl font-bold tabular-nums text-ouro">
+                R$ {formatBRL(product.price)}
               </span>
             </div>
-
             <button
+              type="button"
               onClick={handleAddToCart}
-              className="flex-1 flex items-center justify-center gap-2 py-3.5 px-5 rounded-2xl bg-macarico hover:bg-macarico-glow text-white font-bold text-sm shadow-macarico-glow active:scale-[0.98] transition-all"
+              className="inline-flex min-h-11 flex-1 items-center justify-center rounded bg-macarico px-4 text-sm font-semibold text-carvao"
             >
-              <ShoppingBag className="w-4 h-4" />
-              <span>Colocar na Sacola</span>
+              Colocar na sacola
             </button>
           </div>
         </div>

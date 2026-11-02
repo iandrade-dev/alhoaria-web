@@ -25,9 +25,7 @@ export default function KitchenCanvas({
   selected.current = selection;
   callback.current = onStatus;
 
-  const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">(
-    "idle"
-  );
+  const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [active, setActive] = useState(false);
 
   useEffect(() => {
@@ -50,13 +48,13 @@ export default function KitchenCanvas({
     let cancelled = false;
     let instance: KitchenEngineType | null = null;
 
-    const update = (s: string) => {
+    const update = (next: string) => {
       if (cancelled) return;
-      if (s === "ready") {
+      if (next === "ready") {
         setStatus("ready");
         callback.current?.("Escolha o recheio. A gente monta na sua frente.");
       } else {
-        callback.current?.(s);
+        callback.current?.(next);
       }
     };
 
@@ -75,8 +73,8 @@ export default function KitchenCanvas({
         engine.current = instance;
         instance.setSelection(selected.current);
       })
-      .catch((e) => {
-        console.error("Cena 3D indisponível:", e);
+      .catch((error) => {
+        console.error("Cena 3D indisponível:", error);
         instance?.dispose();
         if (!cancelled) {
           setStatus("error");
@@ -91,81 +89,77 @@ export default function KitchenCanvas({
     };
   }, [active]);
 
+  const controlClass =
+    "inline-flex min-h-11 min-w-11 items-center justify-center rounded text-osso-muted hover:text-osso";
+
   return (
     <div
       ref={mount}
-      className="relative w-full h-[450px] sm:h-[520px] rounded-3xl overflow-hidden bg-gradient-to-b from-[#140e0a] to-[#0a0705] border border-carvao-borda shadow-2xl flex items-center justify-center select-none"
+      className="relative flex h-[420px] w-full select-none items-center justify-center overflow-hidden rounded-xl border border-carvao-borda bg-carvao sm:h-[520px]"
       data-kitchen-ready={status === "ready" ? "true" : "false"}
       data-kitchen-status={status}
-      aria-label="Montagem interativa do pão de alho em 3D"
+      aria-label="Montagem do pão de alho em 3D"
     >
-      {/* Idle overlay */}
       {status === "idle" && (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-carvao/80 backdrop-blur-sm p-6 text-center">
-          <p className="text-sm text-osso font-medium max-w-xs">
-            Escolha um recheio abaixo ou clique para iniciar a montagem 3D.
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-carvao p-6 text-center">
+          <p className="max-w-xs text-sm font-semibold text-osso">
+            Escolha um recheio ou abra a bancada para ver a montagem.
           </p>
           <button
             type="button"
             onClick={() => setActive(true)}
-            className="px-6 py-3 rounded-2xl bg-macarico hover:bg-macarico-glow text-white font-bold text-sm shadow-macarico-glow active:scale-95 transition-all"
+            className="inline-flex min-h-11 items-center rounded bg-macarico px-5 text-sm font-semibold text-carvao"
           >
-            Ativar Bancada 3D ao Vivo
+            Ver a montagem
           </button>
         </div>
       )}
 
-      {/* Loading overlay */}
       {status === "loading" && (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-carvao/90 backdrop-blur-md">
-          <div className="w-8 h-8 border-2 border-macarico border-t-transparent rounded-full animate-spin" />
-          <span className="text-xs font-semibold text-osso-muted tracking-wider uppercase">
-            Preparando a bancada do chef…
-          </span>
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-carvao">
+          <p className="text-sm font-semibold text-osso-muted">Preparando a bancada…</p>
         </div>
       )}
 
-      {/* Error fallback */}
       {status === "error" && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center text-center p-6 text-osso-muted text-xs">
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-carvao p-6 text-center text-sm text-osso-muted">
           Não foi possível carregar a simulação 3D neste navegador.
         </div>
       )}
 
-      {/* Ready controls */}
       {status === "ready" && (
-        <div className="absolute bottom-4 right-4 z-20 flex items-center gap-1.5 bg-carvao/85 border border-white/10 rounded-2xl p-1.5 backdrop-blur-md shadow-lg">
+        <div className="absolute bottom-3 right-3 z-20 flex items-center gap-1 rounded-lg border border-carvao-borda bg-carvao p-1">
           <button
             type="button"
             onClick={() => engine.current?.rotate(0.35)}
-            aria-label="Girar para esquerda"
-            className="p-2 rounded-xl text-osso-muted hover:text-osso hover:bg-white/10 transition-colors"
+            aria-label="Girar para a esquerda"
+            className={controlClass}
           >
-            <RotateCcw className="w-4 h-4" />
+            <RotateCcw className="h-4 w-4" aria-hidden />
           </button>
           <button
             type="button"
             onClick={() => engine.current?.rotate(-0.35)}
-            aria-label="Girar para direita"
-            className="p-2 rounded-xl text-osso-muted hover:text-osso hover:bg-white/10 transition-colors"
+            aria-label="Girar para a direita"
+            className={controlClass}
           >
-            <RotateCw className="w-4 h-4" />
+            <RotateCw className="h-4 w-4" aria-hidden />
           </button>
           <button
             type="button"
             onClick={() => engine.current?.zoom(0.85)}
-            aria-label="Aproximar zoom"
-            className="p-2 rounded-xl text-osso-muted hover:text-osso hover:bg-white/10 transition-colors"
+            aria-label="Aproximar"
+            className={controlClass}
           >
-            <ZoomIn className="w-4 h-4" />
+            <ZoomIn className="h-4 w-4" aria-hidden />
           </button>
           <button
             type="button"
             onClick={() => engine.current?.zoom(1.15)}
-            aria-label="Afastar zoom"
-            className="p-2 rounded-xl text-osso-muted hover:text-osso hover:bg-white/10 transition-colors"
+            aria-label="Afastar"
+            className={controlClass}
           >
-            <ZoomOut className="w-4 h-4" />
+            <ZoomOut className="h-4 w-4" aria-hidden />
           </button>
         </div>
       )}

@@ -1,82 +1,71 @@
 "use client";
 
-import React from "react";
 import Image from "next/image";
-import Link from "next/link";
-import { Instagram, MapPin, Heart, Flame } from "lucide-react";
 import menuData from "@/data/menu.json";
 
 export default function Footer() {
   return (
-    <footer className="w-full bg-black border-t border-carvao-borda text-osso-muted py-14 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-8">
-        {/* Brand identity */}
-        <div className="flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
-          <div className="relative w-16 h-16 rounded-full overflow-hidden border border-white/20 bg-carvao flex-shrink-0">
+    <footer className="w-full border-t border-carvao-borda bg-black px-4 py-12 text-osso-muted sm:px-6 lg:px-8">
+      <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-8 md:flex-row">
+        <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
+          <span className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full border border-carvao-borda bg-carvao">
             <Image
-              src="/refs/logo-anota.jpg"
-              alt="Alhoaria Selo"
+              src="/assets/photos/logo-anota-w320.webp"
+              alt="Selo Alhoaria"
               width={64}
               height={64}
               className="object-cover"
             />
-          </div>
+          </span>
           <div>
-            <h3 className="font-display text-xl uppercase tracking-wider text-osso">
-              ALHOARIA
-            </h3>
-            <p className="text-xs text-osso-muted">
-              Pão de Alho Recheado · Santa Catarina · Desde 2023
+            <h2 className="font-display text-xl uppercase tracking-wider text-osso">
+              Alhoaria
+            </h2>
+            <p className="text-sm text-osso-muted">
+              Pão de alho recheado · Santa Catarina · Desde 2023
             </p>
-            <p className="text-[11px] text-osso-muted/60 mt-1">
-              Pedra Branca (Palhoça) · Kobrasol (São José) · Em breve Praia de Fora
+            <p className="mt-1 text-sm text-osso-muted">
+              Pedra Branca (Palhoça) · Kobrasol (São José) · Praia de Fora: em breve
             </p>
           </div>
         </div>
 
-        {/* Links & Social */}
-        <div className="flex flex-col sm:flex-row items-center gap-6 text-xs">
+        <div className="flex flex-col items-center gap-4 text-sm sm:flex-row">
           <a
             href={menuData.brand.instagram}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-osso transition-colors border border-white/10"
+            className="inline-flex min-h-11 items-center rounded border border-carvao-borda bg-carvao-leve px-3 font-semibold text-osso"
           >
-            <Instagram className="w-4 h-4 text-macarico" />
-            <span>@alhoaria (18,7k)</span>
+            @alhoaria
           </a>
-
           <a
             href={menuData.brand.linktree}
             target="_blank"
             rel="noopener noreferrer"
-            className="hover:text-osso transition-colors"
+            className="font-semibold hover:text-osso"
           >
-            Linktree Oficial
+            Linktree
           </a>
-
           <a
             href={menuData.brand.anota_ai_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="hover:text-osso transition-colors"
+            className="font-semibold hover:text-osso"
           >
             Anota AI
           </a>
         </div>
 
-        {/* Credit */}
-        <div className="text-center md:text-right text-xs text-osso-muted/70">
-          <p>
-            Lanche bom é no pão de alho. O resto é pão. 🔥
-          </p>
-          <p className="mt-1 text-[11px] text-osso-muted/50">
+        <div className="text-center text-sm text-osso-muted md:text-right">
+          <p>Lanche bom é no pão de alho. O resto é pão.</p>
+          <p className="mt-1">
             Desenvolvido por{" "}
             <a
               href="https://instagram.com/iandradedev"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-ouro hover:underline"
+              className="font-semibold text-ouro"
             >
               @iandradedev
             </a>
