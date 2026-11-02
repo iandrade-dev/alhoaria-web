@@ -5,6 +5,20 @@
 
 ---
 
+## Pesquisa e handoff (Grok Bot / Insta Dev)
+
+O levantamento de 01–02/11/2026 está em [`docs/grokbot/GROKBOT-LEVANTAMENTO.md`](docs/grokbot/GROKBOT-LEVANTAMENTO.md). Dali sai o restante da pasta:
+
+- **Pesquisa IG + Anota AI** — cardápio, unidades e tom visual (cozinha escura, maçarico, queijo).
+- **Brief Blender/site** — brand kit, menu, escopo e lista de GLBs em [`ALHOARIA-BRIEF-GPT-BLENDER.md`](docs/grokbot/ALHOARIA-BRIEF-GPT-BLENDER.md).
+- **Montador 3D** — mão do chef coloca e tira ingredientes numa cozinha realista; o pedido fecha no WhatsApp. Refs em [`REFS-3D.md`](docs/grokbot/REFS-3D.md) (Wawa Eats, pizza makers).
+- **Time Grok Bot Alhoaria** — Orquestra, Pesquisa, Modelo, Física, Front e QA.
+- **Agents OpenCode** — `alhoaria-orquestra` e `@alhoaria-pesquisa`, `@alhoaria-modelo`, `@alhoaria-fisica`, `@alhoaria-front`, `@alhoaria-qa`. Plano em [`PLANO-V2.md`](docs/grokbot/PLANO-V2.md); assets e licenças em [`ASSET-LIST-V2.md`](docs/grokbot/ASSET-LIST-V2.md) e [`FONTES-ASSETS-P0.md`](docs/grokbot/FONTES-ASSETS-P0.md).
+
+Preços e contatos raspados continuam marcados **VERIFICAR COM O CLIENTE**. Não publicar sem ok explícito.
+
+---
+
 ## 🚀 Tecnologias
 
 * **Next.js 15 (App Router)** + **React 19** + **TypeScript**
