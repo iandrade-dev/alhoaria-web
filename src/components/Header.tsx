@@ -62,16 +62,16 @@ export default function Header() {
 
         <div className="flex items-center gap-4">
           <nav className="hidden items-center gap-5 text-sm font-semibold text-osso-muted sm:flex">
-            <a href="#monte-ao-vivo" className="hover:text-osso">
-              Monte em 3D
-            </a>
-            <a href="#cardapio" className="hover:text-osso">
-              Cardápio
-            </a>
-            <a href="#unidades" className="hover:text-osso">
+            <Link href="/" className="hover:text-osso">
+              Bancada 3D
+            </Link>
+            <Link href="/cardapio" className="hover:text-osso">
+              Cardápio Completo
+            </Link>
+            <a href="/#unidades" className="hover:text-osso">
               Unidades
             </a>
-            <a href="#chopp-lohn" className="hover:text-osso">
+            <a href="/#chopp-lohn" className="hover:text-osso">
               Chopp Lohn
             </a>
           </nav>

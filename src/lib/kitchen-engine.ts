@@ -26,6 +26,8 @@ interface RigidBodyEntry {
   rotation: THREE.Quaternion;
 }
 
+export type CameraPreset = 'bancada' | 'macro' | 'topo';
+
 export class KitchenEngine {
   mount: HTMLElement;
   status: (s: string) => void;
@@ -63,6 +65,26 @@ export class KitchenEngine {
   ro: ResizeObserver;
   io: IntersectionObserver;
 
+  // Visual FX: Maçarico & Vapor
+  torchLight!: THREE.PointLight;
+  torchCoreLight!: THREE.PointLight;
+  torchTimer: number = 0;
+  torchDuration: number = 2.2;
+  torchSparks!: THREE.Points;
+  torchSparksGeo!: THREE.BufferGeometry;
+  torchSparksPositions!: Float32Array;
+  torchSparksVelocities!: Float32Array;
+
+  steamParticles!: THREE.Points;
+  steamGeo!: THREE.BufferGeometry;
+  steamPositions!: Float32Array;
+  steamAlphas!: Float32Array;
+
+  // Smooth Camera transition
+  cameraTargetPos: THREE.Vector3 | null = null;
+  cameraTargetLook: THREE.Vector3 | null = null;
+  boardCenter: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
+
   constructor(mount: HTMLElement, status: (s: string) => void) {
     this.mount = mount;
     this.status = status;
@@ -79,17 +101,22 @@ export class KitchenEngine {
     this.visible = true;
     this.last = 0;
     this.accumulator = 0;
-    this.reduced = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.reduced =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     this.renderer = new THREE.WebGLRenderer({
       alpha: true,
       antialias: true,
+      powerPreference: 'high-performance',
     });
-    this.renderer.setPixelRatio(Math.min(typeof window !== 'undefined' ? window.devicePixelRatio : 1, 1.7));
+    this.renderer.setPixelRatio(
+      Math.min(typeof window !== 'undefined' ? window.devicePixelRatio : 1, 1.8)
+    );
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1;
+    this.renderer.toneMappingExposure = 1.05;
 
     const studio = new RoomEnvironment();
     const pmrem = new THREE.PMREMGenerator(this.renderer);
@@ -103,28 +130,45 @@ export class KitchenEngine {
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
+    this.controls.dampingFactor = 0.08;
     this.controls.enablePan = false;
     this.controls.minPolarAngle = 0.15;
-    this.controls.maxPolarAngle = Math.PI / 2 - 0.05;
-    this.controls.minDistance = 0.3;
-    this.controls.maxDistance = 2;
+    this.controls.maxPolarAngle = Math.PI / 2 - 0.04;
+    this.controls.minDistance = 0.28;
+    this.controls.maxDistance = 1.8;
 
-    this.scene.add(new THREE.HemisphereLight(0xffe8cc, 0x5c493c, 2));
+    // Atmospheric warm lighting (dark kitchen + warm embers)
+    this.scene.add(new THREE.HemisphereLight(0xffe8cc, 0x4a3424, 2.2));
 
-    const light = new THREE.DirectionalLight(0xffe2bd, 3);
-    light.position.set(-0.7, 1.3, 1);
-    light.castShadow = true;
-    light.shadow.mapSize.set(1024, 1024);
-    light.shadow.camera.left = -0.6;
-    light.shadow.camera.right = 0.6;
-    light.shadow.camera.top = 0.6;
-    light.shadow.camera.bottom = -0.6;
-    light.shadow.normalBias = 0.0003;
-    this.scene.add(light);
+    // Key light (warm lamp above cutting board)
+    const keyLight = new THREE.DirectionalLight(0xffdfb8, 3.2);
+    keyLight.position.set(-0.7, 1.4, 0.9);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(1024, 1024);
+    keyLight.shadow.camera.left = -0.55;
+    keyLight.shadow.camera.right = 0.55;
+    keyLight.shadow.camera.top = 0.55;
+    keyLight.shadow.camera.bottom = -0.55;
+    keyLight.shadow.normalBias = 0.0003;
+    this.scene.add(keyLight);
 
-    const fill = new THREE.DirectionalLight(0xffffff, 1.2);
-    fill.position.set(0.8, 0.5, -0.7);
-    this.scene.add(fill);
+    // Warm back/rim light
+    const rimLight = new THREE.DirectionalLight(0xff9944, 1.6);
+    rimLight.position.set(0.8, 0.6, -0.8);
+    this.scene.add(rimLight);
+
+    // Dynamic Maçarico Lights
+    this.torchLight = new THREE.PointLight(0xff5500, 0, 1.4, 2);
+    this.torchLight.position.set(-0.15, 0.22, 0.1);
+    this.scene.add(this.torchLight);
+
+    this.torchCoreLight = new THREE.PointLight(0x38bdf8, 0, 0.6, 2);
+    this.torchCoreLight.position.set(-0.12, 0.2, 0.08);
+    this.scene.add(this.torchCoreLight);
+
+    // Setup FX systems
+    this.initSparks();
+    this.initSteam();
 
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(mount);
@@ -135,12 +179,138 @@ export class KitchenEngine {
     this.resize();
   }
 
+  private initSparks() {
+    const count = 48;
+    this.torchSparksGeo = new THREE.BufferGeometry();
+    this.torchSparksPositions = new Float32Array(count * 3);
+    this.torchSparksVelocities = new Float32Array(count * 3);
+
+    for (let i = 0; i < count; i++) {
+      this.torchSparksPositions[i * 3 + 0] = 0;
+      this.torchSparksPositions[i * 3 + 1] = -10; // offscreen
+      this.torchSparksPositions[i * 3 + 2] = 0;
+    }
+
+    this.torchSparksGeo.setAttribute(
+      'position',
+      new THREE.BufferAttribute(this.torchSparksPositions, 3)
+    );
+
+    const mat = new THREE.PointsMaterial({
+      color: 0xffaa33,
+      size: 0.012,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+
+    this.torchSparks = new THREE.Points(this.torchSparksGeo, mat);
+    this.scene.add(this.torchSparks);
+  }
+
+  private initSteam() {
+    const count = 36;
+    this.steamGeo = new THREE.BufferGeometry();
+    this.steamPositions = new Float32Array(count * 3);
+    this.steamAlphas = new Float32Array(count);
+
+    for (let i = 0; i < count; i++) {
+      this.resetSteamParticle(i, Math.random() * 0.15);
+    }
+
+    this.steamGeo.setAttribute(
+      'position',
+      new THREE.BufferAttribute(this.steamPositions, 3)
+    );
+
+    const mat = new THREE.PointsMaterial({
+      color: 0xffeedd,
+      size: 0.038,
+      transparent: true,
+      opacity: 0.18,
+      blending: THREE.NormalBlending,
+      depthWrite: false,
+    });
+
+    this.steamParticles = new THREE.Points(this.steamGeo, mat);
+    this.scene.add(this.steamParticles);
+  }
+
+  private resetSteamParticle(i: number, yOffset = 0) {
+    this.steamPositions[i * 3 + 0] = (Math.random() - 0.5) * 0.14;
+    this.steamPositions[i * 3 + 1] = 0.05 + yOffset;
+    this.steamPositions[i * 3 + 2] = (Math.random() - 0.5) * 0.12;
+    this.steamAlphas[i] = Math.random();
+  }
+
+  triggerTorch() {
+    this.torchTimer = this.torchDuration;
+    this.status('Maçarico ligado! Gratinando queijo na sua frente 🔥');
+
+    // Trigger cheese glow
+    const gratin = this.root?.getObjectByName('stage_gratin');
+    if (gratin) {
+      gratin.traverse((o) => {
+        if (o instanceof THREE.Mesh) {
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          for (const m of mats) {
+            if (m instanceof THREE.MeshStandardMaterial) {
+              m.emissive = new THREE.Color(0xff4400);
+              m.emissiveIntensity = 1.2;
+            }
+          }
+        }
+      });
+    }
+
+    // Spawn initial spark burst
+    const count = this.torchSparksPositions.length / 3;
+    for (let i = 0; i < count; i++) {
+      this.torchSparksPositions[i * 3 + 0] = (Math.random() - 0.5) * 0.08;
+      this.torchSparksPositions[i * 3 + 1] = 0.08 + Math.random() * 0.04;
+      this.torchSparksPositions[i * 3 + 2] = (Math.random() - 0.5) * 0.08;
+
+      this.torchSparksVelocities[i * 3 + 0] = (Math.random() - 0.5) * 0.4;
+      this.torchSparksVelocities[i * 3 + 1] = 0.2 + Math.random() * 0.5;
+      this.torchSparksVelocities[i * 3 + 2] = (Math.random() - 0.5) * 0.4;
+    }
+    this.torchSparksGeo.attributes.position.needsUpdate = true;
+  }
+
+  setCameraPreset(preset: CameraPreset) {
+    const target = this.boardCenter.clone().add(new THREE.Vector3(0, 0.06, 0));
+    this.cameraTargetLook = target;
+
+    if (preset === 'bancada') {
+      const d = this.camera.aspect < 1 ? 0.55 : 0.46;
+      this.cameraTargetPos = target.clone().add(new THREE.Vector3(d * 0.45, d * 0.65, d * 0.95));
+    } else if (preset === 'macro') {
+      // Extreme appetizing close-up on the meat and cheese
+      this.cameraTargetPos = target.clone().add(new THREE.Vector3(0.08, 0.12, 0.22));
+    } else if (preset === 'topo') {
+      // Overhead tabletop view
+      this.cameraTargetPos = target.clone().add(new THREE.Vector3(0.01, 0.58, 0.05));
+    }
+  }
+
   frame = (now: number) => {
     if (this.disposed) return;
     const dt = this.last ? Math.min((now - this.last) / 1000, 0.05) : 0;
     this.last = now;
     if (!this.visible || document.hidden) return;
 
+    // Handle Smooth Camera Lerp
+    if (this.cameraTargetPos && this.cameraTargetLook) {
+      this.camera.position.lerp(this.cameraTargetPos, dt * 4.5);
+      this.controls.target.lerp(this.cameraTargetLook, dt * 4.5);
+      if (this.camera.position.distanceTo(this.cameraTargetPos) < 0.005) {
+        this.cameraTargetPos = null;
+        this.cameraTargetLook = null;
+      }
+    }
+
+    // Process Hand Assembly Queue
     if (!this.active && this.queue.length) {
       const name = this.queue.shift()!;
       const root = this.root.getObjectByName(name)!;
@@ -179,12 +349,12 @@ export class KitchenEngine {
       }
       this.status(
         name === 'stage_bread'
-          ? 'Colocando o pão…'
+          ? 'Colocando o pão crocante…'
           : name === 'stage_garlic'
           ? 'Espalhando a pasta de alho…'
           : name.startsWith('filling_')
-          ? 'Preparando o recheio…'
-          : 'Finalizando com queijo…'
+          ? 'Acomodando o recheio suculento…'
+          : 'Cobringo com queijo artesanal…'
       );
     }
 
@@ -231,13 +401,71 @@ export class KitchenEngine {
         if (!this.queue.length) {
           this.status(
             this.selected.size > 2
-              ? 'Seu lanche está tomando forma.'
-              : 'Escolha o recheio. A gente monta na sua frente.'
+              ? 'Sanduíche pronto na bancada. Dê um toque no maçarico!'
+              : 'Escolha o recheio. O chef monta na sua frente.'
           );
         }
       }
     }
 
+    // Torch Flame & Sizzle FX Animation
+    if (this.torchTimer > 0) {
+      this.torchTimer -= dt;
+      const progress = 1 - Math.max(0, this.torchTimer) / this.torchDuration;
+      // Flame flicker
+      const flicker = 0.85 + Math.sin(now * 0.03) * 0.15 + (Math.random() - 0.5) * 0.2;
+      const intensity = Math.sin(progress * Math.PI) * 4.5 * flicker;
+      this.torchLight.intensity = Math.max(0, intensity);
+      this.torchCoreLight.intensity = Math.max(0, intensity * 0.4);
+
+      // Move torch light smoothly across the bread
+      this.torchLight.position.x = -0.12 + Math.sin(progress * Math.PI * 1.5) * 0.18;
+      this.torchCoreLight.position.x = this.torchLight.position.x + 0.02;
+
+      // Animate sparks
+      const mat = this.torchSparks.material as THREE.PointsMaterial;
+      mat.opacity = Math.sin(progress * Math.PI) * 0.9;
+      const count = this.torchSparksPositions.length / 3;
+      for (let i = 0; i < count; i++) {
+        this.torchSparksPositions[i * 3 + 0] += this.torchSparksVelocities[i * 3 + 0] * dt;
+        this.torchSparksPositions[i * 3 + 1] += this.torchSparksVelocities[i * 3 + 1] * dt;
+        this.torchSparksPositions[i * 3 + 2] += this.torchSparksVelocities[i * 3 + 2] * dt;
+        this.torchSparksVelocities[i * 3 + 1] -= 9.8 * 0.08 * dt; // gravity
+      }
+      this.torchSparksGeo.attributes.position.needsUpdate = true;
+
+      // Cool down cheese glow
+      const gratin = this.root?.getObjectByName('stage_gratin');
+      if (gratin) {
+        gratin.traverse((o) => {
+          if (o instanceof THREE.Mesh) {
+            const mats = Array.isArray(o.material) ? o.material : [o.material];
+            for (const m of mats) {
+              if (m instanceof THREE.MeshStandardMaterial) {
+                m.emissiveIntensity = Math.max(0, (1 - progress) * 1.1);
+              }
+            }
+          }
+        });
+      }
+    } else {
+      this.torchLight.intensity = 0;
+      this.torchCoreLight.intensity = 0;
+      (this.torchSparks.material as THREE.PointsMaterial).opacity = 0;
+    }
+
+    // Animate Steam
+    const steamCount = this.steamPositions.length / 3;
+    for (let i = 0; i < steamCount; i++) {
+      this.steamPositions[i * 3 + 1] += dt * 0.06; // rise
+      this.steamPositions[i * 3 + 0] += Math.sin(now * 0.002 + i) * dt * 0.01;
+      if (this.steamPositions[i * 3 + 1] > 0.28) {
+        this.resetSteamParticle(i);
+      }
+    }
+    this.steamGeo.attributes.position.needsUpdate = true;
+
+    // Physics step
     this.accumulator = Math.min(this.accumulator + dt, 0.1);
     while (this.accumulator >= 1 / 120) {
       this.world?.step();
@@ -335,9 +563,8 @@ export class KitchenEngine {
       const center = new THREE.Box3()
         .setFromObject(board)
         .getCenter(new THREE.Vector3());
-      this.controls.target
-        .copy(center)
-        .add(new THREE.Vector3(0, 0.06, 0));
+      this.boardCenter.copy(center);
+      this.controls.target.copy(center).add(new THREE.Vector3(0, 0.06, 0));
     }
     this.resetCamera();
     this.renderer.setAnimationLoop(this.frame);
@@ -522,6 +749,11 @@ export class KitchenEngine {
     this.io.disconnect();
     this.controls.dispose();
     this.draco.dispose();
+    this.torchSparksGeo?.dispose();
+    (this.torchSparks?.material as THREE.Material)?.dispose();
+    this.steamGeo?.dispose();
+    (this.steamParticles?.material as THREE.Material)?.dispose();
+
     this.scene.traverse((o) => {
       if (o instanceof THREE.Mesh) {
         o.geometry.dispose();
