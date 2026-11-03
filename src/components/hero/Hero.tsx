@@ -106,7 +106,7 @@ export default function Hero() {
     const step = (now: number) => {
       if (!sectionRef.current || !autoscrollRef.current) return;
       const amount = Math.min(1, (now - started) / 13200);
-      window.scrollTo(0, start + distance * amount);
+      window.scrollTo({ top: start + distance * amount, behavior: "instant" });
       if (amount < 1) requestAnimationFrame(step);
       else setAutoscrolling(false);
     };
@@ -131,21 +131,20 @@ export default function Hero() {
   return (
     <section id="inicio" ref={sectionRef} className={`relative bg-carvao ${staticHero ? "min-h-[calc(100svh-var(--header-height))]" : "h-[550vh]"}`}>
       <div className={`sticky top-[var(--header-height)] flex h-[calc(100svh-var(--header-height))] min-h-[540px] items-center justify-center overflow-hidden bg-carvao ${staticHero ? "static !h-auto min-h-[calc(100svh-var(--header-height))]" : ""}`}>
-        <div aria-hidden="true" className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_42%,#0A0A0A_82%)]" />
-        {source && !failed && !reduceMotion && <video ref={videoRef} aria-hidden="true" muted playsInline preload="auto" poster={heroSandwich.posters.first} src={source} className="absolute inset-0 h-full w-full object-cover" />}
-        {staticHero && <img src={heroSandwich.posters.final} alt="" className="absolute inset-0 h-full w-full object-cover opacity-75" />}
+        {source && !failed && !reduceMotion && <video ref={videoRef} aria-hidden="true" muted playsInline preload="auto" poster={heroSandwich.posters.first} src={source} className="absolute left-1/2 top-[72%] h-auto w-[175vw] -translate-x-1/2 -translate-y-1/2 aspect-[1264/720] object-cover [mask-image:radial-gradient(ellipse_64%_68%_at_50%_50%,#000_72%,transparent_100%)] [-webkit-mask-image:radial-gradient(ellipse_64%_68%_at_50%_50%,#000_72%,transparent_100%)] md:left-auto md:right-0 md:top-1/2 md:h-auto md:w-[57vw] md:max-w-full md:translate-x-0 md:-translate-y-1/2" />}
+        {staticHero && <img src={heroSandwich.posters.final} alt="" className="absolute left-1/2 top-[72%] h-auto w-[175vw] -translate-x-1/2 -translate-y-1/2 aspect-[1264/720] object-cover opacity-75 [mask-image:radial-gradient(ellipse_64%_68%_at_50%_50%,#000_72%,transparent_100%)] [-webkit-mask-image:radial-gradient(ellipse_64%_68%_at_50%_50%,#000_72%,transparent_100%)] md:left-auto md:right-0 md:top-1/2 md:h-auto md:w-[57vw] md:max-w-full md:translate-x-0 md:-translate-y-1/2" />}
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-carvao/50 via-transparent to-carvao/70" />
-        <div className="relative z-10 mx-auto flex h-full w-full max-w-7xl flex-col justify-center px-5 py-12 sm:px-10">
+        <div className="relative z-10 mx-auto flex h-full w-full max-w-7xl flex-col justify-start px-5 pt-8 sm:px-10 md:justify-center md:pt-12">
           <AnimatePresence mode="wait">
-            {finished ? <motion.div key="final" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-2xl">
+            {finished ? <motion.div key="final" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-2xl md:max-w-[34vw]">
               <h1 className="font-display text-6xl uppercase leading-[0.9] text-osso sm:text-8xl">{heroSandwich.name}</h1>
               <div className="mt-8 flex flex-wrap gap-4">
                 <button onClick={() => scrollTo("#bancada")} className="min-h-12 rounded bg-macarico px-6 font-bold text-carvao hover:bg-queijo focus-visible:outline">Monte o seu</button>
                 <a href={PEDIDO_URL} target="_blank" rel="noreferrer" aria-label="Peça no Anota Aí (abre em nova aba)" className="inline-flex min-h-12 items-center rounded border-2 border-osso px-6 font-bold text-osso hover:bg-osso hover:text-carvao">Peça no Anota Aí</a>
               </div>
-            </motion.div> : exploding ? <motion.div key="ingredients" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="relative h-full w-full">
-              {ingredients.map((ingredient, index) => <motion.p key={ingredient} initial={{ opacity: 0, x: 18 }} animate={{ opacity: Math.min(1, Math.max(0, (time - 13 - index * 0.45) / 0.35)), x: 0 }} transition={{ duration: 0.35 }} className="absolute left-0 max-w-[34%] text-sm font-semibold text-osso drop-shadow-[0_2px_8px_#000] sm:left-auto sm:right-0 sm:max-w-[24%] sm:text-lg" style={{ top: heroSandwich.ingredientPositions[index].top }}>{ingredient}</motion.p>)}
-            </motion.div> : <motion.div key="intro" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-2xl">
+            </motion.div> : exploding ? <motion.div key="ingredients" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="relative w-full md:h-full md:w-[34vw]">
+              {ingredients.map((ingredient, index) => <motion.p key={ingredient} initial={{ opacity: 0, x: 18 }} animate={{ opacity: Math.min(1, Math.max(0, (time - 13 - index * 0.45) / 0.35)), x: 0 }} transition={{ duration: 0.35 }} className="mb-1 text-xs font-semibold leading-5 text-osso drop-shadow-[0_2px_8px_#000] md:absolute md:left-0 md:mb-0 md:max-w-[90%] md:text-lg md:after:absolute md:after:left-full md:after:top-1/2 md:after:ml-2 md:after:h-px md:after:w-5 md:after:bg-macarico" style={{ top: `calc((100% - 32.5vw) / 2 + ${heroSandwich.ingredientPositions[index].top})` }}>{ingredient}</motion.p>)}
+            </motion.div> : <motion.div key="intro" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-2xl md:max-w-[34vw]">
               {time < 4 ? <><h1 className="font-display text-5xl uppercase leading-[0.9] text-osso sm:text-7xl">{heroSandwich.copy.opening}</h1><p className="mt-3 font-hand text-4xl text-macarico sm:text-5xl">{heroSandwich.copy.handwritten}</p><button onClick={beginAutoscroll} className="pointer-events-auto mt-6 rounded bg-macarico px-5 py-3 font-bold text-carvao focus-visible:outline">Ver como é feito</button><p className="mt-4 text-sm text-osso">Role para ver ↓</p></> : <p className="font-display text-3xl text-osso sm:text-5xl">{time < 6 ? heroSandwich.copy.torch : heroSandwich.copy.sandwich}</p>}
             </motion.div>}
           </AnimatePresence>
