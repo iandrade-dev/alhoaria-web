@@ -7,7 +7,7 @@ import { heroSandwich } from "./heroSandwich";
 
 const stages = heroSandwich.stages;
 const finalIndex = stages.length - 1;
-const mediaClass = "absolute left-1/2 top-[72%] aspect-[1264/720] h-auto w-[175vw] -translate-x-1/2 -translate-y-1/2 object-cover [mask-image:radial-gradient(ellipse_64%_68%_at_50%_50%,#000_72%,transparent_100%)] [-webkit-mask-image:radial-gradient(ellipse_64%_68%_at_50%_50%,#000_72%,transparent_100%)] md:left-auto md:right-0 md:top-1/2 md:w-[57vw] md:max-w-full md:translate-x-0 md:-translate-y-1/2";
+const mediaClass = "absolute left-1/2 top-[72%] aspect-[1264/720] h-auto w-[175vw] max-w-none -translate-x-1/2 -translate-y-1/2 object-cover [mask-image:radial-gradient(ellipse_64%_68%_at_50%_50%,#000_72%,transparent_100%)] [-webkit-mask-image:radial-gradient(ellipse_64%_68%_at_50%_50%,#000_72%,transparent_100%)] md:left-auto md:right-0 md:top-1/2 md:w-[57vw] md:max-w-full md:translate-x-0 md:-translate-y-1/2";
 
 export default function Hero() {
   const reduceMotion = useReducedMotion();
