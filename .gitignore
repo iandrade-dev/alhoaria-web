@@ -15,6 +15,7 @@
 /build
 
 # misc
+/media-src/
 .DS_Store
 *.pem
 
