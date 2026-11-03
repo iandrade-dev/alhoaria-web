@@ -2,10 +2,10 @@
 # Gera a mídia do hero: hero-desktop.mp4, hero-mobile.mp4, poster.webp, poster-final.webp.
 #
 # uso: scripts/hero-media.sh [ENTRADA_1.mp4] [ENTRADA_2.mp4] [PASTA_DESTINO]
-#   (sem argumentos usa os vídeos de alhoaria props e public/assets/hero deste worktree)
+#   (sem argumentos usa os vídeos de alhoaria props e ../public/assets/hero em relação a este script)
 #
 # variáveis opcionais:
-#   CRF_DESKTOP (24), CRF_MOBILE (27)  qualidade do x264
+#   CRF_DESKTOP (23), CRF_MOBILE (25)  qualidade do x264
 #   XFADE_DUR (0.5)                     duração do fade entre os clipes
 #   CURVE_1, CURVE_2                    curvas (0-1) aplicadas em RGB para cada clipe
 #
@@ -15,18 +15,18 @@ set -euo pipefail
 SRC_DIR="/mnt/c/Users/igors/OneDrive/Documentos/alhoaria props"
 IN1="${1:-$SRC_DIR/fenaky (1).mp4}"
 IN2="${2:-$SRC_DIR/fenaky (2).mp4}"
-OUT="${3:-/home/igor/wt/alhoaria-web-hero-media/public/assets/hero}"
+OUT="${3:-$(cd "$(dirname "$0")/.." && pwd)/public/assets/hero}"
 
-CRF_DESKTOP="${CRF_DESKTOP:-24}"
-CRF_MOBILE="${CRF_MOBILE:-27}"
+CRF_DESKTOP="${CRF_DESKTOP:-23}"
+CRF_MOBILE="${CRF_MOBILE:-25}"
 XFADE_DUR="${XFADE_DUR:-0.5}"
 # Clipe 1 (fundo #0F-#16 com cantos ~#03): pretos e cinzas do fundo caem para ~#0A.
 CURVE_1="${CURVE_1:-0/0.047 0.086/0.047 0.25/0.25 1/1}"
 # Clipe 2 (fundo #000): sobe o preto para ~#0A; tons médios não mudam.
 CURVE_2="${CURVE_2:-0/0.047 0.19/0.19 1/1}"
 
-MAX_DESKTOP=10000000   # 10 MB
-MAX_MOBILE=5000000     # 5 MB
+MAX_DESKTOP=4000000    # 4 MB
+MAX_MOBILE=2000000     # 2 MB
 MAX_POSTER=150000      # 150 KB
 
 mkdir -p "$OUT"
@@ -44,7 +44,7 @@ echo "duracao1=${D1}s offset=${OFF}s xfade=${XFADE_DUR}s"
 encode() { # $1 saída, $2 filtro complexo, $3 crf
   ffmpeg -v error -y -i "$IN1" -i "$IN2" -filter_complex "$2" -map "[v]" -an \
     -c:v libx264 -preset medium -crf "$3" -profile:v high -pix_fmt yuv420p \
-    -g 1 -keyint_min 1 -sc_threshold 0 -movflags +faststart "$1"
+    -g 48 -keyint_min 24 -sc_threshold 0 -force_key_frames 0,4,9.5,13,18 -movflags +faststart "$1"
 }
 
 FC_DESKTOP="$(norm 0 "$CURVE_1")[a];$(norm 1 "$CURVE_2")[b];[a][b]xfade=transition=fade:duration=${XFADE_DUR}:offset=${OFF}[v]"
