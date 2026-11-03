@@ -71,17 +71,14 @@ export default function Hero() {
       video.currentTime = Math.max(0, Math.min(duration, next));
     }
     setTime(video.currentTime);
-    if (target > video.currentTime + 0.15) {
-      if (!video.dataset.stalledSince) video.dataset.stalledSince = String(now);
-      else if (now - Number(video.dataset.stalledSince) > 4000) setFailed(true);
-    } else delete video.dataset.stalledSince;
     frameRef.current = requestAnimationFrame(tick);
   }, []);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    const onSeeked = () => { seekingRef.current = false; };
+    // Travamento real = um seek que não termina em 4 s; ficar atrás do scroll é esperado.
+    const onSeeked = () => { seekingRef.current = false; delete video.dataset.stalledSince; };
     const onError = () => setFailed(true);
     const onMetadata = () => { video.currentTime = 0; };
     video.addEventListener("seeked", onSeeked);
@@ -105,7 +102,7 @@ export default function Hero() {
     const started = performance.now();
     const step = (now: number) => {
       if (!sectionRef.current || !autoscrollRef.current) return;
-      const amount = Math.min(1, (now - started) / 13200);
+      const amount = Math.min(1, (now - started) / 18000);
       window.scrollTo({ top: start + distance * amount, behavior: "instant" });
       if (amount < 1) requestAnimationFrame(step);
       else setAutoscrolling(false);
