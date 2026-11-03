@@ -23,7 +23,7 @@ const config: Config = {
       },
       fontFamily: {
         display: ["Anton", "sans-serif"],
-        sans: ["Inter", "sans-serif"],
+        sans: ["Inter Variable", "Inter", "sans-serif"],
         hand: ["Caveat Brush", "cursive"],
       },
     },
