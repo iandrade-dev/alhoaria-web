@@ -29,7 +29,7 @@ from mathutils import Vector, noise
 # ----------------------------------------------------------------------------
 _argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 ap = argparse.ArgumentParser()
-ap.add_argument("--renders", default=r"\\wsl.localhost\ubuntu\home\igor\orq\runs\lar-429-modelos\renders")
+ap.add_argument("--renders", default=r"\\wsl.localhost\ubuntu\home\igor\orq\runs\lar-429-modelos-a2\renders")
 ap.add_argument("--parts", default="all")
 ap.add_argument("--views", default="all")
 ap.add_argument("--quick", action="store_true")
@@ -43,7 +43,7 @@ POSTER_DIR = os.path.join(REPO, "public", "assets", "bancada")
 POSTER = os.path.join(POSTER_DIR, "lanche-pronto.webp")
 
 PARTS = ["tabua", "pao", "pasta", "costela", "creme", "mussarela", "gratinado", "macarico"]
-SEL_PARTS = PARTS if ARGS.parts == "all" else ARGS.parts.split(",")
+SEL_PARTS = PARTS if ARGS.parts == "all" else ([] if ARGS.parts == "none" else ARGS.parts.split(","))
 
 # ----------------------------------------------------------------------------
 # utilidades de cor / ruido / matematica
@@ -92,11 +92,12 @@ class MB:
     """Acumulador de malha: vertices (cor sRGB), faces, indice de material."""
 
     def __init__(self):
-        self.v, self.c, self.f, self.fm = [], [], [], []
+        self.v, self.c, self.f, self.fm, self.uv = [], [], [], [], []
 
-    def add(self, p, c=(1.0, 1.0, 1.0)):
+    def add(self, p, c=(1.0, 1.0, 1.0), uv=None):
         self.v.append((float(p[0]), float(p[1]), float(p[2])))
         self.c.append(tuple(c))
+        self.uv.append(uv)
         return len(self.v) - 1
 
     def face(self, *idx, m=0):
@@ -110,19 +111,25 @@ class MB:
         self.face(a, b, c, m=m)
 
 
-def finish(mb, name, mats, parent, uvfn=None, weld=True):
-    """Solda vertices coincidentes, remove faces degeneradas e cria o objeto."""
+def finish(mb, name, mats, parent, uvfn=None, weld=True, vc_white=False):
+    """Solda vertices coincidentes, remove faces degeneradas e cria o objeto.
+    UVs: por vertice (mb.add(..., uv=)) ou por posicao (uvfn)."""
+    has_uv = any(u is not None for u in mb.uv)
     if weld:
-        key2new, remap, V, C = {}, [], [], []
+        key2new, remap, V, C, U = {}, [], [], [], []
         for i, p in enumerate(mb.v):
             k = (round(p[0] * 1e6), round(p[1] * 1e6), round(p[2] * 1e6))
+            if has_uv and mb.uv[i] is not None:
+                k += (round(mb.uv[i][0] * 1e4), round(mb.uv[i][1] * 1e4))
             if k not in key2new:
                 key2new[k] = len(V)
                 V.append(p)
                 C.append(mb.c[i])
+                U.append(mb.uv[i] if mb.uv[i] is not None else (0.0, 0.0))
             remap.append(key2new[k])
     else:
         V, C, remap = list(mb.v), list(mb.c), list(range(len(mb.v)))
+        U = [u if u is not None else (0.0, 0.0) for u in mb.uv]
     F, FM = [], []
     for f, m in zip(mb.f, mb.fm):
         g = []
@@ -142,7 +149,7 @@ def finish(mb, name, mats, parent, uvfn=None, weld=True):
     mesh.validate()
     cols = np.zeros((len(V), 4), dtype=np.float32)
     for i, c in enumerate(C):
-        cols[i] = (s2l(c[0]), s2l(c[1]), s2l(c[2]), 1.0)
+        cols[i] = (1.0, 1.0, 1.0, 1.0) if vc_white else (s2l(c[0]), s2l(c[1]), s2l(c[2]), 1.0)
     ca = mesh.color_attributes.new("Col", "FLOAT_COLOR", "POINT")
     ca.data.foreach_set("color", cols.ravel())
     mesh.color_attributes.active_color = ca
@@ -150,12 +157,15 @@ def finish(mb, name, mats, parent, uvfn=None, weld=True):
         mesh.materials.append(m)
     if len(mats) > 1 and len(FM) == len(mesh.polygons):
         mesh.polygons.foreach_set("material_index", FM)
-    if uvfn is not None:
+    if uvfn is not None or has_uv:
         uv = mesh.uv_layers.new(name="UVMap")
         vi = np.empty(len(mesh.loops), dtype=np.int32)
         mesh.loops.foreach_get("vertex_index", vi)
-        co = np.array(V, dtype=np.float32)[vi]
-        uvs = np.array([uvfn(p) for p in co], dtype=np.float32)
+        if has_uv:
+            uvs = np.array(U, dtype=np.float32)[vi]
+        else:
+            co = np.array(V, dtype=np.float32)[vi]
+            uvs = np.array([uvfn(p) for p in co], dtype=np.float32)
         uv.data.foreach_set("uv", uvs.ravel())
     mesh.shade_smooth()
     obj = bpy.data.objects.new(name, mesh)
@@ -184,7 +194,7 @@ def root_empty(name):
 
 
 def make_mat(name, base=(1, 1, 1), rough=0.5, metal=0.0, vcol=True, emit=None, emit_s=1.0,
-             image=None, spec=0.5, coat=0.0):
+             image=None, spec=0.5, coat=0.0, normal_image=None, normal_strength=1.0):
     m = bpy.data.materials.new(name)
     m.use_nodes = True
     nt = m.node_tree
@@ -207,6 +217,13 @@ def make_mat(name, base=(1, 1, 1), rough=0.5, metal=0.0, vcol=True, emit=None, e
         n = nt.nodes.new("ShaderNodeTexImage")
         n.image = image
         nt.links.new(n.outputs["Color"], b.inputs["Base Color"])
+    if normal_image is not None:
+        tn = nt.nodes.new("ShaderNodeTexImage")
+        tn.image = normal_image
+        nm = nt.nodes.new("ShaderNodeNormalMap")
+        nm.inputs["Strength"].default_value = normal_strength
+        nt.links.new(tn.outputs["Color"], nm.inputs["Color"])
+        nt.links.new(nm.outputs["Normal"], b.inputs["Normal"])
     if emit is not None:
         b.inputs["Emission Color"].default_value = (s2l(emit[0]), s2l(emit[1]), s2l(emit[2]), 1.0)
         b.inputs["Emission Strength"].default_value = emit_s
@@ -218,12 +235,12 @@ def make_mat(name, base=(1, 1, 1), rough=0.5, metal=0.0, vcol=True, emit=None, e
 # ----------------------------------------------------------------------------
 L = 0.150          # meio comprimento (pao tem 0,30 m)
 WB = 0.052         # meia largura
-HB = 0.074         # altura do pao inteiro (cortado ao meio na horizontal, z = HB/2)
+HB = 0.084         # altura do pao inteiro (cortado ao meio na horizontal, z = HB/2)
 NEXP = 2.6         # expoente da superelipse da secao
 XM = 0.140         # fim do monte de recheio
-DISH = 0.006       # concavidade do miolo da base
-DCAV = 0.019       # cavidade do miolo sob a tampa (recheio "aperta" nela)
-PK = 0.013         # altura do monte de costela acima do corte
+DISH = 0.007       # concavidade do miolo da base
+DCAV = 0.027       # cavidade do miolo sob a tampa (recheio "aperta" nela)
+PK = 0.011         # altura do monte de costela acima do corte
 HINGE_DEG = 110.0  # abertura da tampa exportada
 OPEN_RAD = -math.radians(HINGE_DEG)   # rotacao X (local) da tampa ABERTA; fechar = 0
 
@@ -270,7 +287,8 @@ def zface(x, y):
     p = bprof(x)
     yy = p["Wb"] - 0.004
     r = max(0.0, 1 - (y / yy) ** 2)
-    return p["zc"] - DISH * p["s"] * r ** 0.8
+    rel = 0.0011 * nz(x * 60, y * 60, 11.3) + 0.0016 * fbm(x * 22, y * 22, 4.1, 2)
+    return p["zc"] - DISH * p["s"] * r ** 0.8 + rel * min(1.0, r * 4)
 
 
 def zunder(x, y):
@@ -278,7 +296,8 @@ def zunder(x, y):
     p = bprof(x)
     yc = p["Wb"] - 0.0075
     r = max(0.0, 1 - (y / yc) ** 2)
-    return p["zc"] + DCAV * p["s"] * math.sqrt(r)
+    rel = 0.0011 * nz(x * 60, y * 60, 17.9) + 0.0016 * fbm(x * 22, y * 22, 9.7, 2)
+    return p["zc"] + DCAV * p["s"] * math.sqrt(r) + rel * min(1.0, r * 4)
 
 
 def pile(x, v, bump=1.0):
@@ -303,11 +322,16 @@ def cos_spaced(n, half):
 # construtores genericos
 # ----------------------------------------------------------------------------
 
-def strip_layer(mb, xs, us, ftop, fbot):
-    """Placa grossa param. por (x,u). ftop/fbot(x,u) -> (pos, cor). Vertices coincidentes sao soldados."""
+def strip_layer(mb, xs, us, ftop, fbot, uvf=None):
+    """Placa grossa param. por (x,u). ftop/fbot(x,u) -> (pos, cor). Vertices coincidentes sao soldados.
+    uvf(pos) -> uv opcional."""
     nx, nu = len(xs), len(us)
-    T = [[mb.add(*ftop(xs[i], us[j])) for j in range(nu)] for i in range(nx)]
-    B = [[mb.add(*fbot(xs[i], us[j])) for j in range(nu)] for i in range(nx)]
+
+    def mk(f, x, u):
+        p, c = f(x, u)
+        return mb.add(p, c, uv=uvf(p) if uvf else None)
+    T = [[mk(ftop, xs[i], us[j]) for j in range(nu)] for i in range(nx)]
+    B = [[mk(fbot, xs[i], us[j]) for j in range(nu)] for i in range(nx)]
     for i in range(nx - 1):
         for j in range(nu - 1):
             mb.quad(T[i][j], T[i + 1][j], T[i + 1][j + 1], T[i][j + 1])
@@ -320,8 +344,9 @@ def strip_layer(mb, xs, us, ftop, fbot):
         mb.quad(T[-1][j], B[-1][j], B[-1][j + 1], T[-1][j + 1])
 
 
-def tube(mb, pts, radii, colors, sides=5, cap=True, m=0, squash=1.0):
-    """Tubo ao longo de pts (lista de Vector) com raio/cor por ponto."""
+def tube(mb, pts, radii, colors, sides=5, cap=True, m=0, squash=1.0, twist=0.0, uv=None):
+    """Tubo ao longo de pts (lista de Vector) com raio/cor por ponto.
+    uv=(u0, ulen, v0, vrep): liga UVs (u ao longo do comprimento, v em torno, com vertice de emenda duplicado)."""
     n = len(pts)
     T = []
     for i in range(n):
@@ -336,29 +361,40 @@ def tube(mb, pts, radii, colors, sides=5, cap=True, m=0, squash=1.0):
         nrm = Vector((1, 0, 0)).cross(T[0])
     nrm.normalize()
     rings = []
+    acc = 0.0
+    nv = sides + 1 if uv is not None else sides
     for i in range(n):
         t = T[i]
+        if i > 0:
+            acc += (pts[i] - pts[i - 1]).length
         nrm = nrm - t * nrm.dot(t)
         if nrm.length < 1e-6:
             nrm = Vector((1, 0, 0)).cross(t)
         nrm.normalize()
         bn = t.cross(nrm)
         ring = []
-        for k in range(sides):
+        for k in range(nv):
             al = 2 * math.pi * k / sides
-            off = nrm * math.cos(al) + bn * (math.sin(al) * squash)
+            tw = twist * i / max(1, n - 1)
+            ex, ey = math.cos(al), math.sin(al) * squash
+            off = nrm * (ex * math.cos(tw) - ey * math.sin(tw)) + bn * (ex * math.sin(tw) + ey * math.cos(tw))
             col = colors[i](al) if callable(colors[i]) else colors[i]
-            ring.append(mb.add(pts[i] + off * radii[i], col))
+            uvk = None
+            if uv is not None:
+                uvk = (uv[0] + acc / uv[1], uv[2] + uv[3] * k / sides)
+            ring.append(mb.add(pts[i] + off * radii[i], col, uv=uvk))
         rings.append(ring)
     for i in range(n - 1):
         for k in range(sides):
-            k2 = (k + 1) % sides
+            k2 = k + 1 if uv is not None else (k + 1) % sides
             mb.quad(rings[i][k], rings[i][k2], rings[i + 1][k2], rings[i + 1][k], m=m)
     if cap:
-        c0 = mb.add(pts[0], colors[0](0) if callable(colors[0]) else colors[0])
-        c1 = mb.add(pts[-1], colors[-1](0) if callable(colors[-1]) else colors[-1])
+        uc = (uv[0], uv[2]) if uv is not None else None
+        ue = (uv[0] + acc / uv[1], uv[2]) if uv is not None else None
+        c0 = mb.add(pts[0], colors[0](0) if callable(colors[0]) else colors[0], uv=uc)
+        c1 = mb.add(pts[-1], colors[-1](0) if callable(colors[-1]) else colors[-1], uv=ue)
         for k in range(sides):
-            k2 = (k + 1) % sides
+            k2 = k + 1 if uv is not None else (k + 1) % sides
             mb.tri(c0, rings[0][k2], rings[0][k], m=m)
             mb.tri(c1, rings[-1][k], rings[-1][k2], m=m)
 
@@ -425,18 +461,139 @@ def crust_color(x, y, z):
     return c
 
 
+def _fft_noise(rng, n, lo, hi):
+    """ruido periodico (tileavel) com banda de frequencias [lo, hi] (ciclos por imagem)."""
+    w = rng.randn(n, n)
+    F = np.fft.fft2(w)
+    fy = np.fft.fftfreq(n)[:, None] * n
+    fx = np.fft.fftfreq(n)[None, :] * n
+    fr = np.sqrt(fx * fx + fy * fy)
+    mask = ((fr >= lo) & (fr <= hi)).astype(float)
+    out = np.real(np.fft.ifft2(F * mask))
+    out = (out - out.mean()) / (out.std() + 1e-9)
+    return out
+
+
+def _stamp_holes(h, rng, count, rmin, rmax, depth, irregular=0.28, rim=0.0, power=1.4):
+    """Estampa crateras irregulares (tileaveis) no campo de altura h. Devolve mascara dos buracos."""
+    n = h.shape[0]
+    mask = np.zeros_like(h)
+    for _ in range(count):
+        r = float(np.exp(rng.uniform(np.log(rmin), np.log(rmax))))
+        cx, cy = rng.uniform(0, n), rng.uniform(0, n)
+        ph = rng.uniform(0, 6.28, 3)
+        sx = rng.uniform(0.7, 1.35)
+        ang = rng.uniform(0, 3.14)
+        R = int(r * 1.9) + 2
+        ix = (np.arange(-R, R + 1) + int(cx)) % n
+        iy = (np.arange(-R, R + 1) + int(cy)) % n
+        gx, gy = np.meshgrid(np.arange(-R, R + 1) - (cx - int(cx)), np.arange(-R, R + 1) - (cy - int(cy)))
+        ca, sa = math.cos(ang), math.sin(ang)
+        u = (gx * ca + gy * sa) / sx
+        v = (-gx * sa + gy * ca)
+        th = np.arctan2(v, u)
+        rn = 1 + irregular * (np.sin(2 * th + ph[0]) * 0.6 + np.sin(3 * th + ph[1]) * 0.4)
+        d = np.sqrt(u * u + v * v) / (r * rn)
+        prof = np.clip(1 - d * d, 0, 1) ** power
+        sub = np.ix_(iy, ix)
+        h[sub] -= depth * prof
+        if rim > 0:
+            ring = np.exp(-((d - 1.05) / 0.16) ** 2)
+            h[sub] += rim * ring
+        mask[sub] = np.maximum(mask[sub], (d < 1.0).astype(float) * (1 - d))
+    return mask
+
+
+def _normal_from_height(h, strength):
+    dx = (np.roll(h, -1, axis=1) - np.roll(h, 1, axis=1)) * 0.5
+    dy = (np.roll(h, -1, axis=0) - np.roll(h, 1, axis=0)) * 0.5
+    nx, ny, nzz = -dx * strength, -dy * strength, np.ones_like(h)
+    ln = np.sqrt(nx * nx + ny * ny + nzz * nzz)
+    return np.stack([nx / ln, ny / ln, nzz / ln], axis=2)
+
+
+def _save_img(name, rgb, colorspace):
+    import tempfile
+    n = rgb.shape[0]
+    rgba = np.concatenate([rgb, np.ones((n, n, 1))], axis=2).astype(np.float32)
+    im = bpy.data.images.new(name + "_raw", n, n, alpha=False)
+    im.pixels.foreach_set(rgba.ravel())
+    im.update()
+    tmp = os.path.join(tempfile.gettempdir(), name + ".png")
+    im.filepath_raw = tmp
+    im.file_format = "PNG"
+    im.save()
+    im2 = bpy.data.images.load(tmp)
+    im2.name = name
+    im2.colorspace_settings.name = colorspace
+    im2.pack()
+    return im2
+
+
+def make_crumb_textures(n=512):
+    """Miolo de pao: alveolos de varios tamanhos (cor + normal), tileavel."""
+    rng = np.random.RandomState(31)
+    h = 0.10 * _fft_noise(rng, n, 2, 7) + 0.06 * _fft_noise(rng, n, 8, 40) + 0.025 * _fft_noise(rng, n, 40, 120)
+    m1 = _stamp_holes(h, rng, 16, 24, 46, 1.25, 0.30, rim=0.10, power=0.9)
+    m2 = _stamp_holes(h, rng, 55, 10, 24, 0.9, 0.3, rim=0.07, power=0.9)
+    m3 = _stamp_holes(h, rng, 190, 3.5, 10, 0.6, 0.35, rim=0.05, power=0.8)
+    hole = np.clip(m1 + m2 + m3, 0, 1)
+    base_a = np.array(hexc("#F0D79B"))
+    base_b = np.array(hexc("#DDB874"))
+    tone = np.clip(0.5 + 0.25 * _fft_noise(rng, n, 2, 9) + 0.1 * _fft_noise(rng, n, 30, 90), 0, 1)[..., None]
+    col = base_a * (1 - tone) + base_b * tone
+    pit = np.array(hexc("#9A6B35"))
+    dark = np.clip(hole * 1.1, 0, 1)[..., None]
+    col = col * (1 - 0.78 * dark) + pit * 0.78 * dark
+    gx = (np.roll(h, -1, axis=1) - np.roll(h, 1, axis=1)) * 0.5
+    gy = (np.roll(h, -1, axis=0) - np.roll(h, 1, axis=0)) * 0.5
+    shade = np.clip(1 + (-gx * 0.9 + gy * 0.9) * 1.1, 0.6, 1.35)[..., None]
+    col = np.clip(col * shade, 0, 1)
+    nrm = _normal_from_height(h, 3.2)
+    c_img = _save_img("miolo_cor", col, "sRGB")
+    n_img = _save_img("miolo_normal", nrm * 0.5 + 0.5, "Non-Color")
+    return c_img, n_img
+
+
+def make_crust_textures(n=512):
+    """Casca: poros pequenos, bolhas (blisters) e farinha; textura relativa (multiplica a cor de vertice)."""
+    rng = np.random.RandomState(53)
+    h = 0.05 * _fft_noise(rng, n, 2, 10) + 0.05 * _fft_noise(rng, n, 10, 50)
+    hb = np.zeros_like(h)
+    _stamp_holes(hb, rng, 70, 7, 20, 1.0, 0.35, power=0.8)
+    h += -0.55 * hb
+    pores = np.zeros_like(h)
+    mp = _stamp_holes(pores, rng, 520, 1.6, 4.4, 0.8, 0.4, power=0.7)
+    h += pores * 0.8
+    base = 0.90 + 0.07 * _fft_noise(rng, n, 2, 8) + 0.05 * _fft_noise(rng, n, 30, 110)
+    base = base + 0.10 * np.clip(-hb * 0.8, 0, 1)
+    spots = (rng.rand(n, n) > 0.9965).astype(float)
+    spots = np.clip(spots + np.roll(spots, 1, 0) * 0.6 + np.roll(spots, 1, 1) * 0.6, 0, 1)
+    col = base[..., None] * np.ones((1, 1, 3))
+    col = col * (1 - 0.55 * np.clip(mp, 0, 1)[..., None])
+    col = np.clip(col + 0.14 * spots[..., None], 0, 1.0)
+    nrm = _normal_from_height(h, 2.4)
+    c_img = _save_img("casca_cor", np.clip(col, 0, 1), "sRGB")
+    n_img = _save_img("casca_normal", nrm * 0.5 + 0.5, "Non-Color")
+    return c_img, n_img
+
+
+TC_CRUMB = 0.085    # lado (m) do ladrilho de textura do miolo
+TC_CRUST = 0.075    # idem da casca
+
+
 def build_pao(root):
     """Pao cortado ao meio: base (miolo p/ cima) + tampa (miolo p/ baixo) presa pela aresta de tras.
     A tampa e exportada na pose ABERTA, com pivo na dobradica (rotacao X = OPEN_RAD)."""
-    NS, No, Nf = 84, 26, 20
+    NS, No, Nf = 92, 20, 22
     xs = cos_spaced(NS, L * 0.9995)
 
-    def crumb_face(xi, y, z, Wb, under=False):
+    def crumb_color(xi, y, z, Wb, under=False):
         edge = 1 - abs(y) / max(Wb, 1e-6)
-        c = lerpc(hexc("#C79552"), C_CRUMB, smooth(0.02, 0.22, edge))
+        c = lerpc(hexc("#C79552"), (1.0, 1.0, 1.0), smooth(0.02, 0.26, edge))
         c = mulc(c, 1 + 0.07 * nz(xi * 60, y * 60, z * 60))
         if under:
-            c = lerpc(c, C_CRUMB_LO, 0.35)
+            c = mulc(c, 0.93)
         return c
 
     def outer_pt(xi, ph):
@@ -446,57 +603,66 @@ def build_pao(root):
         z = p["zc"] + (p["Hb"] / 2) * math.copysign(abs(sn) ** (2 / NEXP), sn)
         return y, z
 
-    def loft(mb, rings):
+    def loft(mb, rings, nseam):
         n = len(rings[0])
         for i in range(len(rings) - 1):
             for k in range(n):
                 k2 = (k + 1) % n
-                mb.quad(rings[i][k], rings[i + 1][k], rings[i + 1][k2], rings[i][k2])
+                if k in nseam:
+                    continue
+                m = 1 if (k > nseam[0] and k2 != 0) else 0
+                mb.quad(rings[i][k], rings[i + 1][k], rings[i + 1][k2], rings[i][k2], m=m)
         for end, rev in ((0, True), (len(rings) - 1, False)):
             ring = rings[end]
             xe = mb.v[ring[0]][0]
-            c = mb.add((xe, 0.0, bprof(xe)["zc"]), C_CRUST_LO)
+            c = mb.add((xe, 0.0, bprof(xe)["zc"]), C_CRUST_LO, uv=(0.3, 0.3))
             for k in range(n):
                 k2 = (k + 1) % n
+                if k in nseam:
+                    continue
                 if rev:
                     mb.tri(c, ring[k], ring[k2])
                 else:
                     mb.tri(c, ring[k2], ring[k])
 
-    # BASE: borda direita -> fundo -> borda esquerda, depois o miolo (esquerda -> direita)
-    base, rings = MB(), []
-    for xi in xs:
-        p = bprof(xi)
-        ring = []
-        for k in range(No + 1):
-            y, z = outer_pt(xi, -math.pi * k / No)
-            ring.append(base.add((xi, y, z), crust_color(xi, y, z)))
-        for k in range(1, Nf + 1):
-            y = -p["Wb"] + 2 * p["Wb"] * k / (Nf + 1)
-            z = zface(xi, y)
-            ring.append(base.add((xi, y, z), crumb_face(xi, y, z, p["Wb"])))
-        rings.append(ring)
-    loft(base, rings)
+    def make_half(lid_half):
+        mb, rings = MB(), []
+        for xi in xs:
+            p = bprof(xi)
+            ring, s, prev = [], 0.0, None
+            for k in range(No + 1):
+                ph = (math.pi - math.pi * k / No) if lid_half else (-math.pi * k / No)
+                y, z = outer_pt(xi, ph)
+                q = Vector((xi, y, z))
+                if prev is not None:
+                    s += (q - prev).length
+                prev = q
+                ring.append(mb.add((xi, y, z), crust_color(xi, y, z), uv=(xi / TC_CRUST, s / TC_CRUST)))
+            # miolo: de uma borda a outra (inclui as 2 pontas duplicadas, com UV propria)
+            for k in range(0, Nf + 2):
+                if lid_half:
+                    y = p["Wb"] - 2 * p["Wb"] * k / (Nf + 1)
+                    z = zunder(xi, y)
+                else:
+                    y = -p["Wb"] + 2 * p["Wb"] * k / (Nf + 1)
+                    z = zface(xi, y)
+                ring.append(mb.add((xi, y, z), crumb_color(xi, y, z, p["Wb"], under=lid_half),
+                                   uv=(xi / TC_CRUMB, y / TC_CRUMB + (0.37 if lid_half else 0.0))))
+            rings.append(ring)
+        nring = len(rings[0])
+        loft(mb, rings, (No, nring - 1))
+        return mb
 
-    # TAMPA: borda esquerda -> topo -> borda direita, depois o miolo (direita -> esquerda), pos. fechada
-    lid, rings = MB(), []
-    for xi in xs:
-        p = bprof(xi)
-        ring = []
-        for k in range(No + 1):
-            y, z = outer_pt(xi, math.pi - math.pi * k / No)
-            ring.append(lid.add((xi, y, z), crust_color(xi, y, z)))
-        for k in range(1, Nf + 1):
-            y = p["Wb"] - 2 * p["Wb"] * k / (Nf + 1)
-            z = zunder(xi, y)
-            ring.append(lid.add((xi, y, z), crumb_face(xi, y, z, p["Wb"], under=True)))
-        rings.append(ring)
-    loft(lid, rings)
+    base = make_half(False)
+    lid = make_half(True)
     Yh, Zh = bprof(0.0)["Wb"], bprof(0.0)["zc"]
     lid.v = [(x, y - Yh, z - Zh) for (x, y, z) in lid.v]
-    mat = make_mat("mat_pao", rough=0.72, spec=0.35)
-    ob = finish(base, "pao_base", [mat], root)
-    ol = finish(lid, "pao_tampa", [mat], root)
+    crust_c, crust_n = make_crust_textures()
+    crumb_c, crumb_n = make_crumb_textures()
+    m_crust = make_mat("mat_pao_casca", vcol=False, rough=0.74, spec=0.3, image=crust_c, normal_image=crust_n, normal_strength=0.8)
+    m_crumb = make_mat("mat_pao_miolo", vcol=False, rough=0.9, spec=0.2, image=crumb_c, normal_image=crumb_n, normal_strength=1.0)
+    ob = finish(base, "pao_base", [m_crust, m_crumb], root)
+    ol = finish(lid, "pao_tampa", [m_crust, m_crumb], root)
     ol.location = (0.0, Yh, Zh)
     ol.rotation_mode = "XYZ"
     ol.rotation_euler = (OPEN_RAD, 0.0, 0.0)
@@ -550,104 +716,138 @@ def build_pasta(root):
 
 
 # ----------------------------------------------------------------------------
-# PECA: costela desfiada em fiapos
+# PECA: costela desfiada (tiras achatadas em feixes)
 # ----------------------------------------------------------------------------
-MEAT = [hexc(h) for h in ("#5A2314", "#6B2A18", "#6F3220", "#4B1C0E", "#7E3E25", "#3B160B", "#8A4A2C", "#9C6040")]
-C_CORE = hexc("#43190E")
+MEAT = [hexc(h) for h in ("#6B2E1F", "#74321F", "#7E3822", "#8A3F26", "#9C4A2C", "#6F3020", "#5E2819")]
+C_CORE = hexc("#3F180D")
+C_TIP = hexc("#35150B")
 
 
 def core_pos(x, u, top=True):
     By = by_of(x)
     y = u * By
-    ztop = pile(x, u, 1.0) - 0.0035
+    ztop = pile(x, u, 0.0) - 0.0042 + 0.0016 * nz(x * 70, y * 70, 3.1) + 0.0012 * nz(x * 150, y * 150, 8.8)
     zbot = min(zface(x, y) + 0.0005, ztop - 0.002)
-    st = 0.5 + 0.5 * nz(x * 55, y * 260, 3.1)
-    col = lerpc(C_CORE, hexc("#6B2A18"), smooth(0.35, 0.8, st) * 0.9)
+    st = 0.5 + 0.5 * nz(x * 90, y * 90, 3.1)
+    col = lerpc(C_CORE, hexc("#6B2A18"), smooth(0.3, 0.85, st) * 0.8)
     return (x, y, ztop if top else zbot), col
 
 
-def fiber_path(rng, x0, v0, length, nseg, free):
-    """Pontos 3D de um fio que segue a superficie do monte / transborda a borda."""
-    p0 = bprof(x0)
-    pts = []
-    x, y = x0, v0 * by_of(x0)
-    th = rng.gauss(0, 0.55) + (math.pi if rng.random() < 0.5 else 0.0)
-    if rng.random() < 0.22:
-        th = rng.choice([1, -1]) * rng.uniform(0.9, 1.5) + (math.pi if rng.random() < 0.5 else 0)
-    if abs(v0) > 0.8 and rng.random() < 0.3:
-        # fios nos flancos escorrem para fora
-        th = math.copysign(1, v0) * math.pi / 2 + rng.gauss(0, 0.45)
-    ds = length / nseg
-    wig = 0.0
-    arch = rng.uniform(0.0006, 0.0045) if free else 0.0005
-    for i in range(nseg + 1):
-        pts.append((x, y))
-        wig = 0.6 * wig + rng.gauss(0, 0.32)
-        th += wig * 0.5
-        x += ds * math.cos(th)
-        y += ds * math.sin(th)
-        pp = bprof(max(-L, min(L, x)))
-        lim = pp["Wb"] + 0.005
-        if abs(y) > lim:
-            y = math.copysign(lim, y)
-            th = -th
-        if abs(x) > 0.136:
-            x = math.copysign(0.136, x)
-            th = math.pi - th
-    return pts, arch
+def make_fibre_textures(n=256):
+    """Fibras de carne desfiada: estrias ao longo de u (cor cinza relativa + normal), tileavel."""
+    rng = np.random.RandomState(77)
+    fy = np.fft.fftfreq(n)[:, None] * n      # eixo v (linhas)
+    fx = np.fft.fftfreq(n)[None, :] * n      # eixo u (colunas)
+    def aniso(lo_v, hi_v, max_u):
+        w = rng.randn(n, n)
+        F = np.fft.fft2(w)
+        mask = ((np.abs(fy) >= lo_v) & (np.abs(fy) <= hi_v) & (np.abs(fx) <= max_u)).astype(float)
+        out = np.real(np.fft.ifft2(F * mask))
+        return (out - out.mean()) / (out.std() + 1e-9)
+    k = n / 512.0
+    h = 0.55 * aniso(12 * k, 60 * k, 3) + 0.35 * aniso(3 * k, 12 * k, 2) + 0.25 * aniso(40 * k, 120 * k, 10 * k)
+    h += 0.20 * _fft_noise(rng, n, 2, 8)
+    ridge = 1 - np.abs(h) * 0.35
+    col = np.clip(0.78 + 0.16 * h + 0.10 * aniso(2 * k, 10 * k, 3), 0.35, 1.0)
+    col = col * (0.88 + 0.12 * ridge)
+    nrm = _normal_from_height(h * 0.5, 3.4)
+    c_img = _save_img("fibra_cor", np.stack([col, col, col], axis=2), "sRGB")
+    n_img = _save_img("fibra_normal", nrm * 0.5 + 0.5, "Non-Color")
+    return c_img, n_img
+
+
+def surf_z(x, y):
+    """z do topo do monte de costela em (x, y) reais; alem da borda do pao a carne escorre para baixo."""
+    xc = max(-L, min(L, x))
+    By = by_of(xc)
+    v = y / By
+    if abs(v) <= 1.0:
+        return pile(xc, v, 1.0)
+    return pile(xc, math.copysign(1.0, v), 0.0) - (abs(y) - By) * 1.35
 
 
 def build_costela(root):
     mb = MB()
-    # miolo escuro do monte (evita ver atraves dos fios)
-    xs = cos_spaced(64, XM * 0.985)
-    us = [-1 + 2 * j / 16 for j in range(17)]
-    strip_layer(mb, xs, us, lambda x, u: core_pos(x, u, True), lambda x, u: core_pos(x, u, False))
+    # miolo escuro e irregular do monte (os vaos entre as tiras ficam escuros, nao lisos)
+    xs = cos_spaced(70, XM * 0.985)
+    us = [-1 + 2 * j / 18 for j in range(19)]
+    strip_layer(mb, xs, us, lambda x, u: core_pos(x, u, True), lambda x, u: core_pos(x, u, False),
+                uvf=lambda p: (p[0] / 0.03, p[1] / 0.03))
     rng = random.Random(2026)
-    sides, nseg = 4, 6
-    count = 0
-    plan = [(240, 0.5, 1.28, True), (190, 0.0, 0.55, False)]   # (qtd, |v| min, |v| max, livre)
-    for qty, vlo, vhi, free in plan:
-        for _ in range(qty):
-            x0 = rng.uniform(-0.134, 0.134)
-            v0 = rng.uniform(vlo, vhi) * rng.choice([-1, 1])
-            length = rng.uniform(0.022, 0.048)
-            pts2, arch = fiber_path(rng, x0, v0, length, nseg, free)
-            wide = rng.random() < 0.16
-            r0 = rng.uniform(0.0045, 0.0065) if wide else rng.uniform(0.0021, 0.0040)
-            base = rng.choice(MEAT)
-            base = mulc(base, rng.uniform(0.85, 1.15))
-            P, R, C = [], [], []
-            for i, (x, y) in enumerate(pts2):
-                t = i / nseg
-                pp = bprof(max(-L, min(L, x)))
-                By = by_of(max(-L, min(L, x)))
-                a = abs(y) / max(By, 1e-6)
-                rr = r0 * (0.38 + 0.62 * math.sin(math.pi * (0.1 + 0.8 * t))) * (0.8 + 0.4 * (0.5 + 0.5 * nz(i * 3.1, x * 90, y * 90)))
-                if a <= 1.0:
-                    z = pile(x, y / By, 1.0) - 0.0008 + 0.0007 * nz(x * 120, y * 120, i)
-                    z += arch * math.sin(math.pi * t) * smooth(0.55, 0.95, a) if free else 0.0
-                    pos = Vector((x, y, z))
-                else:
-                    yy = min(abs(y), pp["Wb"] + 0.005)
-                    zo = pp["zc"] + 0.002 + rr * 0.5 - max(0.0, yy - pp["Wb"]) * 2.5
-                    pos = Vector((x, math.copysign(yy, y), zo))
-                    pos.z += arch * 0.5 * math.sin(math.pi * t)
-                pos.z = max(pos.z, rr * 0.9)
-                P.append(pos)
-                R.append(rr)
-                shade = 0.82 + 0.3 * smooth(0.0, 1.0, math.sin(math.pi * t))
-                bc = lerpc(base, hexc("#C27850"), 0.18 * (0.5 + 0.5 * nz(x * 80, y * 80, 4.4)))
-                C.append(
-                    (lambda al, bc=bc, shade=shade: mulc(bc, shade * (0.88 + 0.16 * math.cos(al - 1.0))))
-                )
-            # suaviza o caminho (2 passadas), mantem pontas
-            for _ in range(2):
-                P2 = [P[0]] + [(P[i - 1] + 2 * P[i] + P[i + 1]) / 4 for i in range(1, len(P) - 1)] + [P[-1]]
-                P = P2
-            tube(mb, P, R, C, sides=sides, cap=True, squash=rng.uniform(0.28, 0.42) if wide else rng.uniform(0.55, 0.9))
-            count += 1
-    mat = make_mat("mat_costela", rough=0.42, spec=0.55)
+    nseg, sides = 5, 4
+    nstrips = 0
+    NX, NV = 19, 6
+    for ix in range(NX):
+        for iv in range(NV):
+            cx = -0.134 + 0.268 * (ix + rng.uniform(0.1, 0.9)) / NX
+            vc = -1.08 + 2.16 * (iv + rng.uniform(0.1, 0.9)) / NV
+            edge = abs(vc) > 0.72
+            # direcao do feixe: quase sempre ao longo do pao; alguns atravessados
+            if edge:
+                th = rng.gauss(0, 0.40) + math.copysign(0.18, vc) * rng.random()
+            elif rng.random() < 0.22:
+                th = rng.choice([-1, 1]) * rng.uniform(0.8, 1.35)
+            else:
+                th = rng.gauss(0, 0.85)
+            if rng.random() < 0.5:
+                th += math.pi
+            dvec = (math.cos(th), math.sin(th))
+            nvec = (-dvec[1], dvec[0])
+            tuft_len = rng.uniform(0.026, 0.044)
+            bend = rng.gauss(0, 1.0) * 9.0          # curvatura comum do feixe (1/m)
+            m_str = rng.randint(3, 5)
+            layer = rng.choice([0.0, 0.0010, 0.0020, 0.0032])
+            tone = rng.uniform(0.9, 1.1)
+            base_col = rng.choice(MEAT)
+            wmean = rng.uniform(0.0052, 0.0078)
+            cy = vc * by_of(cx)
+            for si in range(m_str):
+                wide = rng.random() < 0.14
+                w = rng.uniform(0.0100, 0.0140) if wide else wmean * rng.uniform(0.7, 1.3)
+                lat = (si - (m_str - 1) / 2) * wmean * 0.95 + rng.gauss(0, 0.0012)
+                t0 = rng.uniform(-0.009, 0.009)
+                ln = tuft_len * rng.uniform(0.7, 1.18)
+                wig_a = rng.uniform(0.0010, 0.0030)
+                wig_p = rng.uniform(0, 6.28)
+                squash = rng.uniform(0.34, 0.55)
+                th_s = th + rng.gauss(0, 0.22)
+                dvs = (math.cos(th_s), math.sin(th_s))
+                nvs = (-dvs[1], dvs[0])
+                twist = rng.gauss(0, 1.3)
+                wf = rng.uniform(3.5, 7.0)
+                wn = rng.uniform(0, 50)
+                P, R, C = [], [], []
+                col_s = mulc(base_col, 1.14 * tone * rng.uniform(0.9, 1.1))
+                ph_col = rng.uniform(0, 6.28)
+                for k in range(nseg + 1):
+                    t = k / nseg
+                    s = -ln / 2 + ln * t + t0
+                    off = lat + bend * s * s + wig_a * math.sin(t * wf + wig_p)
+                    x = cx + dvs[0] * s + nvs[0] * off
+                    y = cy + dvs[1] * s + nvs[1] * off
+                    x = max(-0.139, min(0.139, x))
+                    pp = bprof(max(-L, min(L, x)))
+                    y = math.copysign(min(abs(y), pp["Wb"] + 0.0035), y)
+                    prof = 0.60 + 0.40 * math.sin(math.pi * (0.06 + 0.88 * t))
+                    prof *= 0.82 + 0.36 * (0.5 + 0.5 * nz(wn + t * 2.5, 1.3, 0.2))
+                    a = 0.5 * w * prof
+                    z = surf_z(x, y) + 0.0004 + layer + 0.0007 * math.sin(math.pi * t)
+                    z = max(z, a * squash + 0.0004)
+                    P.append(Vector((x, y, z)))
+                    R.append(a)
+                    tip = smooth(0.30, 0.0, t) + smooth(0.70, 1.0, t)
+                    cc = lerpc(col_s, C_TIP, 0.55 * tip)
+                    cc = lerpc(cc, hexc("#A8603C"), 0.10 * (0.5 + 0.5 * nz(x * 95, y * 95, 4.4)))
+                    cc = mulc(cc, 0.80 + 0.40 * (0.5 + 0.5 * nz(wn + t * 4.0, 7.7, 1.0)))
+                    C.append((lambda al, cc=cc, ph=ph_col: mulc(cc, 0.80 + 0.24 * math.sin(al) + 0.10 * math.sin(3 * al + ph))))
+                for _ in range(2):
+                    P = [P[0]] + [(P[i - 1] + 2 * P[i] + P[i + 1]) / 4 for i in range(1, len(P) - 1)] + [P[-1]]
+                tube(mb, P, R, C, sides=sides, cap=True, squash=squash, twist=twist,
+                     uv=(rng.uniform(0, 1), 0.030, rng.uniform(0, 1), 1.0))
+                nstrips += 1
+    print("costela: %d tiras" % nstrips)
+    fib_c, fib_n = make_fibre_textures()
+    mat = make_mat("mat_costela", vcol=False, rough=0.5, spec=0.45, image=fib_c, normal_image=fib_n, normal_strength=1.0)
     return [finish(mb, "costela_fiapos", [mat], root)]
 
 
@@ -656,6 +856,8 @@ def build_costela(root):
 # ----------------------------------------------------------------------------
 C_CREME = hexc("#F7E6B0")
 C_CREME2 = hexc("#EFD58C")
+XCR = 0.130
+XC = 0.128
 
 
 def make_tongues(seed, n, amp, w, xr):
@@ -670,17 +872,44 @@ def vm_side(x, base, nf, ns, tongs, nsc):
     return v
 
 
-TONG_C = (make_tongues(31, 6, (0.10, 0.26), (0.006, 0.010), 0.11), make_tongues(32, 6, (0.10, 0.26), (0.006, 0.010), 0.11))
 TONG_M = (make_tongues(41, 9, (0.22, 0.45), (0.0045, 0.008), 0.105), make_tongues(42, 9, (0.22, 0.45), (0.0045, 0.008), 0.105))
-XCR = 0.132
-XC = 0.128
+BLOBS = [(-0.095, 0.30, 0.012), (-0.035, -0.28, 0.010), (0.012, 0.34, 0.011), (0.060, -0.30, 0.012), (0.105, 0.22, 0.009)]
 
 
-def vm_creme(x, u):
-    f = (u + 1) / 2
-    a = vm_side(x, 0.60, 22, 3.0, TONG_C[0], 0.06)
-    b = vm_side(x, 0.60, 22, 8.0, TONG_C[1], 0.06)
-    return lerp(a, b, f)
+def creme_axis(x):
+    """eixo (em v = y/By) do fio de creme: serpenteia pelo monte, sem cobrir tudo."""
+    return 0.34 * math.sin(x * 2 * math.pi / 0.090 + 0.7) + 0.10 * math.sin(x * 2 * math.pi / 0.034 + 2.0)
+
+
+def creme_hw(x):
+    hw = 0.17 + 0.05 * nz(x * 34, 2.2, 0.3)
+    for xk, vk, w in BLOBS:
+        hw += 0.16 * math.exp(-((x - xk) / w) ** 2)
+    return hw
+
+
+def creme_pos(x, u, top=True):
+    r_end = max(0.0, 1 - (abs(x) / XCR) ** 3) ** 0.5
+    By = by_of(x)
+    ctr = creme_axis(x)
+    hw = creme_hw(x) * r_end
+    v = max(-0.98, min(0.98, ctr + u * hw))
+    y = v * By
+    zb = pile(x, v, 1.0) + 0.0006
+    th = 0.0058 * (1 + 0.15 * nz(x * 50, 1.1, 2.2)) * max(0.0, 1 - u ** 4) ** 0.5 * min(1.0, r_end * 3)
+    th += 0.0007 * nz(x * 120, v * 9, 2.2) * max(0.0, 1 - u * u)
+    z = zb + th if top else zb
+    col = lerpc(C_CREME, C_CREME2, clamp(0.45 + 0.4 * nz(x * 30, y * 30, 6.6)))
+    return (x, y, z), col
+
+
+def build_creme(root):
+    mb = MB()
+    xs = cos_spaced(150, XCR)
+    us = [-1 + 2 * j / 14 for j in range(15)]
+    strip_layer(mb, xs, us, lambda x, u: creme_pos(x, u, True), lambda x, u: creme_pos(x, u, False))
+    mat = make_mat("mat_creme", rough=0.2, spec=0.8)
+    return [finish(mb, "creme_queijo", [mat], root)]
 
 
 def vm_mus(x, u):
@@ -694,29 +923,6 @@ def vcap(x, v, By):
     p = bprof(x)
     vmax = 1.0 * p["Wb"] / max(By, 1e-6)
     return math.copysign(min(abs(v), vmax), v)
-
-
-def creme_pos(x, u, top=True):
-    r_end = max(0.0, 1 - (abs(x) / XCR) ** 3) ** 0.5
-    By = by_of(x)
-    v = vcap(x, u * vm_creme(x, u) * r_end, By)
-    y = v * By
-    zb = pile(x, v, 1.0) + 0.0004
-    zt = pile(x, v, 0.8) + 0.0035 + 0.0009 * nz(x * 60, v * 6, 8.1) + 0.0005 * nz(x * 140, v * 12, 2.2)
-    f = min(1.0, (1 - abs(u)) / 0.12) ** 0.6 * min(1.0, (1 - abs(x) / XCR) / 0.1) ** 0.6
-    f = max(0.0, f)
-    z = zb + (zt - zb) * f if top else zb
-    col = lerpc(C_CREME, C_CREME2, clamp(0.45 + 0.4 * nz(x * 30, y * 30, 6.6)))
-    return (x, y, z), col
-
-
-def build_creme(root):
-    mb = MB()
-    xs = cos_spaced(110, XCR)
-    us = [-1 + 2 * j / 26 for j in range(27)]
-    strip_layer(mb, xs, us, lambda x, u: creme_pos(x, u, True), lambda x, u: creme_pos(x, u, False))
-    mat = make_mat("mat_creme", rough=0.2, spec=0.8)
-    return [finish(mb, "creme_queijo", [mat], root)]
 
 
 # ----------------------------------------------------------------------------
@@ -994,69 +1200,149 @@ def build_tabua(root):
 
 
 # ----------------------------------------------------------------------------
-# PECA: macarico (+ chama)
+# PECA: macarico culinario (+ chama)
 # ----------------------------------------------------------------------------
-TY = -0.108          # y do macarico
-TR = 0.0172          # raio do corpo (altura do eixo)
-TX0 = 0.100          # x do fundo do corpo (a=0)
+TOR_X, TOR_Y = -0.186, -0.114      # base do macarico na tabua (em pe, ao lado do pao)
+TOR_YAW = math.radians(31.5)       # bico apontando para o pao
+NOZ_PITCH = math.radians(40.0)     # ponta do bico inclinada para baixo
+
+
+def superq(mb, c, ab, e1=0.4, e2=0.4, nu=16, nv=12, color=(1, 1, 1), m=0):
+    """Superelipsoide (caixa arredondada para e pequeno) centrada em c, semi-eixos ab=(a,b,c)."""
+    cx, cy, cz = c
+    a, b, h = ab
+    rows = []
+    for j in range(nv + 1):
+        v = -math.pi / 2 + math.pi * j / nv
+        cv = math.copysign(abs(math.cos(v)) ** e1, math.cos(v))
+        sv = math.copysign(abs(math.sin(v)) ** e1, math.sin(v))
+        row = []
+        for i in range(nu):
+            u = 2 * math.pi * i / nu
+            cu = math.copysign(abs(math.cos(u)) ** e2, math.cos(u))
+            su = math.copysign(abs(math.sin(u)) ** e2, math.sin(u))
+            row.append(mb.add((cx + a * cv * cu, cy + b * cv * su, cz + h * sv), color))
+        rows.append(row)
+    for j in range(nv):
+        for i in range(nu):
+            i2 = (i + 1) % nu
+            mb.quad(rows[j][i], rows[j][i2], rows[j + 1][i2], rows[j + 1][i], m=m)
+
+
+def xform(mb, i0, fn):
+    for i in range(i0, len(mb.v)):
+        mb.v[i] = tuple(fn(Vector(mb.v[i])))
+
+
+def torch_place(mb, i0):
+    """gira o trecho [i0:] em torno de z (yaw) e leva a base ao ponto da tabua."""
+    cs, sn = math.cos(TOR_YAW), math.sin(TOR_YAW)
+
+    def f(p):
+        return Vector((TOR_X + p.x * cs - p.y * sn, TOR_Y + p.x * sn + p.y * cs, p.z))
+    xform(mb, i0, f)
 
 
 def build_macarico(root):
     orange = hexc("#FF6A1A")
     steel = hexc("#C9CDD2")
-    dark_steel = hexc("#7D838B")
-    black = hexc("#1E1D1F")
+    dark_steel = hexc("#80868E")
+    black = hexc("#1B1A1C")
     red = hexc("#D8281F")
-    org = (TX0, TY, TR)
     objs = []
-    # corpo laranja
+    m_or = make_mat("mat_macarico_laranja", base=orange, rough=0.34, metal=0.05, vcol=False, spec=0.7, coat=0.45)
+    m_bk = make_mat("mat_macarico_preto", base=black, rough=0.55, vcol=False, spec=0.4)
+    m_st = make_mat("mat_macarico_aco", base=steel, rough=0.3, metal=0.75, vcol=False)
+    m_rd = make_mat("mat_macarico_botao", base=red, rough=0.4, vcol=False)
+    O = (0.0, 0.0, 0.0)
+    Z0, ZC1 = 0.0, 0.098          # base e topo do cilindro da lata
+    ZH = 0.1235                   # eixo da cabeca
+
+    # --- corpo laranja: lata/cartucho + cabeca (cilindro horizontal) + capa traseira
     mb = MB()
-    lathe(mb, rcyl(0.0166, 0.0, 0.078, 0.0045), org, "x", -1, 36, orange)
-    objs.append(finish(mb, "macarico_corpo", [make_mat("mat_macarico_laranja", base=orange, rough=0.32, metal=0.05, vcol=False, spec=0.7, coat=0.4)], root))
-    # aco: pescoco, cabeca, bico
+    i0 = len(mb.v)
+    lathe(mb, rcyl(0.0178, 0.007, ZC1, 0.004), (0, 0, 0), "z", 1, 40, orange)
+    lathe(mb, rcyl(0.0152, -0.026, 0.040, 0.0045), (0, 0, ZH), "x", 1, 36, orange)     # cabeca
+    torch_place(mb, i0)
+    objs.append(finish(mb, "macarico_corpo", [m_or], root, vc_white=True))
+
+    # --- pretos: base, faixa do rotulo, pescoco, gatilho, capa traseira, regulador de gas
     mb = MB()
-    lathe(mb, rcyl(0.0105, 0.077, 0.092, 0.002), org, "x", -1, 32, steel)
-    lathe(mb, rcyl(0.0128, 0.090, 0.104, 0.0025), org, "x", -1, 32, steel)
-    noz = [(0.0, 0.103), (0.0072, 0.103), (0.0068, 0.150), (0.0086, 0.151), (0.0086, 0.163), (0.0058, 0.163), (0.0050, 0.159), (0.0, 0.158)]
-    lathe(mb, noz, org, "x", -1, 28, dark_steel)
-    objs.append(finish(mb, "macarico_bico", [make_mat("mat_macarico_aco", base=steel, rough=0.26, metal=1.0, vcol=False)], root))
-    # borracha preta: faixa de pegada + knob traseiro + valvula
+    i0 = len(mb.v)
+    lathe(mb, rcyl(0.0188, 0.0, 0.0085, 0.002), O, "z", 1, 40, black)                      # anel da base
+    lathe(mb, rcyl(0.0182, 0.038, 0.060, 0.0008), O, "z", 1, 40, black)                    # faixa do rotulo
+    lathe(mb, rcyl(0.0105, 0.100, 0.1135, 0.0015), (0.002, 0, 0), "z", 1, 28, black)       # pescoco sob a cabeca
+    lathe(mb, rcyl(0.0157, -0.036, -0.026, 0.0022), (0, 0, ZH), "x", 1, 32, black)         # capa traseira
+    lathe(mb, rcyl(0.0095, 0.0, 0.0075, 0.0015), (0.0, 0.0, ZH + 0.0125), "z", 1, 24, black)   # base do botao
+    superq(mb, (0.027, 0.0, 0.092), (0.0058, 0.0072, 0.0165), 0.35, 0.35, 16, 12, black)   # gatilho
+    torch_place(mb, i0)
+    objs.append(finish(mb, "macarico_pretos", [m_bk], root, vc_white=True))
+
+    # --- aco: ombro da lata, colar da cabeca, bico curvo + cabeca do queimador
     mb = MB()
-    lathe(mb, rcyl(0.0173, 0.022, 0.052, 0.0016), org, "x", -1, 36, black)
-    lathe(mb, rcyl(0.0105, -0.010, 0.0, 0.0018), org, "x", -1, 28, black)
-    lathe(mb, rcyl(0.0152, 0.066, 0.078, 0.0018), org, "x", -1, 32, black)
-    objs.append(finish(mb, "macarico_borracha", [make_mat("mat_macarico_borracha", base=black, rough=0.7, vcol=False, spec=0.3)], root))
-    # botao de ignicao
+    i0 = len(mb.v)
+    sh = [(0.0, 0.1085), (0.0055, 0.1083), (0.0105, 0.1068), (0.0145, 0.1035), (0.0170, 0.0990), (0.0178, 0.0955)]
+    lathe(mb, sh, O, "z", 1, 36, steel)
+    lathe(mb, rcyl(0.0168, 0.040, 0.050, 0.0016), (0, 0, ZH), "x", 1, 32, steel)           # colar do bico
+    torch_place(mb, i0)
+    j0 = len(mb.v)
+    path = [Vector(p) for p in ((0.046, 0, ZH), (0.060, 0, ZH + 0.0008), (0.073, 0, ZH - 0.0012),
+                                (0.084, 0, ZH - 0.0062), (0.091, 0, ZH - 0.0125), (0.0955, 0, ZH - 0.0185))]
+    radii = [0.0072, 0.0068, 0.0064, 0.0062, 0.0060, 0.0060]
+    tube(mb, path, radii, [steel] * len(path), sides=20, cap=False)
+    # cabeca do queimador (cilindro curto alinhado ao fim do bico, com aba)
+    tip = path[-1]
+    k0 = len(mb.v)
+    burner = [(0.0, 0.0), (0.0092, 0.0), (0.0092, 0.0030), (0.0072, 0.0036), (0.0072, 0.0115), (0.0095, 0.0118), (0.0095, 0.0150), (0.0055, 0.0156), (0.0, 0.0140)]
+    lathe(mb, burner, O, "x", 1, 24, dark_steel)
+
+    cp, sp = math.cos(NOZ_PITCH), math.sin(NOZ_PITCH)
+    for i in range(k0, len(mb.v)):
+        p = Vector(mb.v[i])
+        # gira em torno de y (ponta para baixo) e leva ao fim do bico
+        mb.v[i] = (tip.x + p.x * cp + p.z * sp, p.y, tip.z - p.x * sp + p.z * cp)
+    torch_place(mb, j0)
+    objs.append(finish(mb, "macarico_bico", [m_st], root, vc_white=True))
+
+    # --- botao de ignicao vermelho
     mb = MB()
-    lathe(mb, rcyl(0.0042, 0.0, 0.007, 0.0012), (TX0 - 0.097, TY, TR + 0.0125), "z", 1, 20, red)
-    objs.append(finish(mb, "macarico_botao", [make_mat("mat_macarico_botao", base=red, rough=0.4, vcol=False)], root))
-    # chama (objeto separado): um cone, base azul -> ponta laranja (2 materiais emissivos)
-    tip_x = TX0 - 0.163
+    i0 = len(mb.v)
+    lathe(mb, rcyl(0.0058, 0.0, 0.0058, 0.0012), (0.0, 0.0, ZH + 0.0200), "z", 1, 20, red)
+    torch_place(mb, i0)
+    objs.append(finish(mb, "macarico_botao", [m_rd], root, vc_white=True))
+
+    # --- chama (objeto separado): cone na direcao do bico, base azul -> ponta laranja
     mb = MB()
+    i0 = len(mb.v)
     n = 16
     prof = [(0.0, 0.0)]
     for i in range(1, n + 1):
         t = i / n
-        prof.append((0.0066 * math.sin(math.pi * t ** 0.55) * (1 - 0.2 * t), 0.078 * t))
-    prof[-1] = (0.0, 0.078)
-    # primeira metade azul (m=1, via lathe), resto laranja (m=0, aneis manuais)
+        prof.append((0.0062 * math.sin(math.pi * t ** 0.55) * (1 - 0.2 * t), 0.085 * t))
+    prof[-1] = (0.0, 0.085)
     k = 8
-    lathe(mb, prof[:k + 1], (tip_x, TY, TR), "x", -1, 20, orange, m=1)
+    lathe(mb, prof[:k + 1], O, "x", 1, 20, orange, m=1)
     seg = 20
     rings = []
     for (r, a) in prof[k:]:
         ring = []
         for q in range(seg):
             th = 2 * math.pi * q / seg
-            ring.append(mb.add((tip_x - a, TY + r * math.cos(th), TR + r * math.sin(th)), orange))
+            ring.append(mb.add((a, r * math.cos(th), r * math.sin(th)), orange))
         rings.append(ring)
     for i in range(len(rings) - 1):
         for q in range(seg):
             q2 = (q + 1) % seg
-            mb.quad(rings[i][q], rings[i + 1][q], rings[i + 1][q2], rings[i][q2], m=0)
+            mb.quad(rings[i][q], rings[i][q2], rings[i + 1][q2], rings[i + 1][q], m=0)
+    cp, sp = math.cos(NOZ_PITCH), math.sin(NOZ_PITCH)
+    ftip = Vector((tip.x + 0.0165 * cp, 0.0, tip.z - 0.0165 * sp))
+    for i in range(i0, len(mb.v)):
+        p = Vector(mb.v[i])
+        mb.v[i] = (ftip.x + p.x * cp + p.z * sp, p.y, ftip.z - p.x * sp + p.z * cp)
+    torch_place(mb, i0)
     mo = make_mat("mat_chama_externa", base=hexc("#FF8A1E"), rough=0.5, vcol=False, emit=hexc("#FF7A12"), emit_s=4.0)
     mi = make_mat("mat_chama_interna", base=hexc("#4A8BFF"), rough=0.5, vcol=False, emit=hexc("#3D7CFF"), emit_s=6.0)
-    objs.append(finish(mb, "chama", [mo, mi], root))
+    objs.append(finish(mb, "chama", [mo, mi], root, vc_white=True))
     return objs
 
 
@@ -1080,7 +1366,7 @@ def export_part(name, objs, root):
     kw = dict(
         filepath=path, export_format="GLB", use_selection=True, export_apply=True, export_yup=True,
         export_cameras=False, export_lights=False, export_materials="EXPORT", export_normals=True,
-        export_vertex_color="ACTIVE", export_image_format="JPEG", export_image_quality=82,
+        export_vertex_color="ACTIVE", export_image_format="JPEG", export_image_quality=78,
         export_draco_mesh_compression_enable=True, export_draco_mesh_compression_level=7,
         export_draco_position_quantization=14, export_draco_normal_quantization=10,
         export_draco_texcoord_quantization=12, export_draco_color_quantization=10,
@@ -1239,14 +1525,15 @@ def frame_camera(cam, mn, mx, az, el, lens, margin=1.08, tgt_shift=(0, 0, 0)):
     return ctr, hi
 
 
-def render_view(parts, name, show, az_deg, el_deg, lens, path, res, samples, offsets=None, floor_z=None, margin=1.08, shift=(0, 0, 0), key_gain=1.0, flame=False, lid="open", lid_dz=0.0, hide=()):
+def render_view(parts, name, show, az_deg, el_deg, lens, path, res, samples, offsets=None, floor_z=None, margin=1.08, shift=(0, 0, 0), key_gain=1.0, flame=False, lid="open", lid_dz=0.0, hide=(), fit=None, box=None, lid_deg=None):
     sc = bpy.context.scene
     for n, d in parts.items():
         for r in d["roots"]:
             r.location = (0, 0, 0)
     lo = parts["pao"]["lid"]
     lo.rotation_mode = "XYZ"
-    lo.rotation_euler = (0.0 if lid == "closed" else OPEN_RAD, 0.0, 0.0)
+    ang = -math.radians(lid_deg) if lid_deg is not None else (0.0 if lid == "closed" else OPEN_RAD)
+    lo.rotation_euler = (ang, 0.0, 0.0)
     h = parts["pao"]["lid_home"]
     lo.location = (h.x, h.y, h.z + lid_dz)
     if offsets:
@@ -1257,6 +1544,11 @@ def render_view(parts, name, show, az_deg, el_deg, lens, path, res, samples, off
     bpy.context.view_layer.update()
     objs = [o for n in show for r in parts[n]["roots"] for o in descend(r)]
     mn, mx = world_bbox(objs)
+    fmn, fmx = mn, mx
+    if fit:
+        fmn, fmx = world_bbox([o for n in fit for r in parts[n]["roots"] for o in descend(r)])
+    if box:
+        fmn, fmx = Vector(box[0]), Vector(box[1])
     for o in list(bpy.data.objects):
         if o.name.startswith(("CAM", "LT_", "FLOOR")):
             bpy.data.objects.remove(o, do_unlink=True)
@@ -1264,8 +1556,8 @@ def render_view(parts, name, show, az_deg, el_deg, lens, path, res, samples, off
     cam = bpy.data.objects.new("CAM", cd)
     sc.collection.objects.link(cam)
     sc.camera = cam
-    ctr, dist = frame_camera(cam, mn, mx, math.radians(az_deg), math.radians(el_deg), lens, margin, shift)
-    R = max((mx - mn).length / 2, 0.05)
+    ctr, dist = frame_camera(cam, fmn, fmx, math.radians(az_deg), math.radians(el_deg), lens, margin, shift)
+    R = max((fmx - fmn).length / 2, 0.05) if (fit or box) else max((mx - mn).length / 2, 0.05)
     # chao escuro
     fz = (mn.z - 0.0004) if floor_z is None else floor_z
     bpy.ops.mesh.primitive_plane_add(size=40.0, location=(ctr.x, ctr.y, fz))
@@ -1282,12 +1574,16 @@ def render_view(parts, name, show, az_deg, el_deg, lens, path, res, samples, off
     right = Vector((math.cos(math.radians(az_deg)), math.sin(math.radians(az_deg)), 0))
     fwd = Vector((math.sin(math.radians(az_deg)), -math.cos(math.radians(az_deg)), 0))
     add_light("AREA", ctr + (fwd * 1.3 - right * 1.6 + Vector((0, 0, 2.2))) * R, ctr, (1.0, 0.88, 0.72), k, R * 1.6, "LT_key")
-    add_light("AREA", ctr + (-fwd * 1.8 + right * 1.9 + Vector((0, 0, 1.0))) * R, ctr, (1.0, 0.5, 0.2), k * 0.6, R * 1.2, "LT_rim")
+    add_light("AREA", ctr + (-fwd * 1.8 + right * 1.9 + Vector((0, 0, 1.0))) * R, ctr, (1.0, 0.68, 0.42), k * 0.6, R * 1.2, "LT_rim")
     add_light("AREA", ctr + (fwd * 2.4 + right * 1.6 + Vector((0, 0, 0.7))) * R, ctr, (1.0, 0.8, 0.6), k * 0.25, R * 2.5, "LT_fill")
     sc.render.filepath = path
     sc.render.resolution_x, sc.render.resolution_y = res
     sc.eevee.taa_render_samples = samples
     bpy.ops.render.render(write_still=True)
+    if fit:
+        from bpy_extras.object_utils import world_to_camera_view
+        xs_ = [world_to_camera_view(sc, cam, Vector((x, y, z))).x for x in (fmn.x, fmx.x) for y in (fmn.y, fmx.y) for z in (fmn.z, fmx.z)]
+        print("FRAC %s: lanche ocupa %.0f%% da largura" % (name, 100 * (max(xs_) - min(xs_))))
     print("RENDER", path)
 
 
@@ -1320,7 +1616,8 @@ def render_all(stats):
         render_view(parts, "09", ["macarico"], 30, 18, 75, os.path.join(outdir, "09-macarico-chama.png"), (W, H), smp, flame=True)
     full = ["tabua", "pao", "pasta", "costela", "creme", "mussarela", "gratinado", "macarico"]
     if ok("10"):
-        render_view(parts, "10", full, 24, 35, 62, os.path.join(outdir, "10-montado.png"), (W, H), smp, margin=1.06, lid="closed")
+        render_view(parts, "10", full, 24, 35, 62, os.path.join(outdir, "10-montado.png"), (W, H), smp, margin=1.42, lid="closed",
+                    fit=["pao", "mussarela", "gratinado"], shift=(0.012, 0.0, -0.004))
     if ok("11"):
         offs = {"pasta": 0.04, "costela": 0.08, "creme": 0.12, "mussarela": 0.235, "gratinado": 0.29}
         render_view(parts, "11", ["tabua", "pao", "pasta", "costela", "creme", "mussarela", "gratinado"], 18, 14, 62,
@@ -1332,9 +1629,14 @@ def render_all(stats):
     if ok("13"):
         render_view(parts, "13", ["tabua", "pao", "pasta", "costela", "creme"], 22, 30, 62,
                     os.path.join(outdir, "13-aberto-recheado.png"), (W, H), smp, margin=1.08, lid="open")
+    if ok("14"):
+        render_view(parts, "14", ["tabua", "pao", "pasta", "costela", "creme"], 14, 14, 90,
+                    os.path.join(outdir, "14-tampa-fechada.png"), (W, H), smp, lid="closed", lid_deg=17.0,
+                    box=((-0.085, -0.060, 0.020), (0.085, 0.0, 0.075)), margin=1.02)
     if ok("poster") and not ARGS.no_poster:
         tmp = os.path.join(outdir, "_poster_src.png")
-        render_view(parts, "poster", full, 24, 35, 62, tmp, (PW, PH), smp, margin=1.06, lid="closed")
+        render_view(parts, "poster", full, 24, 35, 62, tmp, (PW, PH), smp, margin=1.42, lid="closed",
+                    fit=["pao", "mussarela", "gratinado"], shift=(0.012, 0.0, -0.004))
         img = bpy.data.images.load(tmp)
         os.makedirs(POSTER_DIR, exist_ok=True)
         for q in (92, 88, 84, 80, 74, 68, 60, 52, 44, 36):

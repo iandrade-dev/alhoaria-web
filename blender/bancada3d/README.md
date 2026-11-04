@@ -16,18 +16,18 @@ Opções:
 
 | opção | efeito |
 |---|---|
-| `--renders DIR` | pasta dos PNGs de revisão (fora do repo). Padrão: `\\wsl.localhost\ubuntu\home\igor\orq\runs\lar-429-modelos\renders` |
-| `--parts a,b` | constrói/exporta só essas peças (padrão: todas) |
-| `--views 10,04` | renderiza só essas vistas (`01`..`12`, `poster`; `none` não renderiza) |
+| `--renders DIR` | pasta dos PNGs de revisão (fora do repo). Padrão: `\\wsl.localhost\ubuntu\home\igor\orq\runs\lar-429-modelos-a2\renders` |
+| `--parts a,b` | constrói/exporta só essas peças (padrão: todas; `none` só renderiza a partir dos GLBs existentes) |
+| `--views 10,04` | renderiza só essas vistas (`01`..`14`, `poster`; `none` não renderiza) |
 | `--quick` | renders de 600 px, poucas amostras (iteração) |
 | `--no-poster` | não gera o poster |
 
 Saídas:
 
 - `public/assets/models/bancada/*.glb` (8 arquivos)
-- `public/assets/bancada/lanche-pronto.webp` (poster, 1600 px, mesmo enquadramento do render 10)
+- `public/assets/bancada/lanche-pronto.webp` (poster, 1600 px, mesmo enquadramento do render 10: o pão ocupa ~66 % da largura)
 - `DIR/01-tabua.png` ... `08-macarico.png`, `09-macarico-chama.png` (extra), `10-montado.png`,
-  `11-explodido.png`, `12-close-costela.png`, `13-aberto-recheado.png` (EEVEE, 1200 px). Os renders são feitos reimportando os GLBs
+  `11-explodido.png`, `12-close-costela.png`, `13-aberto-recheado.png`, `14-tampa-fechada.png` (encaixe da tampa entreaberta ~17°, vista lateral) (EEVEE, 1200 px). Os renders são feitos reimportando os GLBs
   exportados, ou seja, mostram o que o site recebe.
 
 ## Contrato técnico
@@ -36,27 +36,32 @@ Saídas:
   (`KHR_draco_mesh_compression`). Sem luzes e sem câmeras.
 - Espaço comum: todas as camadas já estão na posição montada. Origem do mundo = centro do topo da tábua
   (topo em y = 0). Carregar todos os GLBs na origem mostra o lanche montado na tábua. O pão tem 0,30 m no
-  eixo X, centrado em x = 0, z = 0 (largura ~0,10 m, altura ~0,07 m fechado). A tábua vai de x = -0,21 a 0,33 (com cabo)
+  eixo X, centrado em x = 0, z = 0 (largura ~0,10 m, altura ~0,084 m fechado). A tábua vai de x = -0,21 a 0,33 (com cabo)
   e z = -0,15 a 0,15 (z do glTF = -y do Blender).
 - Cada arquivo tem um nó raiz com o nome da peça: `tabua`, `pao`, `pasta`, `costela`, `creme`, `mussarela`,
   `gratinado`, `macarico`.
 - `macarico.glb`: o nó `macarico` contém os meshes do corpo e o objeto `chama` (cone azul na base e laranja na
-  ponta, materiais emissivos), separado para o site mostrar/esconder. O maçarico fica deitado na tábua, em
-  z(glTF) ≈ +0,108, ao lado do pão, com o bico apontando para -x.
+  ponta, materiais emissivos), separado para o site mostrar/esconder. O maçarico fica **em pé** na tábua
+  (lata de gás laranja na base, cabeça com gatilho e botão vermelho, bico de aço curvo; ~0,15 m de altura), na
+  frente-esquerda do pão: base em x ≈ -0,186, z(glTF) ≈ +0,114, com o bico apontando para o pão (+x e -z). O cone
+  `chama` sai do fim do bico, inclinado ~40° para baixo.
 - Cores: cores de vértice (`COLOR_0`, atributo `Col`) multiplicadas por um material Principled simples
-  (pão, pasta, costela, creme, mussarela, gratinado). A tábua usa uma textura JPEG 512x512 embutida
-  (madeira, veio sugerido). O maçarico usa materiais de cor sólida. Ligue `vertexColors` no material do
+  (pasta, creme, mussarela, gratinado). A tábua usa uma textura JPEG 512x512 embutida (madeira, veio sugerido).
+  O pão usa 2 materiais (casca e miolo), cada um com textura de cor + normal map JPEG 512x512 embutidos (poros
+  da casca; alvéolos do miolo) multiplicados pela cor de vértice (`COLOR_0` já traz o tom de tostado). A costela
+  usa 1 textura de fibras (cor cinza + normal, 256x256) multiplicada pela cor de vértice. O maçarico usa
+  materiais de cor sólida (`COLOR_0` branco). Ligue `vertexColors` no material do
   three.js (o GLTFLoader já faz isso quando há `COLOR_0`).
 - Mussarela e creme têm material com brilho (roughness baixa; a mussarela usa `KHR_materials_clearcoat`).
 
 ## Pão cortado ao meio (base + tampa articulada)
 
-O pão é cortado na horizontal (plano y = 0,037 m, no glTF) e chega meio aberto, como no vídeo do hero.
+O pão é cortado na horizontal (plano y = 0,042 m, no glTF) e chega meio aberto, como no vídeo do hero.
 `pao.glb` tem o nó raiz `pao` com dois filhos:
 
 - `pao_base`: metade de baixo, miolo para cima (levemente côncavo), na posição final.
 - `pao_tampa`: metade de cima, casca dourada. O pivô do nó fica na linha da dobradiça: a aresta longa de trás
-  (z negativo) no topo da base, em `translation = (0, 0.037, -0.052)`, eixo de rotação = X. A tampa é exportada
+  (z negativo) no topo da base, em `translation = (0, 0.042, -0.052)`, eixo de rotação = X. A tampa é exportada
   na pose **ABERTA**: `rotation.x = -110°`, ou seja, **-1,9199 rad** (quaternion `(-0.8192, 0, 0, 0.5736)`;
   constante `OPEN_RAD` / `HINGE_DEG = 110` no script).
 - **Para FECHAR a tampa**: levar a rotação X local de -1,9199 rad até **0** (equivale a girar +1,9199 rad,
@@ -80,26 +85,33 @@ aumente o `near` ou use `polygonOffset` no material).
 
 | arquivo | tamanho | triângulos |
 |---|---:|---:|
-| tabua.glb | 54.072 B (52.8 KB) | 2.852 |
-| pao.glb | 68.416 B (66.8 KB) | 15.792 |
-| pasta.glb | 24.984 B (24.4 KB) | 4.434 |
-| costela.glb | 179.080 B (174.9 KB) | 28.428 |
-| creme.glb | 35.024 B (34.2 KB) | 11.232 |
-| mussarela.glb | 59.356 B (58.0 KB) | 14.676 |
-| gratinado.glb | 35.680 B (34.8 KB) | 11.610 |
-| macarico.glb | 18.480 B (18.0 KB) | 4.392 |
-| **soma** | **475.092 B (464 KB)** | **93.416** |
+| tabua.glb | 50.160 B (49.0 KB) | 2.852 |
+| pao.glb | 264.396 B (258.2 KB) | 15.824 |
+| pasta.glb | 25.384 B (24.8 KB) | 4.434 |
+| costela.glb | 257.352 B (251.3 KB) | 27.108 |
+| creme.glb | 26.176 B (25.6 KB) | 8.328 |
+| mussarela.glb | 59.348 B (58.0 KB) | 14.676 |
+| gratinado.glb | 35.636 B (34.8 KB) | 11.610 |
+| macarico.glb | 24.136 B (23.6 KB) | 6.484 |
+| **soma** | **742.588 B (725 KB)** | **91.316** |
 
 Orçamento: cada GLB <= 300 KB, soma <= 1,2 MB, peça <= 20 mil triângulos (costela <= 30 mil).
-Poster: `lanche-pronto.webp`, 68 KB (<= 200 KB).
+Poster: `lanche-pronto.webp`, 112 KB (<= 200 KB).
 
 ## Notas de modelagem
 
-- Pão: loft de 84 secções (superelipse que afina nas pontas) cortado em duas metades, base e tampa, com miolo
-  claro e borda tostada; marcas de corte e tostado por cor de vértice.
-- Costela: ~430 fios (tubos de 4 lados achatados, com raio variável e caminhos meandrantes que seguem a
-  superfície do monte e escorrem pelas bordas do pão) sobre um miolo escuro; ~15 % são tiras largas.
-- Creme e mussarela: placas grossas parametrizadas, de borda irregular com línguas que escorrem; a mussarela
-  tem gotas (tubos) pela lateral do pão.
+- Pão: loft de 92 secções (superelipse que afina nas pontas) cortado em duas metades, base e tampa. Miolo com
+  alvéolos (relevo suave na malha + normal map/cor de textura tileável gerados por script) e casca com poros e
+  bolhas (textura + normal) sob a cor de vértice de tostado. Casca e miolo são primitivos separados no glTF
+  (2 materiais); na linha do corte as duas superfícies têm vértices próprios (aresta viva).
+- Costela: ~450 tiras achatadas (seção elíptica de 4 lados, largura/espessura variáveis, algumas largas) agrupadas
+  em ~100 feixes de 3 a 5 tiras paralelas, com curvatura comum, torção, pontas escuras tostadas e camadas em alturas
+  diferentes sobre um miolo escuro irregular (nunca aparece base lisa). Textura de fibras (estrias ao longo da tira)
+  e normal map dão o aspecto de carne desfiada. As tiras das bordas correm ao longo do pão e escorrem um pouco.
+- Creme: fio serpenteante (passa pelo centro sem cobri-lo) com bolsões ocasionais; mussarela: placa grossa de
+  borda irregular com línguas e gotas (tubos) pela lateral.
 - Gratinado: manchas de formas variadas em aglomerados, do âmbar na borda ao quase queimado no centro.
-- Funções analíticas compartilhadas (`bprof`, `zouter`, `zfloor`, `pile`) garantem que todas as camadas encaixem.
+- Maçarico: superfícies de revolução (lata laranja com faixa preta, ombro e colar de aço), cabeça cilíndrica
+  laranja com capa traseira preta, botão vermelho, gatilho (superelipsoide), bico em tubo curvo e cabeça do queimador.
+- Funções analíticas compartilhadas (`bprof`, `zouter`, `zface`, `zunder`, `pile`, `surf_z`) garantem que todas as
+  camadas encaixem.
