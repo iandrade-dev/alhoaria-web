@@ -385,15 +385,11 @@ export default function Hero() {
 
   useEffect(() => () => stopPlayback(), [stopPlayback]);
 
-  const scrollToBancada = () => {
-    enterFinal();
-    document.querySelector("#bancada")?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
-  };
   const skip = () => {
     if (status === "loading") {
       fail(); // No metadata is required to skip the loader.
     } else enterFinal();
-    document.querySelector("#bancada")?.scrollIntoView({ behavior: "instant" });
+    document.querySelector("#unidades")?.scrollIntoView({ behavior: "instant" });
   };
   const visible = staticHero || status === "ready";
   const stage = stages[staticHero ? finalIndex : stageIndex];
@@ -438,9 +434,7 @@ export default function Hero() {
                   <h1 className={headlineClass}><RevelarPalavras texto="ALHOARIA" visivel /></h1>
                   <p className={`mt-3 ${supportClass}`}><RevelarPalavras texto="Lanches no pão de alho recheado." visivel atraso={0.3} /></p>
                   <motion.div initial={staticHero ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ ...heroMotion.enter, delay: staticHero ? 0 : 0.1 }} className="mt-8 flex flex-wrap gap-4">
-                    <motion.a whileTap={{ scale: 0.98 }} href={PEDIDO_URL} target="_blank" rel="noopener noreferrer" aria-label="Peça agora (abre em nova aba)" className="inline-flex min-h-12 items-center rounded bg-macarico px-6 font-bold text-carvao transition-colors duration-160 hover:bg-queijo focus-visible:outline focus-visible:outline-2 focus-visible:outline-ouro">Peça agora</motion.a>
-                    <motion.button whileTap={{ scale: 0.98 }} type="button" onClick={scrollToBancada} className="min-h-12 rounded border-2 border-osso px-6 font-bold text-osso transition-colors duration-160 hover:bg-osso hover:text-carvao focus-visible:outline focus-visible:outline-2 focus-visible:outline-ouro">Monte o seu</motion.button>
-                  </motion.div>
+                    <motion.a whileTap={{ scale: 0.98 }} href={PEDIDO_URL} target="_blank" rel="noopener noreferrer" aria-label="Peça agora (abre em nova aba)" className="inline-flex min-h-12 items-center rounded bg-macarico px-6 font-bold text-carvao transition-colors duration-160 hover:bg-queijo focus-visible:outline focus-visible:outline-2 focus-visible:outline-ouro">Peça agora</motion.a>                  </motion.div>
                 </>}
                 {!staticHero && stageIndex < finalIndex && <button type="button" onClick={skip} className="mt-3 inline-flex min-h-11 items-center justify-start px-0 py-2 font-sans text-sm text-osso underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ouro md:hidden">Pular animação</button>}
               </motion.div>
