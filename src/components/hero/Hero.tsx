@@ -5,14 +5,16 @@ import { AnimatePresence, motion, useAnimationControls, useMotionValue, useReduc
 import { PEDIDO_URL } from "@/lib/links";
 import { heroSandwich } from "./heroSandwich";
 import { heroMotion } from "./motion";
+import { RevelarPalavras } from "./RevelarPalavras";
 
 const stages = heroSandwich.stages;
 const finalIndex = stages.length - 1;
 const mediaClass = "absolute left-1/2 top-[72%] aspect-[1264/720] h-auto w-[175vw] max-w-none -translate-x-1/2 -translate-y-1/2 object-cover [mask-image:radial-gradient(ellipse_64%_68%_at_50%_50%,#000_72%,transparent_100%)] [-webkit-mask-image:radial-gradient(ellipse_64%_68%_at_50%_50%,#000_72%,transparent_100%)] md:left-auto md:right-0 md:top-1/2 md:w-[57vw] md:max-w-full md:translate-x-0 md:-translate-y-1/2";
-const enter = { opacity: 1, y: 0, filter: "blur(0px)" };
-const initial = { opacity: 0, y: 16, filter: "blur(6px)" };
-const exit = { opacity: 0, y: -12, filter: "blur(0px)" };
-const openingLines = ["LANCHES NO", "PÃO DE ALHO"];
+const enter = { opacity: 1, y: 0 };
+const initial = { opacity: 0, y: 16 };
+const exit = { opacity: 0, y: -12 };
+const headlineClass = "font-display text-[clamp(32px,6vw,96px)] uppercase leading-[0.95] text-[#F5F0E6]";
+const supportClass = "font-sans text-[clamp(16px,1.6vw,24px)] leading-snug text-[#F5F0E6]";
 
 export default function Hero() {
   const reduceMotion = useReducedMotion();
@@ -396,7 +398,6 @@ export default function Hero() {
   const visible = staticHero || status === "ready";
   const stage = stages[staticHero ? finalIndex : stageIndex];
   const show = (piece: string) => staticHero || stage.cues.slice(0, cueCount).some((cue) => cue.piece === piece);
-  const textMotion = { initial, animate: enter, exit: { ...exit, transition: heroMotion.exit }, transition: heroMotion.enter };
 
   return (
     <section id="inicio" ref={sectionRef} className={`relative bg-carvao ${staticHero ? "min-h-[calc(100svh-var(--header-height))]" : "h-[500svh]"}`}>
@@ -415,37 +416,27 @@ export default function Hero() {
         {visible && <div className="pointer-events-none absolute inset-x-0 top-0 h-[48%] bg-gradient-to-b from-carvao/50 to-transparent md:inset-y-0 md:left-0 md:right-auto md:h-full md:w-[48%] md:bg-gradient-to-r md:from-carvao/60 md:to-transparent" />}
         {visible && <div className="relative z-10 mx-auto h-full w-full max-w-7xl px-5 pt-8 sm:px-10 md:flex md:items-center md:pt-0">
           <div className="relative h-[285px] w-full max-w-[95%] sm:h-[330px] md:h-[360px] md:max-w-[40%]">
-            <AnimatePresence initial={false}>
+            <AnimatePresence initial={false} mode="wait">
               <motion.div key={stage.id} className="absolute inset-0 flex flex-col items-start justify-start md:justify-center" initial={staticHero ? false : initial} animate={enter} exit={{ ...exit, transition: heroMotion.exit }} transition={heroMotion.enter}>
                 {stage.id === "abertura" && <>
-                  <h1 className="font-display text-[clamp(38px,7vw,88px)] uppercase leading-[0.94] text-osso" aria-label="LANCHES NO PÃO DE ALHO">
-                    {openingLines.map((line, index) => <span key={line} className="block overflow-hidden" aria-hidden="true"><motion.span className="block" initial={{ y: "110%" }} animate={{ y: 0 }} transition={{ ...heroMotion.reveal, delay: index * heroMotion.stagger }}>{line}</motion.span></span>)}
-                  </h1>
-                  <motion.p initial={{ x: -6, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ ...heroMotion.enter, delay: 0.1 }} className="mt-3 -rotate-3 font-hand text-3xl text-macarico md:text-5xl">O resto é pão.</motion.p>
+                  <h1 className={headlineClass}><RevelarPalavras texto="LANCHES NO PÃO DE ALHO" visivel atraso={0} /></h1>
+                  <p className={`mt-3 ${supportClass}`}><RevelarPalavras texto="O resto é pão." visivel atraso={0.3} apoio /></p>
                   <motion.button type="button" onClick={nextStage} whileTap={{ scale: 0.98 }} className="mt-6 min-h-12 rounded bg-macarico px-5 py-3 font-bold text-carvao transition-colors duration-160 hover:bg-queijo focus-visible:outline focus-visible:outline-2 focus-visible:outline-ouro">Ver como é feito</motion.button>
                 </>}
-                {stage.id === "macarico" && <AnimatePresence>{show("caption") && <motion.div key="caption" initial={initial} animate={enter} exit={{ ...exit, transition: heroMotion.exit }} transition={heroMotion.enter} className="mt-4 inline-block max-w-full">
-                  <motion.div className="origin-left bg-macarico px-3 py-1 text-carvao [clip-path:polygon(0_9%,7%_3%,18%_7%,34%_1%,53%_5%,78%_0,100%_7%,98%_91%,82%_97%,63%_92%,41%_100%,17%_94%,0_98%)]" initial={{ scaleX: 0.05, rotate: -1.5 }} animate={{ scaleX: 1, rotate: -1 }} transition={heroMotion.brush}>
-                    <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ ...heroMotion.enter, delay: 0.08 }} className="font-hand text-[30px] leading-tight md:text-[44px]">Queijo gratinado no maçarico.</motion.p>
-                  </motion.div>
-                </motion.div>}</AnimatePresence>}
+                {stage.id === "macarico" && <div className="mt-4 max-w-full">
+                  <h2 className={headlineClass}><RevelarPalavras texto="QUEIJO GRATINADO NO MAÇARICO." visivel={show("caption")} /></h2>
+                </div>}
                 {stage.id === "recheio" && <>
-                  <AnimatePresence>{show("recheio") && <motion.div {...textMotion} className="flex flex-wrap items-end gap-x-3 gap-y-1">
-                    <p className="font-display text-[clamp(44px,5vw,80px)] leading-none text-creme">RECHEIO</p>
-                    <p className="font-hand text-2xl leading-tight text-osso md:text-3xl">de altíssima qualidade.</p>
-                  </motion.div>}</AnimatePresence>
-                  <AnimatePresence>{show("horas") && <motion.div {...textMotion} className="mt-5">
-                    <p className="font-sans text-[18px] text-osso md:text-[20px]">Costela desfiada</p>
-                    <div className="flex items-baseline gap-3"><motion.strong initial={{ scale: 0.96 }} animate={{ scale: 1 }} transition={heroMotion.accent} className="font-display text-[clamp(42px,5vw,76px)] leading-none text-ouro">6 HORAS</motion.strong><span className="font-sans text-[18px] text-osso md:text-[20px]">no fogo</span></div>
-                  </motion.div>}</AnimatePresence>
+                  <h2 className={headlineClass}><RevelarPalavras texto="RECHEIO DE ALTÍSSIMA QUALIDADE." visivel={show("recheio")} /></h2>
+                  <p className={`mt-3 ${supportClass}`}><RevelarPalavras texto="Costela desfiada, 6 horas no fogo." visivel={show("recheio")} atraso={0.3} apoio /></p>
                 </>}
                 {stage.id === "explosao" && <>
-                  <AnimatePresence>{show("beat1") && !show("clear") && <motion.p {...textMotion} className="font-hand text-[clamp(34px,4vw,60px)] leading-tight text-osso">Não é só pão de alho.</motion.p>}</AnimatePresence>
-                  <AnimatePresence>{show("beat2") && !show("clear") && <motion.p {...textMotion} className="mt-4 font-display text-[clamp(38px,4.5vw,70px)] uppercase leading-[0.95] text-creme">É LANCHE RECHEADO DE VERDADE.</motion.p>}</AnimatePresence>
+                  <h2 className={headlineClass}><RevelarPalavras texto="NÃO É SÓ PÃO DE ALHO." visivel={show("beat1") && !show("clear")} /></h2>
+                  <p className={`mt-3 ${supportClass}`}><RevelarPalavras texto="É lanche recheado de verdade." visivel={show("beat1") && !show("clear")} atraso={0.36} apoio /></p>
                 </>}
                 {stage.id === "final" && <>
-                  <h1 className="font-display text-[clamp(56px,7vw,110px)] leading-none text-osso">ALHOARIA</h1>
-                  <p className="mt-3 font-hand text-3xl text-macarico md:text-5xl">Lanches no pão de alho recheado.</p>
+                  <h1 className={headlineClass}><RevelarPalavras texto="ALHOARIA" visivel /></h1>
+                  <p className={`mt-3 ${supportClass}`}><RevelarPalavras texto="Lanches no pão de alho recheado." visivel atraso={0.3} /></p>
                   <motion.div initial={staticHero ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ ...heroMotion.enter, delay: staticHero ? 0 : 0.1 }} className="mt-8 flex flex-wrap gap-4">
                     <motion.a whileTap={{ scale: 0.98 }} href={PEDIDO_URL} target="_blank" rel="noopener noreferrer" aria-label="Peça agora (abre em nova aba)" className="inline-flex min-h-12 items-center rounded bg-macarico px-6 font-bold text-carvao transition-colors duration-160 hover:bg-queijo focus-visible:outline focus-visible:outline-2 focus-visible:outline-ouro">Peça agora</motion.a>
                     <motion.button whileTap={{ scale: 0.98 }} type="button" onClick={scrollToBancada} className="min-h-12 rounded border-2 border-osso px-6 font-bold text-osso transition-colors duration-160 hover:bg-osso hover:text-carvao focus-visible:outline focus-visible:outline-2 focus-visible:outline-ouro">Monte o seu</motion.button>
@@ -457,9 +448,9 @@ export default function Hero() {
         </div>}
         <AnimatePresence>{visible && !staticHero && stageIndex < finalIndex && !playing && <motion.button key="scroll" type="button" onClick={() => { resetIdle(); nextStage(); }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="absolute bottom-14 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center rounded px-3 py-2 text-center text-osso focus-visible:outline focus-visible:outline-2 focus-visible:outline-ouro md:bottom-8" aria-label="Deslize para baixo: avançar uma etapa">
           <motion.span className="whitespace-nowrap font-display uppercase tracking-[0.13em]" style={{ fontSize: "clamp(18px, 2.2vw, 44px)" }} animate={{ opacity: [0.55, 0.85, 0.55] }} transition={{ duration: 2.4, ease: "easeInOut", repeat: Infinity }}>{coarse ? "Deslize" : "Role para baixo"}</motion.span>
-          <motion.span aria-hidden="true" className="text-3xl leading-none text-macarico" animate={{ y: [0, 7, 0] }} transition={{ duration: 1.4, ease: "easeInOut", repeat: Infinity }}>↓</motion.span>
+          <motion.span aria-hidden="true" className="text-3xl leading-none text-osso" animate={{ y: [0, 7, 0] }} transition={{ duration: 1.4, ease: "easeInOut", repeat: Infinity }}>↓</motion.span>
         </motion.button>}</AnimatePresence>
-        {!staticHero && <button type="button" onClick={skip} className="absolute bottom-5 right-5 z-40 rounded px-3 py-2 text-sm text-osso underline underline-offset-4 hover:text-ouro focus-visible:outline focus-visible:outline-2 focus-visible:outline-ouro">Pular animação</button>}
+        {!staticHero && <button type="button" onClick={skip} className="absolute bottom-5 right-5 z-40 rounded px-3 py-2 text-sm text-osso underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ouro">Pular animação</button>}
         <AnimatePresence>{!staticHero && status === "loading" && <motion.div key="loader" initial={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.35 }} aria-hidden="true" className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-carvao">
           <motion.img src="/assets/photos/logo-anota.webp" alt="" className="h-24 w-24 object-contain" animate={{ scale: [1, 1.06, 1] }} transition={{ duration: 1.5, repeat: Infinity }} />
           <div className="mt-6 h-1 w-32 overflow-hidden rounded-full bg-osso/30"><div className="h-full origin-left bg-macarico transition-transform duration-300" style={{ transform: `scaleX(${progress})` }} /></div>
