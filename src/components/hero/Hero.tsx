@@ -442,6 +442,7 @@ export default function Hero() {
                     <motion.button whileTap={{ scale: 0.98 }} type="button" onClick={scrollToBancada} className="min-h-12 rounded border-2 border-osso px-6 font-bold text-osso transition-colors duration-160 hover:bg-osso hover:text-carvao focus-visible:outline focus-visible:outline-2 focus-visible:outline-ouro">Monte o seu</motion.button>
                   </motion.div>
                 </>}
+                {!staticHero && stageIndex < finalIndex && <button type="button" onClick={skip} className="mt-3 inline-flex min-h-11 items-center justify-start px-0 py-2 font-sans text-sm text-osso underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ouro md:hidden">Pular animação</button>}
               </motion.div>
             </AnimatePresence>
           </div>
@@ -450,7 +451,7 @@ export default function Hero() {
           <motion.span className="whitespace-nowrap font-display uppercase tracking-[0.13em]" style={{ fontSize: "clamp(18px, 2.2vw, 44px)" }} animate={{ opacity: [0.55, 0.85, 0.55] }} transition={{ duration: 2.4, ease: "easeInOut", repeat: Infinity }}>{coarse ? "Deslize" : "Role para baixo"}</motion.span>
           <motion.span aria-hidden="true" className="text-3xl leading-none text-osso" animate={{ y: [0, 7, 0] }} transition={{ duration: 1.4, ease: "easeInOut", repeat: Infinity }}>↓</motion.span>
         </motion.button>}</AnimatePresence>
-        {!staticHero && stageIndex < finalIndex && <button type="button" onClick={skip} className="absolute right-3 top-3 z-40 inline-flex min-h-11 min-w-11 items-center justify-center rounded px-3 py-2 text-sm text-osso underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ouro md:bottom-5 md:right-5 md:top-auto">Pular animação</button>}
+        {!staticHero && stageIndex < finalIndex && <button type="button" onClick={skip} className="absolute right-3 top-3 z-40 hidden min-h-11 min-w-11 items-center justify-center rounded px-3 py-2 text-sm text-osso underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ouro md:bottom-5 md:right-5 md:top-auto md:inline-flex">Pular animação</button>}
         <AnimatePresence>{!staticHero && status === "loading" && <motion.div key="loader" initial={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.35 }} aria-hidden="true" className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-carvao">
           <motion.img src="/assets/photos/logo-anota.webp" alt="" className="h-24 w-24 object-contain" animate={{ scale: [1, 1.06, 1] }} transition={{ duration: 1.5, repeat: Infinity }} />
           <div className="mt-6 h-1 w-32 overflow-hidden rounded-full bg-osso/30"><div className="h-full origin-left bg-macarico transition-transform duration-300" style={{ transform: `scaleX(${progress})` }} /></div>
