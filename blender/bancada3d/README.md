@@ -27,7 +27,7 @@ Saídas:
 - `public/assets/models/bancada/*.glb` (8 arquivos)
 - `public/assets/bancada/lanche-pronto.webp` (poster, 1600 px, mesmo enquadramento do render 10)
 - `DIR/01-tabua.png` ... `08-macarico.png`, `09-macarico-chama.png` (extra), `10-montado.png`,
-  `11-explodido.png`, `12-close-costela.png` (EEVEE, 1200 px). Os renders são feitos reimportando os GLBs
+  `11-explodido.png`, `12-close-costela.png`, `13-aberto-recheado.png` (EEVEE, 1200 px). Os renders são feitos reimportando os GLBs
   exportados, ou seja, mostram o que o site recebe.
 
 ## Contrato técnico
@@ -36,7 +36,7 @@ Saídas:
   (`KHR_draco_mesh_compression`). Sem luzes e sem câmeras.
 - Espaço comum: todas as camadas já estão na posição montada. Origem do mundo = centro do topo da tábua
   (topo em y = 0). Carregar todos os GLBs na origem mostra o lanche montado na tábua. O pão tem 0,30 m no
-  eixo X, centrado em x = 0, z = 0 (largura ~0,10 m, altura ~0,07 m). A tábua vai de x = -0,21 a 0,33 (com cabo)
+  eixo X, centrado em x = 0, z = 0 (largura ~0,10 m, altura ~0,07 m fechado). A tábua vai de x = -0,21 a 0,33 (com cabo)
   e z = -0,15 a 0,15 (z do glTF = -y do Blender).
 - Cada arquivo tem um nó raiz com o nome da peça: `tabua`, `pao`, `pasta`, `costela`, `creme`, `mussarela`,
   `gratinado`, `macarico`.
@@ -49,9 +49,30 @@ Saídas:
   three.js (o GLTFLoader já faz isso quando há `COLOR_0`).
 - Mussarela e creme têm material com brilho (roughness baixa; a mussarela usa `KHR_materials_clearcoat`).
 
+## Pão cortado ao meio (base + tampa articulada)
+
+O pão é cortado na horizontal (plano y = 0,037 m, no glTF) e chega meio aberto, como no vídeo do hero.
+`pao.glb` tem o nó raiz `pao` com dois filhos:
+
+- `pao_base`: metade de baixo, miolo para cima (levemente côncavo), na posição final.
+- `pao_tampa`: metade de cima, casca dourada. O pivô do nó fica na linha da dobradiça: a aresta longa de trás
+  (z negativo) no topo da base, em `translation = (0, 0.037, -0.052)`, eixo de rotação = X. A tampa é exportada
+  na pose **ABERTA**: `rotation.x = -110°`, ou seja, **-1,9199 rad** (quaternion `(-0.8192, 0, 0, 0.5736)`;
+  constante `OPEN_RAD` / `HINGE_DEG = 110` no script).
+- **Para FECHAR a tampa**: levar a rotação X local de -1,9199 rad até **0** (equivale a girar +1,9199 rad,
+  `+110°`, em torno de X local). Em 0 a tampa assenta sobre o recheio (o miolo da tampa tem uma cavidade que
+  "aperta" levemente a costela e o creme).
+- `pasta`, `costela` e `creme` ficam sobre o miolo da BASE (a costela transborda um pouco pelas bordas).
+- `mussarela` e `gratinado` já estão na posição de tampa **FECHADA** (por cima da tampa, escorrendo pelas
+  laterais). O site só deve mostrá-las depois de fechar a tampa (com a tampa aberta elas flutuam no ar).
+
+Renders de revisão: `10-montado.png` = lanche fechado com mussarela gratinada; `13-aberto-recheado.png` = tampa
+aberta, base com pasta + costela + creme; `11-explodido.png` = base, pasta, costela, creme, tampa (fechada),
+mussarela, gratinado.
+
 ## Camadas (ordem vertical, de baixo para cima)
 
-`tabua` -> `pao` -> `pasta` -> `costela` -> `creme` -> `mussarela` -> `gratinado`. O `gratinado` é um decalque
+`tabua` -> `pao_base` -> `pasta` -> `costela` -> `creme` -> `pao_tampa` (fechada) -> `mussarela` -> `gratinado`. O `gratinado` é um decalque
 fino apoiado ~0,9 mm acima da mussarela (não tem z-fighting a distâncias normais; se a câmera ficar muito longe,
 aumente o `near` ou use `polygonOffset` no material).
 
@@ -59,23 +80,23 @@ aumente o `near` ou use `polygonOffset` no material).
 
 | arquivo | tamanho | triângulos |
 |---|---:|---:|
-| tabua.glb | 54.072 B (52,8 KB) | 2.852 |
-| pao.glb | 49.500 B (48,3 KB) | 11.360 |
-| pasta.glb | 23.960 B (23,4 KB) | 4.434 |
-| costela.glb | 180.296 B (176,1 KB) | 28.428 |
-| creme.glb | 37.820 B (36,9 KB) | 11.232 |
-| mussarela.glb | 58.444 B (57,1 KB) | 14.680 |
-| gratinado.glb | 35.468 B (34,6 KB) | 11.610 |
-| macarico.glb | 18.480 B (18,0 KB) | 4.392 |
-| **soma** | **458.040 B (447 KB)** | **88.988** |
+| tabua.glb | 54.072 B (52.8 KB) | 2.852 |
+| pao.glb | 68.416 B (66.8 KB) | 15.792 |
+| pasta.glb | 24.984 B (24.4 KB) | 4.434 |
+| costela.glb | 179.080 B (174.9 KB) | 28.428 |
+| creme.glb | 35.024 B (34.2 KB) | 11.232 |
+| mussarela.glb | 59.356 B (58.0 KB) | 14.676 |
+| gratinado.glb | 35.680 B (34.8 KB) | 11.610 |
+| macarico.glb | 18.480 B (18.0 KB) | 4.392 |
+| **soma** | **475.092 B (464 KB)** | **93.416** |
 
 Orçamento: cada GLB <= 300 KB, soma <= 1,2 MB, peça <= 20 mil triângulos (costela <= 30 mil).
-Poster: `lanche-pronto.webp`, 72 KB (<= 200 KB).
+Poster: `lanche-pronto.webp`, 68 KB (<= 200 KB).
 
 ## Notas de modelagem
 
-- Pão: casco em loft de 100 secções (superelipse que afina nas pontas), abertura de barquinho com lábio
-  tostado e miolo claro visível; marcas de corte e tostado por cor de vértice.
+- Pão: loft de 84 secções (superelipse que afina nas pontas) cortado em duas metades, base e tampa, com miolo
+  claro e borda tostada; marcas de corte e tostado por cor de vértice.
 - Costela: ~430 fios (tubos de 4 lados achatados, com raio variável e caminhos meandrantes que seguem a
   superfície do monte e escorrem pelas bordas do pão) sobre um miolo escuro; ~15 % são tiras largas.
 - Creme e mussarela: placas grossas parametrizadas, de borda irregular com línguas que escorrem; a mussarela

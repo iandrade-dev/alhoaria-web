@@ -218,89 +218,81 @@ def make_mat(name, base=(1, 1, 1), rough=0.5, metal=0.0, vcol=True, emit=None, e
 # ----------------------------------------------------------------------------
 L = 0.150          # meio comprimento (pao tem 0,30 m)
 WB = 0.052         # meia largura
-HB = 0.074         # altura
+HB = 0.074         # altura do pao inteiro (cortado ao meio na horizontal, z = HB/2)
 NEXP = 2.6         # expoente da superelipse da secao
-XO = 0.140         # fim da abertura
-HW0 = 0.031        # meia abertura no centro
-DEP0 = 0.040       # profundidade da cavidade
-LIP0 = 0.011       # largura do labio
 XM = 0.140         # fim do monte de recheio
-
-_bp_cache = {}
+DISH = 0.006       # concavidade do miolo da base
+DCAV = 0.019       # cavidade do miolo sob a tampa (recheio "aperta" nela)
+PK = 0.013         # altura do monte de costela acima do corte
+HINGE_DEG = 110.0  # abertura da tampa exportada
+OPEN_RAD = -math.radians(HINGE_DEG)   # rotacao X (local) da tampa ABERTA; fechar = 0
 
 
 def bprof(x):
-    k = round(x, 7)
-    if k in _bp_cache:
-        return _bp_cache[k]
     t = min(abs(x) / L, 0.9995)
     s = (1 - t ** 4) ** 0.5
     Wb = WB * s ** 0.85
     Hb = HB * s ** 0.6
-    zc = Hb / 2
-    to = abs(x) / XO
-    if to < 1:
-        hw = HW0 * (1 - to ** 4) ** 0.5
-        d = DEP0 * (1 - to ** 3) ** 0.5
-    else:
-        hw, d = 0.0, 0.0
-    hw = min(hw, 0.62 * Wb)
-    lip = min(LIP0 * (Wb / WB) ** 0.5, hw * 1.2)
-    yo = min(hw + lip, 0.93 * Wb)
-    lip = yo - hw
-    cphi = (yo / Wb) ** (NEXP / 2)
-    phir = math.acos(min(1.0, cphi))
-    zr = zc + (Hb / 2) * math.sin(phir) ** (2 / NEXP)
-    d = min(d, max(0.0, zr - 0.012))
-    r = dict(Wb=Wb, Hb=Hb, zc=zc, hw=hw, lip=lip, yo=yo, yi=hw, d=d, zr=zr, phir=phir, s=s)
-    _bp_cache[k] = r
-    return r
+    return dict(Wb=Wb, Hb=Hb, zc=Hb / 2, s=s)
 
 
 def zouter(x, y):
-    """z da superficie externa do pao (metade de cima) em (x, |y|)."""
+    """z da casca externa (metade de cima, tampa) em (x, |y|)."""
     p = bprof(x)
     y = min(abs(y), 0.999 * p["Wb"])
     c = (y / p["Wb"]) ** (NEXP / 2)
     return p["zc"] + (p["Hb"] / 2) * (max(0.0, 1 - c * c)) ** (1 / NEXP)
 
 
-def zouter_normal(x, y):
-    """normal (ny, nz) da secao externa em y>0 (aprox. por diferenca)."""
-    h = 0.0006
-    z1, z0 = zouter(x, y + h), zouter(x, max(0.0, y - h))
-    dz = (z1 - z0) / (2 * h)
-    n = math.hypot(dz, 1.0)
-    return (-dz / n, 1.0 / n)
-
-
-def zfloor(x, y):
+def outer_normal(x, y, z):
+    """normal (ny, nz) da casca externa para y>0 (gradiente da superelipse)."""
     p = bprof(x)
-    if p["hw"] < 1e-6:
-        return p["zr"]
-    r = 1 - (y / p["hw"]) ** 2
-    return p["zr"] - p["d"] * math.sqrt(max(0.0, r))
-
-
-PK = 0.027
+    a = abs(y) / p["Wb"]
+    b = (z - p["zc"]) / (p["Hb"] / 2)
+    gy = a ** (NEXP - 1) / p["Wb"]
+    gz = math.copysign(abs(b) ** (NEXP - 1), b) / (p["Hb"] / 2)
+    n = math.hypot(gy, gz) or 1.0
+    return gy / n, gz / n
 
 
 def by_of(x):
-    return bprof(x)["yo"] + 0.004
+    """meia largura do recheio (costela/pasta/creme)."""
+    return 0.9 * bprof(x)["Wb"]
+
+
+def bym(x):
+    """meia largura de referencia da mussarela sobre a tampa."""
+    return 0.94 * bprof(x)["Wb"]
+
+
+def zface(x, y):
+    """z do miolo da BASE (face cortada, levemente concava)."""
+    p = bprof(x)
+    yy = p["Wb"] - 0.004
+    r = max(0.0, 1 - (y / yy) ** 2)
+    return p["zc"] - DISH * p["s"] * r ** 0.8
+
+
+def zunder(x, y):
+    """z do miolo da TAMPA (face cortada com cavidade), posicao fechada."""
+    p = bprof(x)
+    yc = p["Wb"] - 0.0075
+    r = max(0.0, 1 - (y / yc) ** 2)
+    return p["zc"] + DCAV * p["s"] * math.sqrt(r)
 
 
 def pile(x, v, bump=1.0):
-    """superficie superior do monte de costela (envelope), v = y / By(x)."""
+    """superficie superior do monte de costela (envelope) sobre a base, v = y / By(x)."""
     p = bprof(x)
-    By = p["yo"] + 0.004
     a = abs(v)
     tx = max(0.0, 1 - (abs(x) / XM) ** 4) ** 0.5
+    zE = p["zc"] + 0.002
     if a <= 1.0:
-        zE = zouter(x, By) + 0.006
         z = zE + PK * tx * (1 - a * a) ** 0.75
-        z += bump * 0.0028 * nz(x * 38, a * By * 38, 1.7) * tx
+        z += bump * 0.0015 * nz(x * 38, a * by_of(x) * 38, 1.7) * tx
         return z
-    return zouter(x, min(a * By, 0.97 * p["Wb"])) + 0.006
+    return zE
+
 
 
 def cos_spaced(n, half):
@@ -434,68 +426,81 @@ def crust_color(x, y, z):
 
 
 def build_pao(root):
-    mb = MB()
-    NS = 100
-    No, Nl, Ni = 34, 3, 22
-    rings = []
-    for xi in cos_spaced(NS, L * 0.9995):
-        p = bprof(xi)
-        Wb, Hb, zc, phir = p["Wb"], p["Hb"], p["zc"], p["phir"]
-        yo, yi, zr, d, lip = p["yo"], p["yi"], p["zr"], p["d"], p["lip"]
-        ring = []
-        sweep = math.pi + 2 * phir
-        # externa: borda direita -> embaixo -> borda esquerda
-        for k in range(No + 1):
-            ph = phir - sweep * k / No
-            cs, sn = math.cos(ph), math.sin(ph)
-            y = Wb * math.copysign(abs(cs) ** (2 / NEXP), cs)
-            z = zc + (Hb / 2) * math.copysign(abs(sn) ** (2 / NEXP), sn)
-            ring.append(mb.add((xi, y, z), crust_color(xi, y, z)))
-        # labio esquerdo (de -yo para -yi), com boleado
-        bump = 0.0045 * min(1.0, lip / 0.011)
+    """Pao cortado ao meio: base (miolo p/ cima) + tampa (miolo p/ baixo) presa pela aresta de tras.
+    A tampa e exportada na pose ABERTA, com pivo na dobradica (rotacao X = OPEN_RAD)."""
+    NS, No, Nf = 84, 26, 20
+    xs = cos_spaced(NS, L * 0.9995)
 
-        def lipcol(q, y, z):
-            return lerpc(crust_color(xi, y, z), C_TOAST, smooth(0.0, 0.8, q) * 0.8)
-        for k in range(1, Nl + 1):
-            q = k / (Nl + 1)
-            y = -yo + lip * q
-            z = zr + bump * math.sin(math.pi * q)
-            ring.append(mb.add((xi, y, z), lipcol(q, y, z)))
-        # cavidade (miolo): da esquerda para a direita passando pelo fundo
-        for k in range(Ni + 1):
-            ps = math.pi + math.pi * k / Ni
-            y = yi * math.cos(ps)
-            z = zr + d * math.sin(ps)
-            dep = (zr - z) / max(d, 1e-4) if d > 1e-4 else 0.0
-            cc = lerpc(lerpc(C_CRUMB, C_TOAST, 0.35), C_CRUMB, smooth(0.0, 0.5, dep))
-            cc = lerpc(cc, C_CRUMB_LO, smooth(0.6, 1.0, dep) * 0.6)
-            cc = mulc(cc, 1 + 0.06 * nz(xi * 60, y * 60, z * 60))
-            ring.append(mb.add((xi, y, z), cc))
-        # labio direito (de yi para yo)
-        for k in range(1, Nl + 1):
-            q = k / (Nl + 1)
-            y = yi + lip * q
-            z = zr + bump * math.sin(math.pi * (1 - q))
-            ring.append(mb.add((xi, y, z), lipcol(1 - q, y, z)))
+    def crumb_face(xi, y, z, Wb, under=False):
+        edge = 1 - abs(y) / max(Wb, 1e-6)
+        c = lerpc(hexc("#C79552"), C_CRUMB, smooth(0.02, 0.22, edge))
+        c = mulc(c, 1 + 0.07 * nz(xi * 60, y * 60, z * 60))
+        if under:
+            c = lerpc(c, C_CRUMB_LO, 0.35)
+        return c
+
+    def outer_pt(xi, ph):
+        p = bprof(xi)
+        cs, sn = math.cos(ph), math.sin(ph)
+        y = p["Wb"] * math.copysign(abs(cs) ** (2 / NEXP), cs)
+        z = p["zc"] + (p["Hb"] / 2) * math.copysign(abs(sn) ** (2 / NEXP), sn)
+        return y, z
+
+    def loft(mb, rings):
+        n = len(rings[0])
+        for i in range(len(rings) - 1):
+            for k in range(n):
+                k2 = (k + 1) % n
+                mb.quad(rings[i][k], rings[i + 1][k], rings[i + 1][k2], rings[i][k2])
+        for end, rev in ((0, True), (len(rings) - 1, False)):
+            ring = rings[end]
+            xe = mb.v[ring[0]][0]
+            c = mb.add((xe, 0.0, bprof(xe)["zc"]), C_CRUST_LO)
+            for k in range(n):
+                k2 = (k + 1) % n
+                if rev:
+                    mb.tri(c, ring[k], ring[k2])
+                else:
+                    mb.tri(c, ring[k2], ring[k])
+
+    # BASE: borda direita -> fundo -> borda esquerda, depois o miolo (esquerda -> direita)
+    base, rings = MB(), []
+    for xi in xs:
+        p = bprof(xi)
+        ring = []
+        for k in range(No + 1):
+            y, z = outer_pt(xi, -math.pi * k / No)
+            ring.append(base.add((xi, y, z), crust_color(xi, y, z)))
+        for k in range(1, Nf + 1):
+            y = -p["Wb"] + 2 * p["Wb"] * k / (Nf + 1)
+            z = zface(xi, y)
+            ring.append(base.add((xi, y, z), crumb_face(xi, y, z, p["Wb"])))
         rings.append(ring)
-    n = len(rings[0])
-    for i in range(NS - 1):
-        for k in range(n):
-            k2 = (k + 1) % n
-            mb.quad(rings[i][k], rings[i + 1][k], rings[i + 1][k2], rings[i][k2])
-    # tampas nas pontas (ja quase fechadas): fecha com leque
-    for end, rev in ((0, True), (NS - 1, False)):
-        ring = rings[end]
-        cx, cy, cz = mb.v[ring[0]][0], 0.0, bprof(mb.v[ring[0]][0])["zc"]
-        c = mb.add((cx, cy, cz), C_CRUST_LO)
-        for k in range(n):
-            k2 = (k + 1) % n
-            if rev:
-                mb.tri(c, ring[k], ring[k2])
-            else:
-                mb.tri(c, ring[k2], ring[k])
+    loft(base, rings)
+
+    # TAMPA: borda esquerda -> topo -> borda direita, depois o miolo (direita -> esquerda), pos. fechada
+    lid, rings = MB(), []
+    for xi in xs:
+        p = bprof(xi)
+        ring = []
+        for k in range(No + 1):
+            y, z = outer_pt(xi, math.pi - math.pi * k / No)
+            ring.append(lid.add((xi, y, z), crust_color(xi, y, z)))
+        for k in range(1, Nf + 1):
+            y = p["Wb"] - 2 * p["Wb"] * k / (Nf + 1)
+            z = zunder(xi, y)
+            ring.append(lid.add((xi, y, z), crumb_face(xi, y, z, p["Wb"], under=True)))
+        rings.append(ring)
+    loft(lid, rings)
+    Yh, Zh = bprof(0.0)["Wb"], bprof(0.0)["zc"]
+    lid.v = [(x, y - Yh, z - Zh) for (x, y, z) in lid.v]
     mat = make_mat("mat_pao", rough=0.72, spec=0.35)
-    return [finish(mb, "pao_casca_miolo", [mat], root)]
+    ob = finish(base, "pao_base", [mat], root)
+    ol = finish(lid, "pao_tampa", [mat], root)
+    ol.location = (0.0, Yh, Zh)
+    ol.rotation_mode = "XYZ"
+    ol.rotation_euler = (OPEN_RAD, 0.0, 0.0)
+    return [ob, ol]
 
 
 # ----------------------------------------------------------------------------
@@ -508,9 +513,9 @@ XP = 0.126
 
 def pasta_pos(x, u, top=True):
     p = bprof(x)
-    hwp = p["hw"] * 0.96
+    hwp = (p["Wb"] - 0.008) * 0.95
     y = u * hwp
-    zf = zfloor(x, y) + 0.0005
+    zf = zface(x, y) + 0.0004
     f = smooth(1.0, 0.86, abs(u)) * smooth(1.0, 0.9, abs(x) / XP)
     th = 0.0036 * f
     z = zf + (th * (1 + 0.25 * nz(x * 90, y * 90, 2.2)) if top else 0.0)
@@ -552,12 +557,10 @@ C_CORE = hexc("#43190E")
 
 
 def core_pos(x, u, top=True):
-    p = bprof(x)
-    By = p["yo"] + 0.004
+    By = by_of(x)
     y = u * By
     ztop = pile(x, u, 1.0) - 0.0035
-    zbot = zfloor(x, y) + 0.001 if abs(y) < p["hw"] else p["zr"]
-    zbot = min(zbot, ztop - 0.002)
+    zbot = min(zface(x, y) + 0.0005, ztop - 0.002)
     st = 0.5 + 0.5 * nz(x * 55, y * 260, 3.1)
     col = lerpc(C_CORE, hexc("#6B2A18"), smooth(0.35, 0.8, st) * 0.9)
     return (x, y, ztop if top else zbot), col
@@ -567,7 +570,7 @@ def fiber_path(rng, x0, v0, length, nseg, free):
     """Pontos 3D de um fio que segue a superficie do monte / transborda a borda."""
     p0 = bprof(x0)
     pts = []
-    x, y = x0, v0 * (p0["yo"] + 0.004)
+    x, y = x0, v0 * by_of(x0)
     th = rng.gauss(0, 0.55) + (math.pi if rng.random() < 0.5 else 0.0)
     if rng.random() < 0.22:
         th = rng.choice([1, -1]) * rng.uniform(0.9, 1.5) + (math.pi if rng.random() < 0.5 else 0)
@@ -584,7 +587,7 @@ def fiber_path(rng, x0, v0, length, nseg, free):
         x += ds * math.cos(th)
         y += ds * math.sin(th)
         pp = bprof(max(-L, min(L, x)))
-        lim = pp["Wb"] * 0.97
+        lim = pp["Wb"] + 0.005
         if abs(y) > lim:
             y = math.copysign(lim, y)
             th = -th
@@ -618,18 +621,17 @@ def build_costela(root):
             for i, (x, y) in enumerate(pts2):
                 t = i / nseg
                 pp = bprof(max(-L, min(L, x)))
-                By = pp["yo"] + 0.004
-                a = abs(y) / By
+                By = by_of(max(-L, min(L, x)))
+                a = abs(y) / max(By, 1e-6)
                 rr = r0 * (0.38 + 0.62 * math.sin(math.pi * (0.1 + 0.8 * t))) * (0.8 + 0.4 * (0.5 + 0.5 * nz(i * 3.1, x * 90, y * 90)))
                 if a <= 1.0:
                     z = pile(x, y / By, 1.0) - 0.0008 + 0.0007 * nz(x * 120, y * 120, i)
                     z += arch * math.sin(math.pi * t) * smooth(0.55, 0.95, a) if free else 0.0
                     pos = Vector((x, y, z))
                 else:
-                    yy = min(abs(y), 0.97 * pp["Wb"])
-                    zo = zouter(x, yy)
-                    ny, nzv = zouter_normal(x, yy)
-                    pos = Vector((x, math.copysign(yy + ny * rr * 0.9, y), zo + nzv * rr * 0.9))
+                    yy = min(abs(y), pp["Wb"] + 0.005)
+                    zo = pp["zc"] + 0.002 + rr * 0.5 - max(0.0, yy - pp["Wb"]) * 2.5
+                    pos = Vector((x, math.copysign(yy, y), zo))
                     pos.z += arch * 0.5 * math.sin(math.pi * t)
                 pos.z = max(pos.z, rr * 0.9)
                 P.append(pos)
@@ -676,8 +678,8 @@ XC = 0.128
 
 def vm_creme(x, u):
     f = (u + 1) / 2
-    a = vm_side(x, 0.90, 22, 3.0, TONG_C[0], 0.05)
-    b = vm_side(x, 0.90, 22, 8.0, TONG_C[1], 0.05)
+    a = vm_side(x, 0.60, 22, 3.0, TONG_C[0], 0.06)
+    b = vm_side(x, 0.60, 22, 8.0, TONG_C[1], 0.06)
     return lerp(a, b, f)
 
 
@@ -688,20 +690,19 @@ def vm_mus(x, u):
     return lerp(a, b, f)
 
 
-def vcap(x, v):
+def vcap(x, v, By):
     p = bprof(x)
-    By = p["yo"] + 0.004
-    vmax = 0.97 * p["Wb"] / max(By, 1e-6)
+    vmax = 1.0 * p["Wb"] / max(By, 1e-6)
     return math.copysign(min(abs(v), vmax), v)
 
 
 def creme_pos(x, u, top=True):
     r_end = max(0.0, 1 - (abs(x) / XCR) ** 3) ** 0.5
-    v = vcap(x, u * vm_creme(x, u) * r_end)
-    p = bprof(x)
-    y = v * (p["yo"] + 0.004)
+    By = by_of(x)
+    v = vcap(x, u * vm_creme(x, u) * r_end, By)
+    y = v * By
     zb = pile(x, v, 1.0) + 0.0004
-    zt = pile(x, v, 0.8) + 0.0038 + 0.0013 * nz(x * 60, v * 6, 8.1) + 0.0007 * nz(x * 140, v * 12, 2.2)
+    zt = pile(x, v, 0.8) + 0.0035 + 0.0009 * nz(x * 60, v * 6, 8.1) + 0.0005 * nz(x * 140, v * 12, 2.2)
     f = min(1.0, (1 - abs(u)) / 0.12) ** 0.6 * min(1.0, (1 - abs(x) / XCR) / 0.1) ** 0.6
     f = max(0.0, f)
     z = zb + (zt - zb) * f if top else zb
@@ -731,24 +732,22 @@ def wave_m(x, v):
 
 def mus_geom(x, u):
     r_end = max(0.0, 1 - (abs(x) / XC) ** 3) ** 0.5
-    v = vcap(x, u * vm_mus(x, u) * r_end)
-    p = bprof(x)
-    y = v * (p["yo"] + 0.004)
-    return v, y
+    v = vcap(x, u * vm_mus(x, u) * r_end, bym(x))
+    return v, v * bym(x)
 
 
 def mus_top_z(x, v):
-    return pile(x, v, 0.6) + 0.0092 + wave_m(x, v)
+    return zouter(x, abs(v) * bym(x)) + 0.0065 + wave_m(x, v)
 
 
 def mus_pos(x, u, top=True):
     v, y = mus_geom(x, u)
-    zb = pile(x, v, 1.0) + 0.0006
+    zb = zouter(x, abs(y)) + 0.0003
     zt = mus_top_z(x, v)
     f = min(1.0, (1 - abs(u)) / 0.10) ** 0.55 * min(1.0, (1 - abs(x) / XC) / 0.08) ** 0.55
     f = max(0.0, f)
     z = zb + (zt - zb) * f if top else zb
-    t = clamp((zt - zb) / 0.012)
+    t = clamp((zt - zb) / 0.010)
     col = lerpc(C_MUS_PALE, C_MUS_GOLD, clamp(0.25 + 0.5 * t + 0.25 * nz(x * 26, y * 26, 9.9)))
     return (x, y, z), col
 
@@ -757,7 +756,7 @@ def drip_curve(x, ytip, length):
     """pontos sobre a face externa do pao a partir de y=ytip descendo `length` (y>0)."""
     p = bprof(x)
     Wb, Hb, zc = p["Wb"], p["Hb"], p["zc"]
-    ytip = min(ytip, 0.9 * Wb)
+    ytip = min(ytip, 0.995 * Wb)
     cph = (ytip / Wb) ** (NEXP / 2)
     ph0 = math.acos(min(1.0, cph))
     pts, acc, prev = [], 0.0, None
@@ -803,7 +802,7 @@ def build_mussarela(root):
                 target = ln * t
                 q = cur[min(range(len(cur)), key=lambda j: abs(cur[j][0] - target))][1]
                 rr = 0.0024 * (0.7 + 0.8 * smooth(0.6, 0.95, t)) * (1 - 0.8 * smooth(0.92, 1.0, t))
-                ny, nzv = zouter_normal(xk, abs(q.y))
+                ny, nzv = outer_normal(xk, abs(q.y), q.z)
                 pos = Vector((q.x, side * (abs(q.y) + ny * rr * 0.7), q.z + nzv * rr * 0.7))
                 P.append(pos)
                 R.append(max(rr, 0.0004))
@@ -827,7 +826,7 @@ def build_gratinado(root):
 
     def patch(cx_x, u0, R, aspect, rot, ncore):
         v0, y0 = mus_geom(cx_x, u0)
-        By = by_of(cx_x)
+        By = bym(cx_x)
         ph = rng.uniform(0, 6.28)
         fx = [rng.uniform(0.0, 6.28) for _ in range(3)]
         amp = rng.uniform(0.28, 0.5)
@@ -871,7 +870,7 @@ def build_gratinado(root):
             u = clamp(cu + rng.gauss(0, 0.16), -0.85, 0.85)
             x = clamp(x, -0.108, 0.108)
             v, y = mus_geom(x, u)
-            By = by_of(x)
+            By = bym(x)
             room = (min(0.9, vm_mus(x, u) * 0.82) - abs(u) * vm_mus(x, u)) * By
             R = min(rng.uniform(0.0035, 0.0105), max(0.0018, room * 0.8))
             patch(x, u, R, rng.uniform(0.7, 1.5), rng.uniform(0, 3.14), rng.uniform(0.4, 1.0))
@@ -879,7 +878,7 @@ def build_gratinado(root):
         x = rng.uniform(-0.115, 0.115)
         u = rng.uniform(-0.85, 0.85)
         v, y = mus_geom(x, u)
-        By = by_of(x)
+        By = bym(x)
         room = (min(0.9, vm_mus(x, u) * 0.82) - abs(u) * vm_mus(x, u)) * By
         R = min(rng.uniform(0.0014, 0.0032), max(0.0012, room * 0.8))
         patch(x, u, R, rng.uniform(0.8, 1.3), rng.uniform(0, 3.14), 1.0)
@@ -1123,6 +1122,10 @@ def import_parts():
         new = [o for o in bpy.data.objects if o not in before]
         roots = [o for o in new if o.parent is None]
         got[name] = dict(objs=new, roots=roots)
+        if name == "pao":
+            lid = [o for o in new if o.name.startswith("pao_tampa")][0]
+            got[name]["lid"] = lid
+            got[name]["lid_home"] = lid.location.copy()
     return got
 
 
@@ -1133,12 +1136,12 @@ def descend(o):
     return out
 
 
-def set_visible(parts, names, flame=False):
+def set_visible(parts, names, flame=False, hide=()):
     for n, d in parts.items():
         vis = n in names
         for r in d["roots"]:
             for o in descend(r):
-                v = vis and (flame or not o.name.startswith("chama"))
+                v = vis and (flame or not o.name.startswith("chama")) and not (hide and o.name.startswith(tuple(hide)))
                 o.hide_render = not v
                 o.hide_viewport = not v
 
@@ -1236,16 +1239,21 @@ def frame_camera(cam, mn, mx, az, el, lens, margin=1.08, tgt_shift=(0, 0, 0)):
     return ctr, hi
 
 
-def render_view(parts, name, show, az_deg, el_deg, lens, path, res, samples, offsets=None, floor_z=None, margin=1.08, shift=(0, 0, 0), key_gain=1.0, flame=False):
+def render_view(parts, name, show, az_deg, el_deg, lens, path, res, samples, offsets=None, floor_z=None, margin=1.08, shift=(0, 0, 0), key_gain=1.0, flame=False, lid="open", lid_dz=0.0, hide=()):
     sc = bpy.context.scene
     for n, d in parts.items():
         for r in d["roots"]:
             r.location = (0, 0, 0)
+    lo = parts["pao"]["lid"]
+    lo.rotation_mode = "XYZ"
+    lo.rotation_euler = (0.0 if lid == "closed" else OPEN_RAD, 0.0, 0.0)
+    h = parts["pao"]["lid_home"]
+    lo.location = (h.x, h.y, h.z + lid_dz)
     if offsets:
         for n, dz in offsets.items():
             for r in parts[n]["roots"]:
                 r.location = (0, 0, dz)
-    set_visible(parts, show, flame)
+    set_visible(parts, show, flame, hide)
     bpy.context.view_layer.update()
     objs = [o for n in show for r in parts[n]["roots"] for o in descend(r)]
     mn, mx = world_bbox(objs)
@@ -1312,17 +1320,21 @@ def render_all(stats):
         render_view(parts, "09", ["macarico"], 30, 18, 75, os.path.join(outdir, "09-macarico-chama.png"), (W, H), smp, flame=True)
     full = ["tabua", "pao", "pasta", "costela", "creme", "mussarela", "gratinado", "macarico"]
     if ok("10"):
-        render_view(parts, "10", full, 24, 35, 62, os.path.join(outdir, "10-montado.png"), (W, H), smp, margin=1.06)
+        render_view(parts, "10", full, 24, 35, 62, os.path.join(outdir, "10-montado.png"), (W, H), smp, margin=1.06, lid="closed")
     if ok("11"):
-        offs = {"pasta": 0.05, "costela": 0.10, "creme": 0.15, "mussarela": 0.19, "gratinado": 0.235}
+        offs = {"pasta": 0.04, "costela": 0.08, "creme": 0.12, "mussarela": 0.235, "gratinado": 0.29}
         render_view(parts, "11", ["tabua", "pao", "pasta", "costela", "creme", "mussarela", "gratinado"], 18, 14, 62,
-                    os.path.join(outdir, "11-explodido.png"), (W, H), smp, offsets=offs, floor_z=-0.028, margin=1.1)
+                    os.path.join(outdir, "11-explodido.png"), (W, H), smp, offsets=offs, floor_z=-0.028, margin=1.1,
+                    lid="closed", lid_dz=0.17)
     if ok("12"):
         render_view(parts, "12", ["pao", "pasta", "costela"], 16, 24, 90, os.path.join(outdir, "12-close-costela.png"), (W, H), smp,
-                    margin=1.0, shift=(0.0, 0.0, 0.0))
+                    margin=1.0, shift=(0.0, 0.0, 0.0), hide=("pao_tampa",))
+    if ok("13"):
+        render_view(parts, "13", ["tabua", "pao", "pasta", "costela", "creme"], 22, 30, 62,
+                    os.path.join(outdir, "13-aberto-recheado.png"), (W, H), smp, margin=1.08, lid="open")
     if ok("poster") and not ARGS.no_poster:
         tmp = os.path.join(outdir, "_poster_src.png")
-        render_view(parts, "poster", full, 24, 35, 62, tmp, (PW, PH), smp, margin=1.06)
+        render_view(parts, "poster", full, 24, 35, 62, tmp, (PW, PH), smp, margin=1.06, lid="closed")
         img = bpy.data.images.load(tmp)
         os.makedirs(POSTER_DIR, exist_ok=True)
         for q in (92, 88, 84, 80, 74, 68, 60, 52, 44, 36):
