@@ -15,7 +15,7 @@ export default function Unidades() {
               <p className="mt-4 leading-6 text-osso-muted">{unit.address}</p>
               <p className="mt-3 text-sm">seg a sáb, 18h30 às 0h</p>
               <p className="mt-2 text-sm">{unit.phone}</p>
-              <a href={unit.maps_url} target="_blank" rel="noreferrer" className="mt-5 inline-flex min-h-11 items-center rounded border border-macarico px-4 font-semibold text-macarico hover:bg-macarico hover:text-carvao focus-visible:outline focus-visible:outline-2 focus-visible:outline-osso">Como chegar</a>
+              <a href={unit.maps_url} target="_blank" rel="noreferrer" className="group mt-5 inline-flex min-h-11 items-center gap-2 rounded border border-macarico px-4 font-semibold text-macarico transition-colors duration-150 hover:bg-macarico hover:text-carvao focus-visible:outline focus-visible:outline-2 focus-visible:outline-osso">Como chegar <span aria-hidden="true" className="inline-block transition-transform duration-150 group-hover:translate-x-[3px] group-focus-visible:translate-x-[3px]">→</span></a>
             </article>
           ))}
           {comingSoon && <article className="flex min-h-64 flex-col justify-center border border-dashed border-madeira bg-madeira-escura p-6 text-osso-muted"><h3 className="font-display text-3xl uppercase text-osso">{comingSoon.name}</h3><p className="mt-3">Próxima parada · em breve</p></article>}
