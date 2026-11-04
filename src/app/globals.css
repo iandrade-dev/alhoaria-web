@@ -22,7 +22,7 @@ body { margin: 0; overflow-x: clip; }
 section[id] { scroll-margin-top: var(--header-height); }
 :focus-visible { outline: 2px solid #E8B84A; outline-offset: 3px; }
 
-.marquee-window { overflow: hidden; }
+.marquee-window { overflow: hidden; padding-block: 0.12em; }
 .marquee-track { display: flex; width: max-content; animation: alhoaria-marquee 36s linear infinite; }
 .marquee-copy { -webkit-text-stroke: 1.5px var(--carvao); color: transparent; }
 .marquee-word { transition: color 160ms ease, -webkit-text-fill-color 160ms ease; }

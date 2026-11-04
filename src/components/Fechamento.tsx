@@ -38,7 +38,7 @@ export default function Fechamento() {
         whileInView="visible"
         viewport={{ once: true, amount: 0.4 }}
       >
-        <h2 className="font-display text-[clamp(56px,11vw,200px)] uppercase leading-[0.9] tracking-[-0.035em]">
+        <h2 className="font-display text-[clamp(56px,11vw,200px)] uppercase leading-[1.04] tracking-[-0.035em]">
           <span className="-mt-[0.18em] block overflow-hidden pt-[0.18em] pb-[0.12em]"><motion.span custom={0} variants={reducedMotion ? undefined : lineVariants} className="block">O FOGO</motion.span></span>
           <span className="-mt-[0.18em] block overflow-hidden pt-[0.18em] pb-[0.12em]">
             <motion.span custom={1} variants={reducedMotion ? undefined : lineVariants} className="block">JÁ TÁ <span className="relative inline-block text-macarico">ACESO.<motion.svg aria-hidden="true" viewBox="0 0 420 28" className="absolute -bottom-[0.13em] left-0 h-[0.12em] w-full overflow-visible" preserveAspectRatio="none"><motion.path d="M4 18 C 92 5, 190 24, 416 7" fill="none" stroke="currentColor" strokeWidth="14" strokeLinecap="round" initial={{ pathLength: 0 }} animate={{ pathLength: reducedMotion ? 1 : undefined }} whileInView={reducedMotion ? undefined : { pathLength: 1 }} viewport={{ once: true }} transition={{ duration: 0.55, delay: reducedMotion ? 0 : 0.15, ease: "easeOut" }} /></motion.svg></span></motion.span>
@@ -58,7 +58,7 @@ export default function Fechamento() {
         </motion.div>
 
         <div aria-hidden="true" className="marquee-window lg:col-span-2">
-          <div className="marquee-track font-display text-[clamp(28px,5vw,80px)] uppercase leading-none">
+          <div className="marquee-track font-display text-[clamp(28px,5vw,80px)] uppercase leading-[1.2]">
             <MarqueeText /><MarqueeText duplicate />
           </div>
         </div>
