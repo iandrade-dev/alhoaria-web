@@ -9,10 +9,10 @@ export const heroSandwich = {
   },
   duration: 19.625,
   stages: [
-    { id: "abertura", start: 0, end: 0, title: "LANCHES NO PÃO DE ALHO", handwritten: "O resto é pão." },
-    { id: "macarico", start: 0, end: 4, handwritten: "Queijo gratinado no maçarico." },
-    { id: "recheio", start: 4, end: 9.5, handwritten: "Recheio de altíssima qualidade.", line: "Costela desfiada, 6 horas no fogo." },
-    { id: "explosao", start: 9.5, end: 19.625, handwritten: "Não é só pão de alho.", line: "É lanche recheado de verdade." },
-    { id: "final", start: 19.625, end: 19.625, title: "ALHOARIA", handwritten: "Lanches no pão de alho recheado." },
+    { id: "abertura", start: 0, end: 0, cues: [] },
+    { id: "macarico", start: 0, end: 4, cues: [{ at: 1.2, piece: "caption" }] },
+    { id: "recheio", start: 4, end: 9.5, cues: [{ at: 5.6, piece: "recheio" }, { at: 7.4, piece: "horas" }] },
+    { id: "explosao", start: 9.5, end: 19.625, cues: [{ at: 13.2, piece: "beat1" }, { at: 15.8, piece: "beat2" }, { at: 18.6, piece: "clear" }] },
+    { id: "final", start: 19.625, end: 19.625, cues: [] },
   ],
 } as const;
