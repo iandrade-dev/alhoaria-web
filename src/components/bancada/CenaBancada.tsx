@@ -10,7 +10,6 @@ type Props = {
   layout: LayoutBancada;
   destacado: boolean;
   manchas: { x: number; y: number }[];
-  anotacao: string | null;
 };
 
 const origem = { transformBox: "fill-box", transformOrigin: "center center" } as const;
@@ -24,13 +23,12 @@ const pedacos = [
   { x: 235, y: 341, r: 16 }, { x: 293, y: 337, r: -17 },
 ];
 
-export default function CenaBancada({ estado, reduzido, aoTerminar, layout, destacado, manchas, anotacao }: Props) {
+export default function CenaBancada({ estado, reduzido, aoTerminar, layout, destacado, manchas }: Props) {
   const uid = useId().replace(/:/g, "");
   const luz = `${uid}-luz`;
   const madeira = `${uid}-madeira`;
   const ativo = (id: PassoId) => estado.animando && PASSOS[estado.passoAtual]?.id === id;
   const duracao = reduzido ? 0.12 : 1.2;
-  const ultimo = PASSOS.find((passo) => passo.id === anotacao);
   const queijo = tem(estado, "creme") || tem(estado, "mussarela");
   const descricao = estado.colocados.size
     ? `Bancada com ${PASSOS.filter((passo) => tem(estado, passo.id)).map((passo) => passo.nome.toLowerCase()).join(", ")}.`
@@ -154,15 +152,6 @@ export default function CenaBancada({ estado, reduzido, aoTerminar, layout, dest
           <path d="M119 226q10 6 15 19-13-5-19-2l-3-12z" fill="#65c7ee" />
           <motion.path d="M128 236q26 13 21 52-21-17-35-37z" fill="#ff9b38" style={origem} animate={{ scaleY: [1, .85, 1] }} transition={{ duration: .22, repeat: 5 }} />
           <path d="M126 240q12 10 11 32-14-12-18-26z" fill="#70d8ef" />
-        </motion.g>
-      )}
-      {/* Um bilhete de cada vez, com ponto e fio até a camada. */}
-      {ultimo && (
-        <motion.g initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}>
-          <path d="M245 283l15 21" fill="none" stroke="#fff1d1" strokeWidth="1.5" />
-          <circle cx="260" cy="304" r="3" fill="#ffcb70" />
-          <rect x="108" y="252" width="212" height="34" rx="14" fill="#34221c" opacity=".94" />
-          <text x="122" y="276" fill="#fff4d8" fontFamily="Caveat Brush, cursive" fontSize="20">{ultimo.anotacao}</text>
         </motion.g>
       )}
       {estado.passoAtual === 6 && estado.colocados.size > 0 && <path d="M29 272l5-8 5 8-5 8zM364 280l4-7 4 7-4 7zM340 374l4-7 4 7-4 7z" fill="#ffe1a0" opacity=".8" />}
