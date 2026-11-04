@@ -145,9 +145,13 @@ function Modelos({ estado, destacado, aoTerminar }: Omit<Props, "orientacao">) {
 function Enquadramento({ orientacao }: { orientacao: Props["orientacao"] }) {
   const { camera, size } = useThree();
   useLayoutEffect(() => {
-    camera.lookAt(0, 0.13, 0);
+    // Keep the same 3/4 elevation while aiming at the bread, not the board.
+    const alvoY = orientacao === "retrato" ? 0.10 : 0.17;
+    camera.position.set(0.19, alvoY + 0.35, 0.63);
+    camera.lookAt(0, alvoY, 0);
     // R3F sets the ortho frustum in CSS pixels; zoom converts to world meters.
-    camera.zoom = size.width / (orientacao === "retrato" ? 0.64 : 0.67);
+    // The open lid spans ~70% / ~61% of the portrait / landscape canvas.
+    camera.zoom = size.width / (orientacao === "retrato" ? 0.48 : 0.56);
     camera.updateProjectionMatrix();
   }, [camera, size.width, orientacao]);
   return null;
@@ -166,9 +170,9 @@ export default function CenaBancada3D({ estado, orientacao, destacado, aoTermina
   }, [failed, estado.animando, aoTerminar]);
 
   const camera = useMemo(() => ({ position: [0.19, 0.48, 0.63] as [number, number, number], near: 0.01, far: 4 }), []);
-  return <div className="absolute overflow-hidden bg-[radial-gradient(ellipse_at_50%_45%,#33231d,#1a1210)]" style={orientacao === "retrato" ? { left: 0, top: "11%", width: "100%", height: "69%" } : { left: 0, top: "11%", width: "67%", height: "89%" }}>
+  return <div className="absolute overflow-hidden bg-[radial-gradient(ellipse_at_50%_45%,#33231d,#1a1210)]" style={orientacao === "retrato" ? { left: 0, top: "36%", width: "100%", height: "46%" } : { left: 0, top: "11%", width: "67%", height: "89%" }}>
     {(!ready || failed) && <div className="absolute inset-0 bg-cover bg-center opacity-45" style={{ backgroundImage: "url('/assets/bancada/lanche-pronto.webp')" }} aria-hidden="true" />}
-    {failed ? null : <Canvas className="relative" dpr={[1, 2]} camera={camera} orthographic shadows onCreated={({ gl }) => {
+    {failed ? null : <Canvas className="relative" dpr={[1, 2]} camera={camera} orthographic shadows="percentage" onCreated={({ gl }) => {
       gl.domElement.addEventListener("webglcontextlost", () => setFailed(true), { once: true });
     }}>
       <Enquadramento orientacao={orientacao} />
