@@ -12,7 +12,7 @@ export const heroSandwich = {
     { id: "abertura", start: 0, end: 0, cues: [] },
     { id: "macarico", start: 0, end: 4, cues: [{ at: 1.2, piece: "caption" }] },
     { id: "recheio", start: 4, end: 9.5, cues: [{ at: 5.6, piece: "recheio" }, { at: 7.4, piece: "horas" }] },
-    { id: "explosao", start: 9.5, end: 19.625, cues: [{ at: 13.2, piece: "beat1" }, { at: 15.8, piece: "beat2" }, { at: 18.6, piece: "clear" }] },
+    { id: "explosao", start: 9.5, end: 19.625, cues: [{ at: 10.2, piece: "beat1" }, { at: 11.4, piece: "beat2" }, { at: 18.6, piece: "clear" }] },
     { id: "final", start: 19.625, end: 19.625, cues: [] },
   ],
 } as const;
