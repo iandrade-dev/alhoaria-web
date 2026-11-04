@@ -13,8 +13,8 @@ export default function Header() {
           </span>
         </a>
         <nav className="flex shrink-0 items-center gap-2 sm:gap-4">
-          <a href={PEDIDO_URL} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center px-2 text-sm font-semibold hover:text-ouro focus-visible:outline focus-visible:outline-2 focus-visible:outline-ouro">Cardápio</a>
-          <a href={PEDIDO_URL} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center justify-center rounded bg-macarico px-3 text-sm font-bold text-carvao hover:bg-queijo focus-visible:outline focus-visible:outline-2 focus-visible:outline-osso">Peça agora</a>
+          <a href={PEDIDO_URL} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center px-2 text-sm font-semibold transition-colors duration-150 hover:text-ouro focus-visible:outline focus-visible:outline-2 focus-visible:outline-ouro">Cardápio</a>
+          <a href={PEDIDO_URL} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center justify-center rounded bg-macarico px-3 text-sm font-bold text-carvao transition-colors duration-150 hover:bg-queijo active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-osso">Peça agora</a>
         </nav>
       </div>
     </header>
