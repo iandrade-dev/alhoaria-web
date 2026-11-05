@@ -1,193 +1,215 @@
 "use client";
 
-import { useEffect, useReducer, useRef, useState } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
-import dynamic from "next/dynamic";
-import { motion } from "framer-motion";
-import { PEDIDO_URL } from "@/lib/links";
+import { useCallback, useEffect, useReducer, useRef, useState, type ComponentType, type MutableRefObject, type PointerEvent as ReactPointerEvent } from "react";
+import Carregando from "./Carregando";
+import Escolha from "./Escolha";
+import { IcGirar } from "./Icones";
+import { PainelCombo, PainelFinal, PainelMontar, Progresso } from "./Painel";
+import {
+  BEBIDAS, PORCOES, RECEITAS, bancadaReducer, estadoFinalDe, estadoInicial, etapaAtual, receitaDe, textoPedido,
+  type BebidaId, type Estado, type LancheId, type PorcaoId,
+} from "./passos";
+import type { Zona } from "./CenaBancada3D";
 
-import type { ZonaCena } from "./CenaBancada3D";
-const CenaBancada3D = dynamic(() => import("./CenaBancada3D"), { ssr: false });
-import IconeIngrediente from "./IconeIngrediente";
-import { layouts, type LayoutBancada, type Ponto } from "./layout";
-import { bancadaReducer, estadoInicial, PASSOS, type PassoId } from "./passos";
+type CenaProps = {
+  estado: Estado; reduzido: boolean; destacado: boolean; bloqueado: boolean; pronto: boolean;
+  aoTerminar: () => void; aoMudarZona: (z: Zona) => void; aoPronto: () => void; aoFalhar: () => void; voltar: MutableRefObject<() => void>;
+};
+type Arrasto = { x: number; y: number; icone: string; sobre: boolean };
 
-type Voo = { tipo: PassoId; origem: Ponto; destino: Ponto; volta: boolean; id: number };
-type Arrasto = { pointer: number; origem: Ponto; toque: Ponto; ponto: Ponto; offset: Ponto; tipo: PassoId; iniciou: boolean };
-const posicao = (p: Ponto, l: LayoutBancada) => ({ left: `${p.x / l.largura * 100}%`, top: `${p.y / l.altura * 100}%` });
+// A cena 3D (three.js) fica num chunk à parte: carrega junto com a página, mas fora do caminho da escolha.
+const carregarCena = () => import("./CenaBancada3D");
+
+function estadoDaUrl(): Estado | null {
+  const q = new URLSearchParams(window.location.search);
+  const lanche = q.get("lanche") as LancheId | null;
+  const valido = lanche && lanche in RECEITAS ? lanche : null;
+  if (q.get("bancada") === "final") {
+    const bebida = BEBIDAS.find((b) => b.id === q.get("bebida"))?.id ?? null;
+    const porcao = PORCOES.find((p) => p.id === q.get("porcao"))?.id ?? null;
+    return estadoFinalDe(valido ?? "costela", bebida as BebidaId | null, porcao as PorcaoId | null);
+  }
+  return valido ? { ...estadoInicial, tela: "montar", lanche: valido } : null;
+}
 
 export default function Bancada() {
   const [estado, enviar] = useReducer(bancadaReducer, estadoInicial);
-  const [orientacao, setOrientacao] = useState<"retrato" | "paisagem">("retrato");
-  const [anuncio, setAnuncio] = useState("");
-  const [interagiu, setInteragiu] = useState(false);
+  const [Cena, setCena] = useState<{ C: ComponentType<CenaProps> } | null>(null);
+  const [modo, setModo] = useState<"3d" | "sem3d" | null>(null);
+  const [reduzido, setReduzido] = useState(false);
+  const [prontoPara, setProntoPara] = useState<LancheId | null>(null);
   const [arrasto, setArrasto] = useState<Arrasto | null>(null);
-  const [voo, setVoo] = useState<Voo | null>(null);
-  const vooAtual = useRef<Voo | null>(null);
-  const [anotacao, setAnotacao] = useState<PassoId | null>(null);
-  const [geracao, novaGeracao] = useReducer((n: number) => n + 1, 0);
-  const [previa, setPrevia] = useState(false);
-  const [suporte, setSuporte] = useState<"neutro" | "3d" | "poster">("neutro");
-  const quadro = useRef<HTMLDivElement>(null);
-  const zona = useRef<ZonaCena | null>(null);
-  const drag = useRef<Arrasto | null>(null);
-  const vooId = useRef(0);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const revisou = useRef(false);
-  const reduzido = suporte === "poster";
-  const layout = layouts[orientacao];
-  const passo = PASSOS[estado.passoAtual];
-  const terminou = estado.passoAtual === PASSOS.length;
-  const completo = estado.colocados.size === PASSOS.length;
-  const vazio = estado.colocados.size === 0;
+  const [copia, setCopia] = useState<"idle" | "ok" | "manual">("idle");
+  const [anuncio, setAnuncio] = useState("");
+  const cenaRef = useRef<HTMLDivElement>(null);
+  const zona = useRef<Zona | null>(null);
+  const voltar = useRef<() => void>(() => {});
+  const drag = useRef<{ pointer: number; x: number; y: number; ativo: boolean } | null>(null);
+  const suprimir = useRef(false);
+  const receita = receitaDe(estado);
+  const final = estado.tela === "final";
+  const pronto = modo === "sem3d" || (!!estado.lanche && prontoPara === estado.lanche);
 
+  // URL de QA, WebGL e movimento reduzido.
   useEffect(() => {
-    const media = window.matchMedia("(min-width: 768px)");
-    const atualizar = () => setOrientacao(media.matches ? "paisagem" : "retrato");
-    atualizar();
-    media.addEventListener("change", atualizar);
-    return () => media.removeEventListener("change", atualizar);
-  }, []);
-  useEffect(() => {
-    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const verificar = () => {
-      let disponivel = false;
-      try {
-        const canvas = document.createElement("canvas");
-        const gl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
-        disponivel = !!gl;
-        gl?.getExtension("WEBGL_lose_context")?.loseContext();
-      } catch { /* WebGL can be blocked by the browser. */ }
-      setSuporte(motion.matches || !disponivel ? "poster" : "3d");
-    };
+    const url = estadoDaUrl();
+    if (url) enviar({ type: "definir", estado: url });
+    carregarCena().then((m) => setCena({ C: m.default as ComponentType<CenaProps> }));
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const verificar = () => setReduzido(media.matches);
     verificar();
-    motion.addEventListener("change", verificar);
-    return () => motion.removeEventListener("change", verificar);
+    media.addEventListener("change", verificar);
+    let gl3d = false;
+    try {
+      const canvas = document.createElement("canvas");
+      const gl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
+      gl3d = !!gl;
+      gl?.getExtension("WEBGL_lose_context")?.loseContext();
+    } catch { /* WebGL pode estar bloqueado. */ }
+    setModo(gl3d ? "3d" : "sem3d");
+    return () => media.removeEventListener("change", verificar);
   }, []);
+
+  useEffect(() => { if (!estado.lanche) setProntoPara(null); }, [estado.lanche]);
+  const primeira = useRef(true);
   useEffect(() => {
-    if (revisou.current) return;
-    revisou.current = true;
-    const valor = new URLSearchParams(window.location.search).get("bancada");
-    const alvo = valor === "final" ? 6 : /^[1-6]$/.test(valor ?? "") ? Number(valor) - 1 : 0;
-    for (let i = 0; i < alvo; i++) {
-      enviar({ type: "escolher", opcaoId: PASSOS[i].opcoes[0].id });
-      enviar({ type: "fimAnimacao" });
-    }
-  }, []);
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+    if (primeira.current) { primeira.current = false; return; }
+    if (estado.tela === "escolha" || estado.tela === "montar") cenaRef.current?.closest("section")?.scrollIntoView({ block: "start" });
+  }, [estado.tela === "escolha", estado.lanche]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const ponto = (e: { clientX: number; clientY: number }): Ponto => {
-    const rect = quadro.current?.getBoundingClientRect();
-    if (!rect) return layout.bandeja;
-    return { x: (e.clientX - rect.left) / rect.width * layout.largura, y: (e.clientY - rect.top) / rect.height * layout.altura };
-  };
-  // The scene reports where the bread is on screen for the current camera; the layout constants are the fallback.
-  const alvo = () => zona.current?.orientacao === orientacao ? zona.current : layout;
-  const dentro = (p: Ponto) => { const z = alvo(); return Math.abs(p.x - z.pao.x) <= z.raio.x && Math.abs(p.y - z.pao.y) <= z.raio.y; };
-  const agendarAnotacao = (id: PassoId) => {
-    if (timer.current) clearTimeout(timer.current);
-    setAnotacao(id);
-    timer.current = setTimeout(() => setAnotacao(null), 2500);
-  };
-  const escolher = (id: PassoId) => {
-    if (estado.animando || terminou || PASSOS[estado.passoAtual].id !== id) return;
-    enviar({ type: "escolher", opcaoId: PASSOS[estado.passoAtual].opcoes[0].id });
-    setAnuncio(id === "macarico" ? "Maçarico finalizado no pão" : `${PASSOS[estado.passoAtual].nome} no pão`);
-    agendarAnotacao(id);
-
-  };
-  const finalizar = () => {
+  const terminou = useCallback(() => enviar({ type: "fimAnimacao" }), []);
+  // Sem 3D (ou se a cena travar) as animações não terminam sozinhas: o estado não pode ficar preso.
+  useEffect(() => {
     if (!estado.animando) return;
-    enviar({ type: "fimAnimacao" });
-  };
+    const id = setTimeout(terminou, modo === "3d" ? 8000 : 140);
+    return () => clearTimeout(id);
+  }, [estado.animando, modo, terminou]);
   useEffect(() => {
-    if (suporte !== "3d" && estado.animando) {
-      const id = setTimeout(() => enviar({ type: "fimAnimacao" }), 140);
-      return () => clearTimeout(id);
-    }
-  }, [suporte, estado.animando]);
-  const reiniciar = () => {
-    drag.current = null; vooAtual.current = null; setArrasto(null); setVoo(null); setAnotacao(null); setPrevia(false);
-    if (timer.current) clearTimeout(timer.current);
-    novaGeracao(); enviar({ type: "recomecar" }); setAnuncio("Montagem recomeçada");
+    if (!estado.anterior) return;
+    const id = setTimeout(() => enviar({ type: "descartarAnterior" }), 5000);
+    return () => clearTimeout(id);
+  }, [estado.anterior]);
+  useEffect(() => {
+    if (copia !== "ok") return;
+    const id = setTimeout(() => setCopia("idle"), 2500);
+    return () => clearTimeout(id);
+  }, [copia]);
+  useEffect(() => { if (estado.tela !== "final") setCopia("idle"); }, [estado.tela]);
+  useEffect(() => {
+    const etapa = etapaAtual(estado);
+    if (estado.animando && etapa && estado.animando === etapa.id) setAnuncio(`${etapa.opcao.nome} colocado na tábua`);
+    else if (estado.animando === "sacola") setAnuncio("Lanche na sacola, pronto pra viagem");
+  }, [estado.animando]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const preparar = useCallback((id: LancheId) => { carregarCena().then((m) => m.preCarregar(id)); }, []);
+  const escolher = (id: LancheId) => { preparar(id); enviar({ type: "escolherLanche", id }); };
+
+  // Arrastar a camada até a cena (zona = lanche projetado) ou simplesmente tocar/Enter.
+  const sobreCena = (x: number, y: number) => {
+    const r = cenaRef.current?.getBoundingClientRect();
+    if (!r) return false;
+    const z = zona.current, p = 20;
+    const px = x - r.left, py = y - r.top;
+    if (px < 0 || py < 0 || px > r.width || py > r.height) return false;
+    return !z || (px >= z.x0 - p && px <= z.x1 + p && py >= z.y0 - p && py <= z.y1 + p);
   };
-  const comecarVoo = (tipo: PassoId, origem: Ponto, destino: Ponto, volta = false) => {
-    if (reduzido) { if (!volta) escolher(tipo); return; }
-    const proximo = { tipo, origem, destino, volta, id: ++vooId.current };
-    vooAtual.current = proximo;
-    setVoo(proximo);
-  };
-  const toqueMacarico = () => comecarVoo("macarico", layout.bandeja, alvo().pouso);
-  const iniciar = (e: ReactPointerEvent<HTMLButtonElement>, tipo: PassoId) => {
-    if (estado.animando || vooAtual.current || terminou) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    const p = ponto(e);
-    const rect = e.currentTarget.getBoundingClientRect();
-    const centro = ponto({ clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 });
-    drag.current = { pointer: e.pointerId, origem: centro, toque: p, ponto: centro, offset: { x: p.x - centro.x, y: p.y - centro.y }, tipo, iniciou: false };
-    setInteragiu(true);
-  };
-  const mover = (e: ReactPointerEvent<HTMLButtonElement>) => {
-    const d = drag.current;
-    if (!d || d.pointer !== e.pointerId) return;
-    const p = ponto(e);
-    if (!d.iniciou && Math.hypot(p.x - d.toque.x, p.y - d.toque.y) * (quadro.current?.clientWidth ?? 400) / layout.largura < 6) return;
-    d.iniciou = true;
-    d.ponto = { x: p.x - d.offset.x, y: p.y - d.offset.y };
-    setArrasto({ ...d });
-    setPrevia(dentro(d.ponto));
-  };
-  const soltar = (e: ReactPointerEvent<HTMLButtonElement>) => {
-    const d = drag.current;
-    if (!d || d.pointer !== e.pointerId) return;
-    drag.current = null; setArrasto(null); setPrevia(false);
-    if (!d.iniciou) {
-      if (d.tipo === "macarico") toqueMacarico();
-      else comecarVoo(d.tipo, layout.bandeja, alvo().pouso);
-    } else if (dentro(d.ponto)) {
-      comecarVoo(d.tipo, d.ponto, alvo().pouso);
-    } else comecarVoo(d.tipo, d.ponto, layout.bandeja, true);
-  };
-  const cancelar = () => { drag.current = null; setArrasto(null); setPrevia(false); };
-  const desfazer = () => {
-    if (estado.animando || vooAtual.current || !estado.colocados.size) return;
-    const ultimo = [...PASSOS].reverse().find((p) => estado.colocados.has(p.id));
-    if (!ultimo) return;
-    enviar({ type: "desfazer" }); setAnotacao(null); novaGeracao(); setAnuncio(`Desfeito: ${ultimo.nome.toLowerCase()}`);
+  const etapa = estado.tela === "montar" ? etapaAtual(estado) : null;
+  const colocar = () => { if (etapa) enviar({ type: "colocar", id: etapa.id }); };
+  const propsArrasto = {
+    onPointerDown: (e: ReactPointerEvent<HTMLButtonElement>) => {
+      if (e.button !== 0 || estado.animando || !pronto) return;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      drag.current = { pointer: e.pointerId, x: e.clientX, y: e.clientY, ativo: false };
+    },
+    onPointerMove: (e: ReactPointerEvent<HTMLButtonElement>) => {
+      const d = drag.current;
+      if (!d || d.pointer !== e.pointerId || !etapa) return;
+      if (!d.ativo && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 6) return;
+      d.ativo = true;
+      setArrasto({ x: e.clientX, y: e.clientY, icone: etapa.id, sobre: sobreCena(e.clientX, e.clientY) });
+    },
+    onPointerUp: (e: ReactPointerEvent<HTMLButtonElement>) => {
+      const d = drag.current;
+      if (!d || d.pointer !== e.pointerId) return;
+      drag.current = null;
+      if (!d.ativo) return;
+      suprimir.current = true;
+      setTimeout(() => { suprimir.current = false; }, 0);
+      setArrasto(null);
+      if (sobreCena(e.clientX, e.clientY)) colocar();
+    },
+    onPointerCancel: () => { drag.current = null; setArrasto(null); },
+    onClick: () => { if (!suprimir.current) colocar(); },
   };
 
-  return <section id="bancada" className="scroll-mt-[var(--header-height)] bg-creme px-3 py-8 text-carvao sm:px-8 sm:py-14">
-    <div className="mx-auto max-w-6xl">
-      <header className="mb-4 text-center sm:mb-7"><h2 className="font-display text-4xl uppercase leading-none sm:text-6xl">Monte o seu</h2><p className="font-hand text-2xl text-madeira sm:text-3xl">do seu jeito, na nossa bancada</p></header>
-      <div ref={quadro} className="relative mx-auto aspect-[400/580] w-[min(100%,calc((100svh-var(--header-height)-24px)*400/580))] max-w-[640px] overflow-hidden rounded-xl border border-madeira bg-[#38251e] shadow-[0_18px_40px_rgba(36,24,18,.22)] md:aspect-video md:w-[min(100%,calc((100svh-var(--header-height)-24px)*16/9))] md:max-w-none">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_45%,#33231d,#1a1210)]" role="img" aria-label={terminou ? "Lanche finalizado na bancada da Alhoaria" : `Bancada: ${passo.pedido.toLowerCase()}. ${estado.colocados.size} de 6 etapas prontas.`} />
-        {suporte === "3d" && <CenaBancada3D key={geracao} estado={estado} orientacao={orientacao} destacado={previa} aoTerminar={finalizar} bloqueado={!!arrasto?.iniciou} aoMudarZona={(z) => { zona.current = z; }} />}
-        {suporte === "poster" && <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-[#1a1210] px-6 text-center text-osso"><img src="/assets/bancada/lanche-pronto.webp" alt="A Costela! pronta na tábua" className="max-h-[55%] w-full max-w-2xl rounded-lg object-contain" /><h3 className="font-display text-3xl">A COSTELA!</h3><p className="max-w-sm font-sans text-sm">Você pode montar com animação em outro dispositivo ou configuração com WebGL e movimento habilitados.</p><a href={PEDIDO_URL} target="_blank" rel="noopener noreferrer" className="flex min-h-11 items-center rounded-lg bg-macarico px-6 font-sans font-bold text-carvao">Peça agora<span className="sr-only"> (abre em nova aba)</span></a></div>}
-        {suporte === "3d" && <div aria-hidden="true" className={orientacao === "retrato" ? "absolute inset-x-0 bottom-0 h-[18%] border-t-4 border-[#ddaa72] bg-gradient-to-b from-[#bd8958] to-[#71432f]" : "absolute right-[2%] top-1/2 h-[48%] w-[31%] -translate-y-1/2 rounded-xl border-4 border-[#d2a373] bg-gradient-to-b from-[#bd8958] to-[#71432f]"} />}
-        {suporte === "3d" && <>
-        <div className="absolute inset-x-0 top-0 flex h-[11%] flex-nowrap items-center justify-between gap-x-1 bg-[#261b19]/85 px-2 font-sans text-[8px] font-bold tracking-wide text-osso sm:px-5 sm:text-[9px] md:text-xs">
-          <span className="whitespace-nowrap">ALHOARIA · COZINHA ABERTA</span><div className="flex shrink-0 items-center gap-1 sm:gap-2"><span className="hidden items-center gap-1 whitespace-nowrap text-[8px] sm:flex sm:text-xs"><span className="h-2 w-2 animate-pulse rounded-full bg-macarico" />PREPARANDO AGORA</span><ol className="flex gap-0.5" aria-label="Progresso da montagem">{PASSOS.map((item, i) => { const situacao = estado.colocados.has(item.id) ? "feito" : i < estado.passoAtual ? "pulado" : i === estado.passoAtual ? "atual" : "pendente"; return <li key={item.id} aria-label={`${item.nome}: ${situacao}`} aria-current={situacao === "atual" ? "step" : undefined} title={`${item.nome}: ${situacao}`} className={`flex h-5 w-5 items-center justify-center rounded-full border ${situacao === "atual" ? "border-queijo bg-macarico" : situacao === "feito" ? "border-queijo bg-madeira" : "border-osso/40 bg-carvao/50 opacity-60"}`}><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2"><path d={["M3 16q1-10 9-10t9 10q0 4-9 4T3 16Z", "M7 5h10l-2 15H9Z", "M3 16l4-8 9-2 5 10-7 4H7Z", "M4 9h16l-3 11H7Z", "M4 6l16 2-4 12H7Z", "M5 8h11l3 5-3 4H5Z"][i]} /></svg></li>; })}</ol></div>
+  const copiar = async () => {
+    const texto = textoPedido(estado);
+    try {
+      await navigator.clipboard.writeText(texto);
+      setCopia("ok");
+    } catch {
+      let ok = false;
+      try {
+        const area = document.createElement("textarea");
+        area.value = texto; area.setAttribute("readonly", ""); area.style.cssText = "position:fixed;opacity:0;top:0;left:0";
+        document.body.appendChild(area); area.select();
+        ok = document.execCommand("copy");
+        area.remove();
+      } catch { /* cai no texto manual */ }
+      setCopia(ok ? "ok" : "manual");
+    }
+  };
+
+  if (estado.tela === "escolha" || !receita) {
+    return <section id="bancada" className="min-h-[100svh] bg-[#fff8e7] px-2 pb-5 pt-[calc(var(--header-height)+8px)] text-[#0a0a0a] min-[900px]:px-6 min-[900px]:pb-10 min-[900px]:pt-[calc(var(--header-height)+20px)]">
+      <div className="mx-auto max-w-[1264px]"><Escolha aoEscolher={escolher} aoPreparar={preparar} /></div>
+    </section>;
+  }
+
+  const combo = estado.tela === "bebida" || estado.tela === "porcao";
+  const bebida = BEBIDAS.find((b) => b.id === estado.bebida);
+  const porcao = PORCOES.find((p) => p.id === estado.porcao);
+  const Scene = Cena?.C;
+  return <section id="bancada" className="min-h-[100svh] bg-[#fff8e7] px-2 pb-5 pt-[calc(var(--header-height)+8px)] text-[#0a0a0a] min-[900px]:px-6 min-[900px]:pb-10 min-[900px]:pt-[calc(var(--header-height)+20px)]">
+    <div className="mx-auto max-w-[1264px]">
+      <header className="max-[899px]:sr-only min-[900px]:mb-3.5 min-[900px]:text-center">
+        <h1 className="font-display text-[46px] font-normal uppercase leading-none">Monte o seu</h1>
+        <p className="font-hand text-2xl text-[#5c3d2e]">do seu jeito, na nossa bancada</p>
+      </header>
+      <div aria-label="Bancada Monte o seu" role="region"
+        className="grid grid-cols-[minmax(0,1fr)] gap-3 rounded-3xl bg-[#1a1210] p-3 text-[#fff8e7] shadow-[0_24px_60px_-24px_rgba(36,24,22,.6)] min-[900px]:grid-cols-[minmax(0,1fr)_380px] min-[900px]:grid-rows-[auto_1fr] min-[900px]:gap-5 min-[900px]:rounded-[32px] min-[900px]:p-5">
+        <Progresso estado={estado} />
+        <div ref={cenaRef} className={`relative isolate overflow-hidden rounded-2xl bg-[#120d0b] min-[900px]:min-h-[600px] min-[900px]:rounded-[22px] min-[900px]:[grid-column:1] min-[900px]:[grid-row:1/span_2] ${final ? "h-[276px] min-[900px]:h-auto" : "h-[250px] min-[900px]:h-auto"}`}>
+          {modo === "3d" && Scene && <Scene estado={estado} reduzido={reduzido} destacado={!!arrasto?.sobre} bloqueado={!!arrasto} pronto={pronto}
+            aoTerminar={terminou} aoMudarZona={(z) => { zona.current = z; }} aoPronto={() => setProntoPara(estado.lanche)} aoFalhar={() => setModo("sem3d")} voltar={voltar} />}
+          {modo === "sem3d" && <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={receita.foto} alt={`${receita.nome} na tábua`} className="absolute inset-0 h-full w-full object-cover" />
+            <p className="absolute inset-x-3 top-3 rounded-lg bg-[#120d0b]/75 px-3 py-2 text-center text-xs text-[#fff8e7]">A cena 3D não está disponível neste aparelho, mas a montagem funciona igual.</p>
+          </>}
+          {(modo === null || (modo === "3d" && !Scene)) && <Carregando foto={receita.foto} />}
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-[1] rounded-[inherit] shadow-[inset_0_0_60px_rgba(10,6,5,.55)]" />
+          {combo && <div aria-label="Na mesa" className="absolute bottom-2.5 left-2.5 z-[2] flex max-w-[calc(100%-70px)] flex-wrap gap-1.5 min-[900px]:bottom-4 min-[900px]:left-4 min-[900px]:max-w-[calc(100%-190px)]">
+            {[receita.nome.replace(/!$/, ""), bebida?.curto, estado.tela === "porcao" ? porcao?.curto : undefined].filter(Boolean).map((t) => <span key={t} className="rounded-full border border-[#fff8e7]/20 bg-[#120d0b]/80 px-2.5 py-[5px] text-xs font-semibold text-[#fff8e7] backdrop-blur-sm">{t}</span>)}
+          </div>}
+          {modo === "3d" && <button type="button" data-testid="ver-de-frente" onClick={() => voltar.current()} aria-label="Ver de frente"
+            className="absolute bottom-2.5 right-2.5 z-[2] inline-flex h-11 min-w-11 items-center justify-center gap-2 rounded-xl border border-[#fff8e7]/30 bg-[#120d0b]/75 px-3 text-sm font-semibold text-[#fff8e7] backdrop-blur-sm transition-colors hover:bg-[#120d0b]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e8b84a] min-[900px]:bottom-4 min-[900px]:right-4 min-[900px]:pl-3 min-[900px]:pr-4">
+            <IcGirar /><span className="hidden min-[900px]:inline">Ver de frente</span></button>}
         </div>
-        {(!terminou || anotacao) && <motion.h3 aria-live="off" initial={reduzido ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduzido ? 0 : 0.15 }} className="pointer-events-none absolute z-10 w-[min(206px,54%)] -translate-x-1/2 -translate-y-1/2 text-center font-hand text-[clamp(20px,4vw,30px)] leading-tight text-[#fff0ce] drop-shadow-[0_2px_3px_#261b19] md:w-[min(250px,27%)] md:text-[clamp(22px,2.2vw,30px)]" style={posicao(layout.pedido, layout)} key={anotacao ?? passo.id}>{anotacao ? PASSOS.find((item) => item.id === anotacao)?.anotacao : passo.pedido}</motion.h3>}
-        {!terminou && <>
-          <div className="absolute z-10 flex -translate-x-1/2 -translate-y-1/2 gap-1 sm:gap-2" style={posicao(layout.controles, layout)}>
-            <button type="button" disabled={estado.animando || !!voo || !estado.colocados.size} onClick={desfazer} className="min-h-11 rounded-full border border-[#e4b684] bg-[#37251f]/95 px-2 font-sans text-[11px] font-bold text-osso disabled:opacity-45 sm:px-3 sm:text-sm" aria-label="Desfazer última camada">↶ Desfazer</button>
-            <button type="button" disabled={estado.animando || !!voo} onClick={() => { setInteragiu(true); setAnuncio(`${passo.nome} pulado`); enviar({ type: "pular" }); }} className="min-h-11 rounded-full border border-[#e4b684] bg-[#37251f]/95 px-2 font-sans text-[11px] font-bold text-osso disabled:opacity-45 sm:px-3 sm:text-sm" aria-label={`Pular ${passo.nome}`}>→ Pular</button>
-            <button type="button" onClick={reiniciar} className="min-h-11 rounded-full border border-[#e4b684] bg-[#37251f]/95 px-2 font-sans text-[11px] font-bold text-osso sm:px-3 sm:text-sm" aria-label="Recomeçar montagem">⟲ Recomeçar</button>
-          </div>
-          <div className="absolute z-10 flex -translate-x-1/2 -translate-y-1/2 flex-wrap justify-center gap-1 sm:gap-3" style={posicao(layout.bandeja, layout)}>
-            {passo.opcoes.map((opcao) => <button key={opcao.id} type="button" disabled={estado.animando || !!voo} onPointerDown={(e) => iniciar(e, passo.id)} onPointerMove={mover} onPointerUp={soltar} onPointerCancel={cancelar} onClick={(e) => { if (e.detail === 0 && !estado.animando && !voo) { setInteragiu(true); if (passo.id === "macarico") toqueMacarico(); else comecarVoo(passo.id, layout.bandeja, alvo().pouso); } }} aria-label={`${opcao.nome}: toque ou arraste até o pão`} style={{ touchAction: "none" }} className="flex min-h-[90px] min-w-[108px] flex-col items-center justify-center rounded-xl p-1 font-sans text-[13px] font-bold leading-tight text-osso drop-shadow-[0_5px_4px_rgba(30,20,15,.7)] transition-opacity focus-visible:outline focus-visible:outline-2 focus-visible:outline-queijo disabled:opacity-50 md:min-h-[114px] md:min-w-[152px] md:text-sm md:[&_svg]:h-[93px] md:[&_svg]:w-[126px]">
-              <motion.span animate={!reduzido && !interagiu ? { scale: [1, 1.06, 1] } : { scale: 1 }} transition={{ duration: 1.5, repeat: !interagiu && !reduzido ? Infinity : 0 }} className={arrasto?.tipo === passo.id ? "opacity-35" : ""}><IconeIngrediente tipo={passo.id} /></motion.span><span>{opcao.nome}</span>
-            </button>)}
-          </div>
-          {!interagiu && estado.passoAtual === 0 && !reduzido && <motion.div aria-hidden="true" className="pointer-events-none absolute z-20 text-3xl drop-shadow-lg" style={posicao(layout.bandeja, layout)} animate={{ x: [0, (layout.pao.x - layout.bandeja.x) * (quadro.current?.clientWidth ?? 400) / layout.largura, 0], y: [0, (layout.pao.y - layout.bandeja.y) * (quadro.current?.clientHeight ?? 580) / layout.altura, 0], opacity: [0, 1, 0] }} transition={{ duration: 2.5, repeat: Infinity, repeatDelay: .8 }}>☝️</motion.div>}
-        </>}
-        {arrasto?.iniciou && <motion.div aria-hidden="true" className="pointer-events-none absolute z-30" style={{ ...posicao(arrasto.ponto, layout), translate: "-50% -50%", touchAction: "none" }} animate={{ rotate: -12, scale: 1.1 }}><IconeIngrediente tipo={arrasto.tipo} /></motion.div>}
-        {voo && <motion.div key={voo.id} aria-hidden="true" className="pointer-events-none absolute z-30" style={{ ...posicao(voo.origem, layout), translate: "-50% -50%", touchAction: "none" }} initial={{ x: 0, y: 0, rotate: -10, scale: 1.1 }} animate={{ x: (voo.destino.x - voo.origem.x) / layout.largura * (quadro.current?.clientWidth ?? 400), y: voo.volta ? (voo.destino.y - voo.origem.y) / layout.altura * (quadro.current?.clientHeight ?? 580) : [0, (voo.destino.y - voo.origem.y) / layout.altura * (quadro.current?.clientHeight ?? 580) - 45, (voo.destino.y - voo.origem.y) / layout.altura * (quadro.current?.clientHeight ?? 580)], rotate: 0, scale: voo.volta ? 1 : [1.1, 1.16, .85, 1] }} transition={voo.volta ? { type: "spring", stiffness: 300, damping: 24 } : { duration: .55, ease: "easeOut" }} onAnimationComplete={() => { if (vooAtual.current?.id !== voo.id) return; vooAtual.current = null; setVoo(null); if (!voo.volta) escolher(voo.tipo); }}><IconeIngrediente tipo={voo.tipo} /></motion.div>}
-        {terminou && <div className="absolute inset-x-2 bottom-[1.5%] z-20 rounded-xl border border-[#e9b880] bg-[#f5e7ce]/95 px-2 py-1.5 text-center shadow-2xl backdrop-blur-sm md:inset-x-auto md:bottom-auto md:left-[67%] md:top-1/2 md:w-[31%] md:-translate-y-1/2 md:p-3"><div aria-hidden="true" className="hidden text-xl text-macarico sm:block">✦ ♨ ✦</div><p className="hidden font-hand text-xl text-madeira sm:block">Saindo da nossa cozinha</p><h3 className="font-display text-xl text-madeira md:text-2xl">{vazio ? "PULOU TUDO?" : completo ? "A COSTELA!" : "SUA MONTAGEM"}</h3><p className="my-1 font-sans text-xs text-[#3e2b22] sm:my-2 sm:text-sm">{vazio ? "Pulou tudo? Então peça do jeito da casa." : completo ? "Do jeitinho que sai da nossa chapa." : "Aqui foi brincadeira. O pedido de verdade é no Anota Aí."}</p><div className="flex gap-2"><a href={PEDIDO_URL} target="_blank" rel="noopener noreferrer" className="flex min-h-11 flex-1 items-center justify-center rounded-lg bg-macarico px-2 font-sans text-sm font-bold text-carvao">Peça agora<span className="sr-only"> (abre em nova aba)</span></a><button type="button" onClick={reiniciar} className="min-h-11 flex-1 rounded-lg border border-madeira px-2 font-sans text-sm font-bold text-madeira">Montar de novo</button></div></div>}
-        </>}
-        <p aria-live="polite" className="sr-only">{anuncio}</p>
+        <div className="flex min-w-0 flex-col gap-2.5 rounded-[18px] bg-[#241a16] px-3.5 pb-3 pt-3.5 min-[900px]:gap-3 min-[900px]:rounded-[22px] min-[900px]:px-[18px] min-[900px]:py-4 min-[900px]:[grid-column:2] min-[900px]:[grid-row:2]">
+          {estado.tela === "montar" && <PainelMontar estado={estado} enviar={enviar} pronto={pronto} arrasto={{ ativo: !!arrasto, props: propsArrasto }} />}
+          {combo && <PainelCombo estado={estado} enviar={enviar} />}
+          {final && <PainelFinal estado={estado} enviar={enviar} copia={copia} aoCopiar={copiar} textoManual={textoPedido(estado)} />}
+        </div>
       </div>
     </div>
+    {arrasto && etapa && <div aria-hidden="true" className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-1/2" style={{ left: arrasto.x, top: arrasto.y }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={`/assets/bancada/icones/${arrasto.icone}.webp`} alt="" className={`h-[84px] w-[84px] -rotate-6 object-contain drop-shadow-[0_10px_8px_rgba(0,0,0,.55)] transition-transform ${arrasto.sobre ? "scale-[1.2]" : "scale-110"}`} />
+    </div>}
+    {estado.anterior && <div role="status" className="fixed bottom-[18px] left-1/2 z-50 flex -translate-x-1/2 items-center gap-3.5 rounded-xl bg-[#fff8e7] px-4 py-3 text-sm font-semibold text-[#0a0a0a] shadow-[0_10px_30px_rgba(0,0,0,.4)] min-[900px]:bottom-7">
+      Limpado.<button type="button" data-testid="restaurar" onClick={() => enviar({ type: "restaurar" })} className="min-h-8 font-bold text-[#5c3d2e] underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e8b84a]">Desfazer</button>
+    </div>}
+    <p aria-live="polite" className="sr-only">{anuncio}</p>
   </section>;
 }
