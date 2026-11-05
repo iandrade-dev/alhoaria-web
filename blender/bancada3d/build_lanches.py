@@ -32,6 +32,7 @@ ap.add_argument("--parts", default="all")
 ap.add_argument("--views", default="all")
 ap.add_argument("--icons", default="all")
 ap.add_argument("--quick", action="store_true")
+ap.add_argument("--tag", default="depois")
 ARGS = ap.parse_args(_argv)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -85,119 +86,241 @@ def smooth_pts(P, it=2):
 
 
 # ----------------------------------------------------------------------------
-# PULLED PORK: pernil desfiado (feixes de fiapos claros e dourados, pontas caramelizadas)
+# PULLED PORK: pernil desfiado suculento (LAR-433)
+# feixes de fios grossos (2-5 mm) que se curvam, se abrem e se embolam; miolo rosado-dourado,
+# glaze avermelhado-caramelo nas pontas e por cima (material brilhante), molho escuro nos vaos
 # ----------------------------------------------------------------------------
-PORK = [hexc(h) for h in ("#B4774A", "#BC7F4F", "#C58854", "#CD9059", "#D9A066", "#C48550", "#D39A5E", "#A86B42", "#BF8658", "#C9A27A", "#B08A64")]
-C_PCORE_LO, C_PCORE_HI = hexc("#946033"), hexc("#C48B50")
-C_CARA = hexc("#7A3A18")
-C_CARA2 = hexc("#A5481F")
+P_CORE = [hexc(h) for h in ("#C98A5A", "#D19A66", "#D8A672", "#E0B07A", "#CF925E", "#D6A272", "#CB8C5C")]
+P_ROSY = hexc("#D98C6A")
+P_GLAZE = [hexc(h) for h in ("#8A3A1A", "#8A3A1A", "#943F1C", "#9E4520", "#A84E22", "#B65A26", "#C2652A")]
+P_BARK = hexc("#5C2310")
+P_SAUCE_LO, P_SAUCE_HI = hexc("#7A3416"), hexc("#9A4A22")
+GLAZE_GR = 0.585     # g/r da cor de vertice abaixo disso = trecho com molho (material brilhante)
 
 
 def pcore_pos(x, u, top=True):
+    """miolo do monte: massa irregular de carne com molho (o que aparece nos vaos entre os feixes)."""
     By = by_of(x)
     y = u * By
-    ztop = pile(x, u, 0.0) - 0.0040 + 0.0016 * nz(x * 70, y * 70, 3.1) + 0.0012 * nz(x * 150, y * 150, 8.8)
+    lump = fbm(x * 75, y * 75, 4.4, 2)
+    ztop = pile(x, u, 0.0) - 0.0032 + 0.0034 * lump + 0.0012 * nz(x * 190, y * 190, 8.8)
+    ztop = max(ztop, zface(x, y) + 0.0050)          # nunca abaixo do topo da pasta de alho
     zbot = min(zface(x, y) + 0.0005, ztop - 0.002)
-    st = 0.5 + 0.5 * nz(x * 90, y * 90, 3.1)
-    col = lerpc(C_PCORE_LO, C_PCORE_HI, smooth(0.3, 0.85, st))
+    st = 0.5 + 0.5 * nz(x * 70, y * 70, 3.1)
+    col = lerpc(P_SAUCE_LO, P_SAUCE_HI, smooth(0.25, 0.85, st))
+    col = lerpc(col, P_CORE[0], 0.20 + 0.35 * smooth(-0.2, 0.6, lump))
     return (x, y, ztop if top else zbot), col
 
 
-def pulled_strips(mb, rng, centers, surf, clampxy, nseg=4, sides=4, len_rng=(0.028, 0.048), wmean_rng=(0.0046, 0.0068),
-                  nstr=(3, 5), layers=(0.0, 0.0010, 0.0020, 0.0032), bend_sd=10.0, chunk_p=0.35):
-    """Feixes de fiapos achatados. centers = [(cx, cy, borda)]; surf(x, y) = z do topo do monte."""
-    n = 0
+def core_uv(p, s=0.026):
+    """UV do miolo com as fibras girando devagar (campo de direcoes), para nao parecer tabua."""
+    a = 2.6 * nz(p[0] * 22, p[1] * 22, 5.5)
+    ca, sa = math.cos(a), math.sin(a)
+    return ((p[0] * ca + p[1] * sa) / s, (-p[0] * sa + p[1] * ca) / s)
+
+
+def make_pork_textures(n=256):
+    """Fibras do pernil: estrias suaves ao longo de u + manchas (cor cinza relativa, pouco contraste) e normal, tileavel."""
+    rng = np.random.RandomState(433)
+    fy = np.fft.fftfreq(n)[:, None] * n
+    fx = np.fft.fftfreq(n)[None, :] * n
+
+    def aniso(lo_v, hi_v, max_u):
+        F = np.fft.fft2(rng.randn(n, n))
+        mask = ((np.abs(fy) >= lo_v) & (np.abs(fy) <= hi_v) & (np.abs(fx) <= max_u)).astype(float)
+        out = np.real(np.fft.ifft2(F * mask))
+        return (out - out.mean()) / (out.std() + 1e-9)
+    k = n / 512.0
+    h = 0.60 * aniso(10 * k, 50 * k, 2) + 0.30 * aniso(3 * k, 10 * k, 2) + 0.20 * aniso(40 * k, 110 * k, 6 * k)
+    blot = bb._fft_noise(rng, n, 2, 10)
+    h += 0.12 * blot
+    col = np.clip(0.87 + 0.09 * h + 0.02 * blot, 0.66, 1.0)
+    nrm = bb._normal_from_height(h * 0.5, 2.4)
+    c_img = save_img("pernil_cor", np.stack([col, col, col], axis=2), "sRGB")
+    n_img = save_img("pernil_normal", nrm * 0.5 + 0.5, "Non-Color")
+    return c_img, n_img
+
+
+def _glaze_faces(mb, f0, m_glaze=1):
+    """faces com cor de molho (vermelho-caramelo: g/r baixo) vao para o material brilhante."""
+    for i in range(f0, len(mb.f)):
+        f = mb.f[i]
+        gr = sum(mb.c[j][1] / max(mb.c[j][0], 1e-3) for j in f) / len(f)
+        if gr < GLAZE_GR:
+            mb.fm[i] = m_glaze
+
+
+def _arc_path(rng, x0, y0, th, ln, sweep, n, wig_a, wig_f):
+    """pontos (x, y, t) ao longo de um arco de comprimento ln centrado em (x0, y0), curvatura total sweep (rad)."""
+    m = 24
+    pts = [(0.0, 0.0)]
+    ph = rng.uniform(0, 6.28)
+    for i in range(m):
+        t = (i + 0.5) / m
+        a = th + sweep * (t - 0.5) + wig_a * math.sin(t * wig_f * 2 * math.pi + ph)
+        px, py = pts[-1]
+        pts.append((px + math.cos(a) * ln / m, py + math.sin(a) * ln / m))
+    cx = sum(p[0] for p in pts) / len(pts)
+    cy = sum(p[1] for p in pts) / len(pts)
+    out = []
+    for kk in range(n + 1):
+        t = kk / n
+        j = t * m
+        i0 = min(int(j), m - 1)
+        f = j - i0
+        px = pts[i0][0] * (1 - f) + pts[i0 + 1][0] * f
+        py = pts[i0][1] * (1 - f) + pts[i0 + 1][1] * f
+        out.append((x0 + px - cx, y0 + py - cy, t))
+    return out
+
+
+def _pork_tube(mb, rng, path, w, squash, zfun, base, glaze, sauc, sides, k, tip_glaze=1.0, end_w=(0.75, 0.75), ztop=None):
+    """um pedaco (corpo do feixe ou fio solto) ao longo de path [(x, y, t)]; zfun(x, y, t, h) -> z do eixo."""
+    P, R, C = [], [], []
+    wn = rng.uniform(0, 80)
+    for (x, y, t) in path:
+        e0, e1 = end_w
+        prof = lerp(e0, 1.0, smooth(0.0, 0.3, t)) * lerp(1.0, e1, smooth(0.7, 1.0, t))
+        prof *= 0.80 + 0.40 * (0.5 + 0.5 * nz(wn + t * 3.3, 1.3, 0.2))
+        a = 0.5 * w * prof
+        z = zfun(x, y, t, a * squash)
+        z = max(z, a * squash + 0.0004)
+        if ztop is not None:
+            z = min(z, ztop(x, y) + 0.0009 - a * squash)
+        P.append(Vector((x, y, z)))
+        R.append(a)
+        tip = smooth(0.25, 0.0, t) + smooth(0.75, 1.0, t)
+        n1 = 0.5 + 0.5 * nz(wn + t * 4.0, 7.7, 1.0)
+        cc = bright(base, 0.98 * (0.90 + 0.20 * n1))
+        gl = lerpc(glaze, P_BARK, 0.55 * smooth(0.15, 0.6, nz(x * 160, y * 160, 2.2 + wn)))   # crostinha escura
+        C.append((lambda al, cc=cc, gl=gl, tip=tip, n1=n1:
+                  lerpc(cc, gl, clamp(tip_glaze * 0.9 * tip * (0.5 + sauc) + sauc * 1.2 * smooth(-0.5, 0.7, math.sin(al)) * (0.6 + 0.6 * n1) - 0.02))))
+    P = smooth_pts(P, 1)
+    tube(mb, P, R, C, sides=sides, cap=True, squash=squash, twist=rng.gauss(0, 0.8),
+         uv=(rng.uniform(0, 1), 0.024 * k, rng.uniform(0, 1), 1.0))
+
+
+def pork_pieces(mb, rng, centers, surf, clampxy, ztop=None, k=1.0, lift_k=1.0):
+    """Feixes de pernil desfiado: 2 a 4 fios grossos (3-5,5 mm) que saem juntos, se curvam (arcos e S), se abrem e passam
+    por cima dos vizinhos; ~15 % dos feixes sao uma lasca curta, larga e achatada. centers = [(cx, cy, borda)];
+    surf(x, y) = topo do monte; ztop(x, y) = teto (cavidade da tampa) ou None; k escala as medidas (icone).
+    Devolve (feixes, fios)."""
+    nb = nfi = 0
+    f0 = len(mb.f)
     for (cx, cy, edge) in centers:
-        if edge:
-            th = rng.gauss(0, 0.40) + math.copysign(0.18, cy) * rng.random()
-        elif rng.random() < 0.25:
-            th = rng.choice([-1, 1]) * rng.uniform(0.8, 1.35)
-        else:
-            th = rng.gauss(0, 0.9)
+        th = (rng.gauss(0, 0.45) + math.copysign(0.2, cy) * rng.random()) if edge else rng.uniform(0, math.pi)
         if rng.random() < 0.5:
             th += math.pi
-        tuft_len = rng.uniform(*len_rng)
-        bend = rng.gauss(0, 1.0) * bend_sd
-        m_str = rng.randint(*nstr)
-        layer = rng.choice(layers)
-        tone = rng.uniform(0.92, 1.08)
-        base_col = rng.choice(PORK)
-        wmean = rng.uniform(*wmean_rng)
-        chunky = rng.random() < chunk_p            # pedacos mais curtos e grossos no meio dos fios
-        if chunky:
-            m_str = rng.randint(2, 3)
-            tuft_len *= 0.50
-            wmean *= 1.7
+        layer = rng.choice((0.0, 0.0012, 0.0024, 0.0036, 0.0048)) * k * (0.4 if edge else 1.0)
+        arch_b = rng.uniform(-0.4, 1.0) * 0.0028 * k * lift_k
+        sauc = rng.uniform(0.05, 0.30) if rng.random() < 0.28 else rng.uniform(0.45, 1.0)   # alguns feixes quase sem molho
+        base = rng.choice(P_CORE)
+        if rng.random() < 0.15:
+            base = lerpc(base, P_ROSY, rng.uniform(0.25, 0.6))
+        glaze = rng.choice(P_GLAZE)
+        nb += 1
+        if rng.random() < 0.15:                                     # lasca
+            ln = rng.uniform(0.016, 0.026) * k
+            path = [clampxy(x, y) + (t,) for (x, y, t) in _arc_path(rng, cx, cy, th, ln, rng.gauss(0, 0.6), 5, 0.1, 1.0)]
+
+            def zl(x, y, t, h, layer=layer, arch=arch_b):
+                return surf(x, y) + 0.0004 + layer + arch * math.sin(math.pi * t) + h * 0.55
+            _pork_tube(mb, rng, path, rng.uniform(0.0085, 0.0125) * k, rng.uniform(0.45, 0.65), zl, base, glaze, sauc, 6, k,
+                       end_w=(0.65, 0.65), ztop=ztop)
+            nfi += 1
+            continue
+        m_str = rng.randint(2, 4)
+        ln_b = rng.uniform(0.024, 0.040) * k
+        sweep_b = rng.gauss(0, 1.1)
+        w_b = rng.uniform(0.0036, 0.0050) * k
+        div = rng.uniform(0.05, 0.18)                               # o feixe se abre (fios puxados)
+        lift = (rng.uniform(0.0015, 0.0050) * k * lift_k) if (not edge and rng.random() < 0.4) else 0.0
+        lift_end = rng.random() < 0.5
         for si in range(m_str):
-            wide = rng.random() < 0.07
-            w = rng.uniform(0.0070, 0.0095) if wide else wmean * rng.uniform(0.7, 1.35)
-            lat = (si - (m_str - 1) / 2) * wmean * 0.95 + rng.gauss(0, 0.0012)
-            t0 = rng.uniform(-0.009, 0.009)
-            ln = tuft_len * rng.uniform(0.55, 1.25) * (0.55 if wide else 1.0)
-            wig_a = rng.uniform(0.0015, 0.0040) * (0.4 if chunky else 1.0)
-            wig_p = rng.uniform(0, 6.28)
-            squash = rng.uniform(0.70, 1.0)
-            th_s = th + rng.gauss(0, 0.30)
-            dvs = (math.cos(th_s), math.sin(th_s))
-            nvs = (-dvs[1], dvs[0])
-            twist = rng.gauss(0, 1.3)
-            wf = rng.uniform(3.5, 7.0)
-            wn = rng.uniform(0, 50)
-            P, R, C = [], [], []
-            col_s = bright(base_col, 1.45 * tone * rng.uniform(0.92, 1.08))
-            ph_col = rng.uniform(0, 6.28)
-            gold = rng.random() < 0.25
-            for k in range(nseg + 1):
-                t = k / nseg
-                s = -ln / 2 + ln * t + t0
-                off = lat + bend * s * s + wig_a * math.sin(t * wf + wig_p)
-                x = cx + dvs[0] * s + nvs[0] * off
-                y = cy + dvs[1] * s + nvs[1] * off
-                x, y = clampxy(x, y)
-                prof = 0.60 + 0.40 * math.sin(math.pi * (0.06 + 0.88 * t))
-                prof *= 0.82 + 0.36 * (0.5 + 0.5 * nz(wn + t * 2.5, 1.3, 0.2))
-                a = 0.5 * w * prof
-                z = surf(x, y) + 0.0004 + layer + 0.0007 * math.sin(math.pi * t)
-                z = max(z, a * squash + 0.0004)
-                P.append(Vector((x, y, z)))
-                R.append(a)
-                tip = bb.smooth(0.30, 0.0, t) + bb.smooth(0.70, 1.0, t)
-                cc = lerpc(col_s, C_CARA2 if gold else C_CARA, 0.45 * tip)
-                cc = lerpc(cc, hexc("#E2B27A"), 0.10 * (0.5 + 0.5 * nz(x * 95, y * 95, 4.4)))
-                cc = bright(cc, 0.82 + 0.36 * (0.5 + 0.5 * nz(wn + t * 4.0, 7.7, 1.0)))
-                C.append((lambda al, cc=cc, ph=ph_col: bright(cc, 0.82 + 0.22 * math.sin(al) + 0.10 * math.sin(3 * al + ph))))
-            P = smooth_pts(P, 2)
-            tube(mb, P, R, C, sides=sides, cap=True, squash=squash, twist=twist,
-                 uv=(rng.uniform(0, 1), 0.030, rng.uniform(0, 1), 1.0))
-            n += 1
-    return n
+            c = (si - (m_str - 1) / 2)
+            ths = th + c * div + rng.gauss(0, 0.06)
+            off = c * w_b * 0.85
+            x0 = cx - math.sin(th) * off + rng.gauss(0, 0.0008 * k)
+            y0 = cy + math.cos(th) * off + rng.gauss(0, 0.0008 * k)
+            ln = ln_b * rng.uniform(0.75, 1.15)
+            sw = sweep_b + rng.gauss(0, 0.35)
+            path = [clampxy(x, y) + (t,) for (x, y, t) in _arc_path(rng, x0, y0, ths, ln, sw, 4, rng.uniform(0.1, 0.3), rng.uniform(0.8, 1.6))]
+            arch = arch_b + rng.gauss(0, 0.0007 * k)
+
+            def zs(x, y, t, h, layer=layer, arch=arch, lift=lift, le=lift_end):
+                tt = t if le else 1 - t
+                return surf(x, y) + 0.0004 + layer + arch * math.sin(math.pi * t) + lift * smooth(0.45, 1.0, tt) ** 2 + h * 0.6
+            _pork_tube(mb, rng, path, w_b * rng.uniform(0.8, 1.2), rng.uniform(0.62, 0.92), zs, base, glaze,
+                       sauc * rng.uniform(0.8, 1.1), 4 if layer < 0.0018 * k else 5, k, end_w=(0.8, 0.8), ztop=ztop)
+            nfi += 1
+    _glaze_faces(mb, f0)
+    return nb, nfi
+
+
+def sauce_blobs(mb, rng, pts, surf, k=1.0):
+    """gotas/pocas de molho brilhante entre os fios."""
+    for (x, y) in pts:
+        rx, ry = rng.uniform(0.0030, 0.0060) * k, rng.uniform(0.0022, 0.0040) * k
+        h = rng.uniform(0.0010, 0.0018) * k
+        z = surf(x, y) + rng.uniform(0.0010, 0.0035) * k
+        col = lerpc(P_SAUCE_HI, hexc("#A84E22"), rng.random())
+        i0 = len(mb.v)
+        f0 = len(mb.f)
+        bb.superq(mb, (0.0, 0.0, 0.0), (rx, ry, h), 0.7, 0.9, 10, 4, col, m=1)
+        yaw = rng.uniform(0, math.pi)
+        cs, sn = math.cos(yaw), math.sin(yaw)
+        for i in range(i0, len(mb.v)):
+            px, py, pz = mb.v[i]
+            q = 1 + 0.18 * nz(px * 900 + x * 50, py * 900, 1.0)
+            mb.v[i] = (x + (px * cs - py * sn) * q, y + (px * sn + py * cs) * q, z + pz)
+            mb.uv[i] = (mb.v[i][0] / 0.03, mb.v[i][1] / 0.03)
+        for i in range(f0, len(mb.f)):
+            mb.fm[i] = 1
+
+
+def pulled_mats(icon=False):
+    """material 0 = carne (fibras, fosco), material 1 = trechos com molho (mesmas fibras, brilho e clearcoat)."""
+    fib_c, fib_n = make_pork_textures()
+    mk = tex_vc_mat if icon else (lambda name, im, nm, st, ro, sp, coat=0.0: make_mat(name, vcol=False, rough=ro, spec=sp, coat=coat,
+                                                                                         image=im, normal_image=nm, normal_strength=st))
+    m_meat = mk("mat_pulled_carne", fib_c, fib_n, 1.0, 0.60, 0.35)
+    m_glaze = mk("mat_pulled_molho", fib_c, fib_n, 0.35, 0.24, 0.60, coat=0.30)
+    return m_meat, m_glaze
+
+
+def pulled_centers(rng, nx, nv, x0, extra=0, vspan=1.06):
+    out = []
+    for ix in range(nx):
+        for iv in range(nv):
+            cx = -x0 + 2 * x0 * (ix + rng.uniform(0.1, 0.9)) / nx
+            vc = -vspan + 2 * vspan * (iv + rng.uniform(0.1, 0.9)) / nv
+            out.append((cx, vc * by_of(cx), abs(vc) > 0.74))
+    for _ in range(extra):
+        cx = rng.uniform(-x0 * 0.9, x0 * 0.9)
+        out.append((cx, rng.uniform(-0.55, 0.55) * by_of(cx), False))
+    return out
 
 
 def build_pulled(root):
     mb = MB()
-    xs = cos_spaced(46, XM * 0.985)
-    us = [-1 + 2 * j / 14 for j in range(15)]
-    strip_layer(mb, xs, us, lambda x, u: pcore_pos(x, u, True), lambda x, u: pcore_pos(x, u, False),
-                uvf=lambda p: (p[0] / 0.03, p[1] / 0.03))
-    rng = random.Random(4311)
-    NX, NV = 17, 6
-    centers = []
-    for ix in range(NX):
-        for iv in range(NV):
-            cx = -0.134 + 0.268 * (ix + rng.uniform(0.1, 0.9)) / NX
-            vc = -1.08 + 2.16 * (iv + rng.uniform(0.1, 0.9)) / NV
-            centers.append((cx, vc * by_of(cx), abs(vc) > 0.72))
+    xs = cos_spaced(40, XM * 0.985)
+    us = [-1 + 2 * j / 12 for j in range(13)]
+    strip_layer(mb, xs, us, lambda x, u: pcore_pos(x, u, True), lambda x, u: pcore_pos(x, u, False), uvf=core_uv)
+    ntop = (len(xs) - 1) * (len(us) - 1) * 2
+    mb.fm = [1 if (i < ntop and i % 2 == 0) else 0 for i in range(len(mb.f))]   # topo do miolo = molho brilhante
+    rng = random.Random(4331)
 
     def clampxy(x, y):
         x = max(-0.139, min(0.139, x))
         pp = bprof(max(-L, min(L, x)))
-        return x, math.copysign(min(abs(y), pp["Wb"] + 0.0035), y)
-    n = pulled_strips(mb, rng, centers, surf_z, clampxy, nseg=4, sides=3, len_rng=(0.030, 0.050), wmean_rng=(0.0030, 0.0044),
-                      nstr=(3, 6), layers=(0.0, 0.0010, 0.0020, 0.0032, 0.0045))
-    print("pulled: %d tiras" % n)
-    fib_c, fib_n = bb.make_fibre_textures()
-    mat = make_mat("mat_pulled", vcol=False, rough=0.52, spec=0.40, image=fib_c, normal_image=fib_n, normal_strength=1.0)
-    return [finish(mb, "pulled_pernil_fiapos", [mat], root)]
+        return x, math.copysign(min(abs(y), pp["Wb"] + 0.0030), y)
+
+    def ceil(x, y):
+        return max(zunder(x, y), bprof(max(-L, min(L, x)))["zc"] + 0.004)
+    npc, nfi = pork_pieces(mb, rng, pulled_centers(rng, 18, 7, 0.132, extra=6), surf_z, clampxy, ztop=ceil)
+    print("pulled: %d feixes, %d fios soltos" % (npc, nfi))
+    m_meat, m_glaze = pulled_mats()
+    return [finish(mb, "pulled_pernil_fiapos", [m_meat, m_glaze], root)]
 
 
 # ----------------------------------------------------------------------------
@@ -423,34 +546,114 @@ def dunder(x, y):
     return min(z, douter(x, y) - 0.0045) if r > 0 else z
 
 
-C_BR_LO, C_BR_HI, C_BR_TOP = hexc("#C98528"), hexc("#EDB652"), hexc("#B4651C")
+# casca do brioche (LAR-433): dourado-escuro brilhante no topo, faixa clara nas laterais (onde os paes encostam na forma),
+# fundo dourado; leve irregularidade no topo (so para fora, para o fondue continuar assentando) e pontas mais baixas
+C_BR_TOP, C_BR_TOP2 = hexc("#7E4413"), hexc("#9C5719")
+C_BR_MID = hexc("#C47A24")
+C_BR_SIDE, C_BR_SIDE2 = hexc("#E3AE5E"), hexc("#EEC57C")
+C_BR_BOT = hexc("#B87028")
+C_BR_RIM = hexc("#C58A3E")
+C_BR_CRUMB, C_BR_CRUMB2 = hexc("#FBEFCF"), hexc("#F3E0B0")
+XEND0 = 0.090                       # inicio do arredondamento das pontas (o fondue termina em 0,098 e afina antes)
 
 
-def brioche_color(x, y, z):
+def end_round(x):
+    """fatores (rW, rT, rB) <= 1 que arredondam e abaixam as pontas do brioche: largura, altura do topo acima do corte e
+    profundidade da base abaixo do corte. Iguais a 1 em |x| <= XEND0 (nao mexe no encaixe do fondue nem na dobradica)."""
+    ax = abs(x)
+    if ax <= XEND0:
+        return 1.0, 1.0, 1.0
+    u = min(1.0, (ax - XEND0) / (DL - XEND0))
+    p0, p = dprof(XEND0), dprof(x)
+    rW = min(1.0, p0["W"] * max(0.0, 1 - u ** 2.2) ** 0.5 / max(p["W"], 1e-6))
+    rT = min(1.0, 0.6 * p0["H"] * (1 - 0.12 * u) * max(0.0, 1 - u ** 2.5) ** 0.5 / max(0.6 * p["H"], 1e-6))
+    rB = min(1.0, 0.4 * p0["H"] * max(0.0, 1 - u ** 3.0) ** 0.5 / max(0.4 * p["H"], 1e-6))
+    return max(rW, 0.05), max(rT, 0.05), max(rB, 0.05)
+
+
+def crust_bump(x, y, z):
+    """irregularidade do topo, so para fora (0 a ~2 mm), mais forte no alto."""
+    return 0.0019 * (0.5 + 0.5 * fbm(x * 24, y * 24, z * 24 + 3.3, 2)) + 0.0003 * nz(x * 90, y * 90, z * 90)
+
+
+def brioche_shell(xi, ph, lid):
+    """ponto (y, z) da casca e a cor, para o angulo ph da secao (lid: metade de cima)."""
+    p = dprof(xi)
+    cs, sn = math.cos(ph), math.sin(ph)
+    y = p["W"] * math.copysign(abs(cs) ** (2 / DN), cs)
+    z = p["zm"] + (p["H"] / 2) * math.copysign(abs(sn) ** (2 / DN), sn)
+    ny, nzv = douter_normal(xi, abs(y), z)
+    rW, rT, rB = end_round(xi)
+    if lid and z > p["zcut"]:
+        up = clamp((z - p["zcut"]) / max(1e-6, p["zm"] + p["H"] / 2 - p["zcut"]))
+        z = p["zcut"] + (z - p["zcut"]) * rT
+        b = crust_bump(xi, y, z) * smooth(0.15, 0.6, up)
+        y += math.copysign(ny * b, y)
+        z += nzv * b
+    elif not lid and z < p["zcut"]:
+        z = p["zcut"] - (p["zcut"] - z) * rB
+    y *= rW
+    return y, z, brioche_color(xi, y, z, abs(ny), nzv)
+
+
+def brioche_color(x, y, z, side, upn):
+    """side = |componente y da normal| (1 na lateral), upn = componente z da normal."""
     h = clamp((z - DZ0) / DH)
-    c = lerpc(C_BR_LO, C_BR_HI, smooth(0.05, 0.65, h))
-    c = lerpc(c, C_BR_TOP, smooth(0.62, 1.0, h) * 0.35 * (0.5 + 0.5 * nz(x * 25, y * 25, 2.2)))
-    c = mulc(c, 1 + 0.07 * nz(x * 70, y * 70, z * 70))
-    sh = bb.smooth(0.55, 1.0, fbm(x * 60, y * 60, z * 60 + 9, 3)) * 0.18      # pontinhos de egg wash mais escuros
-    return lerpc(c, hexc("#9A5518"), sh)
+    top = lerpc(C_BR_TOP, C_BR_TOP2, 0.5 + 0.5 * nz(x * 30, y * 30, 2.2))
+    c = lerpc(C_BR_MID, top, smooth(0.25, 0.85, upn) * smooth(0.45, 0.85, h))
+    band = smooth(0.66, 0.90, side) * (1 - smooth(0.80, 0.95, h)) * (1 - 0.6 * smooth(0.10, 0.0, h))
+    band *= 0.75 + 0.25 * nz(x * 40, z * 60, 7.1)
+    c = lerpc(c, lerpc(C_BR_SIDE, C_BR_SIDE2, 0.5 + 0.5 * nz(x * 50, z * 50, 1.4)), clamp(band * 1.15))
+    c = lerpc(c, C_BR_BOT, smooth(0.12, -0.05, h) * 0.8)
+    c = lerpc(c, lerpc(C_BR_SIDE, C_BR_MID, 0.5), 0.35 * smooth(0.090, DL, abs(x)) * (1 - smooth(0.6, 0.95, upn)))   # pontas
+    c = mulc(c, 1 + 0.06 * nz(x * 80, y * 80, z * 80))
+    sh = smooth(0.45, 0.95, fbm(x * 18, y * 18, z * 18 + 9, 2)) * 0.16 * smooth(0.5, 0.9, h)    # manchas do pincelado de ovo
+    return lerpc(c, hexc("#7E4214"), sh)
+
+
+def make_brioche_crust_textures(n=256):
+    """Casca lisa de brioche: so um mosqueado muito leve e graos finos (cor relativa clara), tileavel."""
+    rng = np.random.RandomState(4330)
+    base = 0.965 + 0.014 * bb._fft_noise(rng, n, 1, 3) + 0.010 * bb._fft_noise(rng, n, 30, 100)
+    col = np.clip(base, 0.85, 1.0)
+    return save_img("brioche_casca_cor", np.stack([col, col, col], axis=2), "sRGB")
+
+
+def make_brioche_crumb_textures(n=512):
+    """Miolo de brioche: claro, fofo, alveolos pequenos e medios levemente alongados (cor + normal), tileavel."""
+    rng = np.random.RandomState(4331)
+    h = 0.06 * bb._fft_noise(rng, n, 2, 8) + 0.05 * bb._fft_noise(rng, n, 10, 40) + 0.03 * bb._fft_noise(rng, n, 50, 140)
+    m1 = bb._stamp_holes(h, rng, 22, 11, 20, 0.9, 0.40, rim=0.06, power=0.9)
+    m2 = bb._stamp_holes(h, rng, 110, 5, 11, 0.7, 0.40, rim=0.05, power=0.9)
+    m3 = bb._stamp_holes(h, rng, 520, 1.8, 5, 0.5, 0.40, rim=0.04, power=0.8)
+    hole = np.clip(m1 + m2 + m3, 0, 1)
+    base_a, base_b = np.array(hexc("#FFF8E4")), np.array(hexc("#F8E9C2"))
+    tone = np.clip(0.5 + 0.3 * bb._fft_noise(rng, n, 2, 9), 0, 1)[..., None]
+    col = base_a * (1 - tone) + base_b * tone
+    pit = np.array(hexc("#D2A865"))
+    dark = np.clip(hole * 1.15, 0, 1)[..., None]
+    col = col * (1 - 0.55 * dark) + pit * 0.55 * dark
+    gx = (np.roll(h, -1, axis=1) - np.roll(h, 1, axis=1)) * 0.5
+    gy = (np.roll(h, -1, axis=0) - np.roll(h, 1, axis=0)) * 0.5
+    shade = np.clip(1 + (-gx * 0.9 + gy * 0.9) * 1.2, 0.7, 1.25)[..., None]
+    col = np.clip(col * shade, 0, 1)
+    nrm = bb._normal_from_height(h, 2.6)
+    c_img = save_img("brioche_miolo_cor", col, "sRGB")
+    n_img = save_img("brioche_miolo_normal", nrm * 0.5 + 0.5, "Non-Color")
+    return c_img, n_img
 
 
 def build_brioche(root):
-    NS, No, Nf = 70, 16, 18
+    NS, No, Nf = 96, 24, 20
     xs = cos_spaced(NS, DL * 0.9995)
     phc = -math.asin((1 - 2 * DCUT) ** (DN / 2))      # angulo do corte (negativo: abaixo do meio)
+    TC, TM = 0.040, 0.045                             # ladrilhos (m) das texturas de casca e miolo
 
-    def crumb_color(y, wcut, under=False):
+    def crumb_color(x, y, wcut, under=False):
         edge = 1 - abs(y) / max(wcut, 1e-6)
-        c = lerpc(hexc("#D5A25A"), (1.0, 0.95, 0.80), smooth(0.02, 0.26, edge))
-        return mulc(c, 0.94 if under else 1.0)
-
-    def arc_pt(xi, ph):
-        p = dprof(xi)
-        cs, sn = math.cos(ph), math.sin(ph)
-        y = p["W"] * math.copysign(abs(cs) ** (2 / DN), cs)
-        z = p["zm"] + (p["H"] / 2) * math.copysign(abs(sn) ** (2 / DN), sn)
-        return y, z
+        c = lerpc(C_BR_CRUMB, C_BR_CRUMB2, 0.5 + 0.5 * nz(x * 40, y * 40, 3.3))
+        c = lerpc(C_BR_RIM, c, smooth(0.0, 0.085, edge))         # fio fino de casca na borda do corte
+        return mulc(c, 0.95 if under else 1.0)
 
     def loft(mb, rings, nseam):
         n = len(rings[0])
@@ -464,7 +667,7 @@ def build_brioche(root):
         for end, rev in ((0, True), (len(rings) - 1, False)):
             ring = rings[end]
             xe = mb.v[ring[0]][0]
-            c = mb.add((xe, 0.0, dprof(xe)["zm"]), C_BR_LO, uv=(0.3, 0.3))
+            c = mb.add((xe, 0.0, dprof(xe)["zm"]), lerpc(C_BR_SIDE, C_BR_MID, 0.5), uv=(0.3, 0.3))
             for k in range(n):
                 k2 = (k + 1) % n
                 if k in nseam:
@@ -474,29 +677,37 @@ def build_brioche(root):
                 else:
                     mb.tri(c, ring[k2], ring[k])
 
-    TC = 0.050
-
     def make_half(lid_half):
         mb, rings = MB(), []
         for xi in xs:
             p = dprof(xi)
-            ring = []
+            ring, s, prev = [], 0.0, None
             for k in range(No + 1):
                 if lid_half:
                     ph = (math.pi - phc) - (math.pi - 2 * phc) * k / No
                 else:
                     ph = phc - (math.pi + 2 * phc) * k / No
-                y, z = arc_pt(xi, ph)
-                ring.append(mb.add((xi, y, z), brioche_color(xi, y, z), uv=(xi / TC, k / No)))
+                y, z, col = brioche_shell(xi, ph, lid_half)
+                q = Vector((xi, y, z))
+                if prev is not None:
+                    s += (q - prev).length
+                prev = q
+                ring.append(mb.add((xi, y, z), col, uv=(xi / TC, s / TC)))
+            sc, prev = 0.0, None
+            rW, rT, rB = end_round(xi)
             for k in range(0, Nf + 2):
                 if lid_half:
                     y = p["wcut"] - 2 * p["wcut"] * k / (Nf + 1)
-                    z = dunder(xi, y)
+                    z = min(dunder(xi, y), p["zcut"] + (douter(xi, y) - p["zcut"]) * rT - 0.0040)
                 else:
                     y = -p["wcut"] + 2 * p["wcut"] * k / (Nf + 1)
-                    z = dface(xi, y)
-                ring.append(mb.add((xi, y, z), crumb_color(y, p["wcut"], under=lid_half),
-                                   uv=(xi / TC, y / TC + (0.37 if lid_half else 0.0))))
+                    z = max(dface(xi, y), p["zcut"] - (p["zcut"] - DZ0) * rB + 0.0040)
+                y *= rW
+                if prev is not None:
+                    sc += math.hypot(y - prev[0], z - prev[1])        # v pelo comprimento de arco (sem esticar na cavidade)
+                prev = (y, z)
+                ring.append(mb.add((xi, y, z), crumb_color(xi, y, p["wcut"], under=lid_half),
+                                   uv=(xi / TM, sc / TM + (0.37 if lid_half else 0.0))))
             rings.append(ring)
         nring = len(rings[0])
         loft(mb, rings, (No, nring - 1))
@@ -506,9 +717,10 @@ def build_brioche(root):
     lid = make_half(True)
     Yh, Zh = dprof(0.0)["wcut"], dprof(0.0)["zcut"]
     lid.v = [(x, y - Yh, z - Zh) for (x, y, z) in lid.v]
-    crumb_c, crumb_n = bb.make_crumb_textures()
-    m_crust = make_mat("mat_brioche_casca", vcol=True, rough=0.30, spec=0.6, coat=0.35)
-    m_crumb = make_mat("mat_brioche_miolo", vcol=False, rough=0.9, spec=0.2, image=crumb_c, normal_image=crumb_n, normal_strength=0.7)
+    cc = make_brioche_crust_textures()
+    mc, mn = make_brioche_crumb_textures()
+    m_crust = make_mat("mat_brioche_casca", vcol=False, rough=0.36, spec=0.5, coat=0.22, image=cc)
+    m_crumb = make_mat("mat_brioche_miolo", vcol=False, rough=0.9, spec=0.2, image=mc, normal_image=mn, normal_strength=0.8)
     ob = finish(base, "dog_brioche_base", [m_crust, m_crumb], root)
     ol = finish(lid, "dog_brioche_tampa", [m_crust, m_crumb], root)
     ol.location = (0.0, Yh, Zh)
@@ -581,38 +793,66 @@ def saus_top(x, y):
     return z if z is not None else saus_zc(x)
 
 
+C_SAU_TOP, C_SAU_MID, C_SAU_BOT = hexc("#C8603A"), hexc("#B8522F"), hexc("#A5442A")
+C_SAU_TIP, C_SAU_MARK = hexc("#7E3220"), hexc("#8E3A22")
+SAU_LCAP = 0.0095        # comprimento da ponta arredondada (elipse alongada, nao meia esfera)
+SAU_NUB = 0.0009         # raio do biquinho torcido da tripa
+
+
+def saus_radius(d, half):
+    """raio da salsicha a uma distancia d da ponta (0 = ponta). Corpo com leve afunilamento nos ultimos ~2 cm, ponta
+    arredondada alongada e um biquinho torcido da tripa."""
+    dn = SAU_NUB
+    taper = 1.0 - 0.17 * smooth(0.030 + dn, dn, d) ** 1.3
+    if d >= SAU_LCAP + dn:
+        return SR * taper
+    q = 1.0 - max(0.0, d - dn) / SAU_LCAP
+    r = SR * taper * max(0.0, 1.0 - q ** 2.2) ** 0.5
+    nub = max(0.0, dn * dn - (d - dn) ** 2) ** 0.5                     # biquinho da tripa na ponta
+    return max(r, nub)
+
+
 def build_salsichas(root):
     mb = MB()
-    C_BODY, C_TOP, C_BOT, C_TIP = hexc("#B93D2A"), hexc("#D6563B"), hexc("#8A2819"), hexc("#A82D1E")
+    sides = 24
     for si, (yc, half) in enumerate(zip((-SY, SY), SHALF)):
-        cl = SR * 0.95
-        prof = []
-        for k in range(7):
-            a = (math.pi / 2) * k / 6
-            prof.append((-half + cl * (1 - math.cos(a)), SR * math.sin(a)))
-        for k in range(1, 9):
-            prof.append((-half + cl + (2 * half - 2 * cl) * k / 9, SR))
-        for k in range(7):
-            a = (math.pi / 2) * (6 - k) / 6
-            prof.append((half - cl * (1 - math.cos(a)), SR * math.sin(a)))
-        sides = 16
+        # estacoes ao longo de x: mais densas nas pontas
+        ds = [0.0, 0.0004, 0.0009, 0.0016, 0.0020, 0.0025, 0.0031, 0.0038, 0.0047, 0.0058, 0.0071, 0.0086, 0.0103, 0.0122,
+              0.0146, 0.0175, 0.0210, 0.0250]
+        xs = [-half + d for d in ds]
+        nmid = 26
+        x_a, x_b = -half + ds[-1], half - ds[-1]
+        xs += [x_a + (x_b - x_a) * (k + 1) / (nmid + 1) for k in range(nmid)]
+        xs += [half - d for d in reversed(ds)]
+        tw = 3 if si else -2                    # torcao das rugas da tripa (inteiro: fecha na emenda)
         rows = []
-        for (x, r) in prof:
+        for x in xs:
+            d = half - abs(x)
+            r0 = saus_radius(d, half)
             ring = []
-            wr = 1 + 0.018 * nz(x * 60 + si * 9, 0.3, 1.0)
+            endz = smooth(0.030, 0.0, d)
             for k in range(sides):
                 th = 2 * math.pi * k / sides
-                tipf = bb.smooth(half - cl * 1.2, half, abs(x))
+                # rugas finas em helice perto das pontas + ondulacao suave no corpo
+                wph = 2 * math.pi * d / 0.0042 + tw * th
+                wr = 0.00028 * endz * math.sin(wph)
+                wr += 0.00012 * nz(x * 120 + si * 9, math.cos(th) * 2, math.sin(th) * 2)
+                r = r0 + (wr if r0 > 0.004 else 0.0)
                 top = 0.5 + 0.5 * math.sin(th)
-                col = lerpc(lerpc(C_BOT, C_TOP, clamp(top * 1.1)), C_TIP, tipf * 0.5)
-                col = mulc(col, 1 + 0.05 * nz(x * 40, th, si * 3.0))
-                ring.append(mb.add((x, yc + r * wr * math.cos(th), saus_zc(x) + r * wr * math.sin(th)), col))
+                col = lerpc(C_SAU_BOT, C_SAU_MID, smooth(0.0, 0.55, top))
+                col = lerpc(col, C_SAU_TOP, smooth(0.55, 1.0, top))
+                col = lerpc(col, C_SAU_TIP, 0.65 * smooth(0.016, 0.0, d))                    # pontas mais escuras
+                col = mulc(col, 1.0 - 0.12 * endz * (0.5 - 0.5 * math.sin(wph)))                # sulco das rugas
+                mk = smooth(0.35, 0.75, fbm(x * 70 + si * 5, math.cos(th) * 1.4, math.sin(th) * 1.4, 2))         # marcas sutis (defumado)
+                col = lerpc(col, C_SAU_MARK, 0.45 * mk)
+                col = mulc(col, 1 + 0.04 * nz(x * 40, th, si * 3.0))
+                ring.append(mb.add((x, yc + r * math.cos(th), saus_zc(x) + r * math.sin(th)), col))
             rows.append(ring)
         for i in range(len(rows) - 1):
             for k in range(sides):
                 k2 = (k + 1) % sides
                 mb.quad(rows[i][k], rows[i][k2], rows[i + 1][k2], rows[i + 1][k])
-    mat = make_mat("mat_dog_salsicha", rough=0.28, spec=0.7, coat=0.3)
+    mat = make_mat("mat_dog_salsicha", rough=0.30, spec=0.55, coat=0.25)
     return [finish(mb, "dog_salsichas_corpo", [mat], root)]
 
 
@@ -1203,6 +1443,32 @@ def render_all():
     if ok("16"):
         rview(parts, ["dog-cesta", "dog-brioche", "dog-pasta", "dog-salsichas", "dog-molhos"], P("16-dog-tampa-entreaberta"), res, smp,
               az=14, el=14, lens=90, lids={"dog-brioche": 20.0}, box=((-0.12, -0.06, 0.0), (0.12, 0.0, 0.085)), margin=1.02)
+    # refino (LAR-433): vistas de comparacao antes/depois (--tag) e vistas finais do pulled e do Dogalho
+    tg = ARGS.tag
+    if ok("r1"):
+        rview(parts, ["pao", "pasta", "pulled-pernil"], P("01-pulled-pernil-" + tg), res, smp, az=18, el=32, lens=90, margin=1.0,
+              hide=("pao_tampa",))
+    if ok("r2"):
+        rview(parts, ["dog-brioche"], P("02-dog-brioche-" + tg), res, smp, az=30, el=24, lens=85, margin=1.04,
+              lids={"dog-brioche": 64.0})
+    if ok("r3"):
+        rview(parts, ["dog-brioche", "dog-salsichas"], P("03-dog-salsichas-" + tg), res, smp, az=32, el=22, lens=85, margin=1.04,
+              lids={"dog-brioche": "closed"})
+    if ok("r5"):
+        rview(parts, ["tabua", "pao", "pasta", "pulled-pernil", "creme"], P("pulled-montado-aberto"), res, smp, az=22, el=30, lens=62,
+              margin=1.08, lids={"pao": "open"})
+    if ok("r6"):
+        rview(parts, dogs[:6], P("dogalho-aberto"), res, smp, az=22, el=32, lens=62, margin=1.1, fit=["dog-cesta"],
+              lids={"dog-brioche": "open"})
+    if ok("r7"):
+        rview(parts, dogs, P("dogalho-montado"), res, smp, az=24, el=35, lens=62, margin=1.1, fit=["dog-cesta"],
+              lids={"dog-brioche": "closed"})
+    if ok("r8"):
+        rview(parts, ["pao", "pasta", "pulled-pernil", "creme"], P("pulled-tampa-fechada"), res, smp, az=14, el=14, lens=90,
+              lids={"pao": 17.0}, box=((-0.085, -0.060, 0.020), (0.085, 0.0, 0.075)), margin=1.02)
+    if ok("r9"):
+        rview(parts, ["pao", "pulled-pernil"], P("pulled-fechado-sem-queijo"), res, smp, az=24, el=30, lens=62, margin=1.08,
+              lids={"pao": "closed"})
 
 
 # ----------------------------------------------------------------------------
@@ -1293,8 +1559,8 @@ def icon_pulled():
     revolve_oval(mb, [(0.0, 0.0, 0.0), (0.88, 0.0, 0.0), (1.0, -0.004, 0.0035), (1.0, 0.0, 0.0110), (1.0, 0.0025, 0.0150),
                       (1.0, 0.0003, 0.0160), (1.0, -0.0042, 0.0120), (0.86, 0.0, 0.0065), (0.0, 0.0, 0.0065)], A, B, cream)
     put(mb, "icone_travessa", [make_mat("mat_icone_travessa", rough=0.28, spec=0.7, coat=0.3)])
-    # montinho de pernil desfiado
-    rx, ry, hm, z0 = 0.095, 0.064, 0.050, 0.0075
+    # montinho de pernil desfiado (mesmos fios do GLB, um pouco mais grossos para ler a 84 px)
+    rx, ry, hm, z0 = 0.092, 0.062, 0.040, 0.0075
 
     def surf(x, y):
         r2 = (x / rx) ** 2 + (y / ry) ** 2
@@ -1302,10 +1568,10 @@ def icon_pulled():
 
     def clampxy(x, y):
         r = math.hypot(x / rx, y / ry)
-        if r > 1.02:
-            x, y = x / r * 1.02, y / r * 1.02
+        if r > 1.04:
+            x, y = x / r * 1.04, y / r * 1.04
         return x, y
-    rng = random.Random(2468)
+    rng = random.Random(2469)
     cm = MB()
     rings = []
     nrg, nsg = 10, 40
@@ -1315,24 +1581,27 @@ def icon_pulled():
         for k in range(nsg):
             ps = 2 * math.pi * k / nsg
             x, y = f * rx * 0.98 * math.cos(ps), f * ry * 0.98 * math.sin(ps)
-            ring.append(cm.add((x, y, surf(x, y) - 0.003 + 0.0010 * nz(x * 90, y * 90, 2.0)), lerpc(C_PCORE_LO, C_PCORE_HI, 0.5 + 0.5 * nz(x * 60, y * 60, 3.0))))
+            ring.append(cm.add((x, y, surf(x, y) - 0.003 + 0.0010 * nz(x * 90, y * 90, 2.0)),
+                               lerpc(P_SAUCE_LO, P_SAUCE_HI, 0.5 + 0.5 * nz(x * 60, y * 60, 3.0)), uv=(x / 0.03, y / 0.03)))
         rings.append(ring)
     for j in range(nrg):
         for k in range(nsg):
             k2 = (k + 1) % nsg
             cm.quad(rings[j][k], rings[j][k2], rings[j + 1][k2], rings[j + 1][k])
-    fib_c, fib_n = bb.make_fibre_textures()
-    mat = tex_vc_mat("mat_icone_pulled", fib_c, fib_n, 1.0, 0.52, 0.40)
-    put(cm, "icone_pulled_miolo", [mat])
     centers = []
-    for _ in range(150):
+    for _ in range(210):
         a = rng.uniform(0, 6.28)
-        r = math.sqrt(rng.uniform(0, 1.0)) * 0.97
-        centers.append((r * rx * math.cos(a), r * ry * math.sin(a), False))
-    sm = MB()
-    pulled_strips(sm, rng, centers, surf, clampxy, nseg=4, sides=4, len_rng=(0.034, 0.056), wmean_rng=(0.0040, 0.0058), nstr=(3, 5),
-                  layers=(0.0, 0.0012, 0.0024, 0.0040, 0.0056), bend_sd=14.0)
-    put(sm, "icone_pulled_fiapos", [mat])
+        r = math.sqrt(rng.uniform(0, 1.0)) * 0.95
+        centers.append((r * rx * math.cos(a), r * ry * math.sin(a), r > 0.85))
+    pork_pieces(cm, rng, centers, surf, clampxy, k=1.2, lift_k=1.3)
+    blobs = []
+    for _ in range(14):
+        a = rng.uniform(0, 6.28)
+        r = math.sqrt(rng.uniform(0, 1.0)) * 0.8
+        blobs.append((r * rx * math.cos(a), r * ry * math.sin(a)))
+    sauce_blobs(cm, rng, blobs, surf, k=1.3)
+    m_meat, m_glaze = pulled_mats(icon=True)
+    put(cm, "icone_pulled", [m_meat, m_glaze])
 
 
 def icon_brocolis():
@@ -1362,6 +1631,46 @@ def icon_brioche():
     for r in roots:
         r.rotation_mode = "XYZ"
         r.rotation_euler = (0, 0, math.radians(-14))
+
+
+def garlic_clove(mb, L=0.030, W=0.0085, seed=0.0, bend=0.20):
+    """(mesma funcao de build_extras.py) Dente de alho deitado sobre o lado reto (secao em D), base larga com a raizinha, ponta fina, leve meia-lua,
+    casca marfim com estrias arroxeadas. Eixo do dente em +x (base em x = 0), apoiado em z = 0."""
+    na, nt = 20, 22
+    ivory, ivory2 = hexc("#F6EEDF"), hexc("#EFE2CB")
+    vio, root, tipc = hexc("#C9A9BE"), hexc("#B99868"), hexc("#E6D2AA")
+    rows, pts = [], []
+    for i in range(na + 1):
+        a = i / na
+        R = W * (0.62 + 0.38 * smooth(0.0, 0.30, a)) * max(0.0, 1.0 - smooth(0.40, 1.0, a)) ** 0.8
+        ay = bend * L * (a - a * a) * 1.2
+        ring = []
+        for k in range(nt):
+            th = 2 * math.pi * k / nt
+            c, sn = math.cos(th), math.sin(th)
+            ry = R * (1.0 if sn > 0 else 0.50)
+            fac = 1 + 0.035 * math.sin(5 * th + seed)
+            ring.append((L * a, ay + sn * ry * fac, c * R * 0.86 * fac, th, a))
+        rows.append(ring)
+        pts += ring
+    ymin = min(p[1] for p in pts)
+    idx = []
+    for ring in rows:
+        r2 = []
+        for (x, y, z, th, a) in ring:
+            st = smooth(0.50, 1.0, 0.5 + 0.5 * math.sin(7 * th + seed * 3.1)) * 0.70 * (1 - smooth(0.6, 0.95, a))
+            col = lerpc(lerpc(ivory, ivory2, 0.5 + 0.5 * bb.nz(x * 200, th, seed)), vio, st)
+            col = lerpc(col, root, smooth(0.10, 0.0, a) * 0.9)
+            col = lerpc(col, tipc, smooth(0.75, 1.0, a) * 0.7)
+            r2.append(mb.add((x, z, y - ymin), col))          # lado reto (y < 0) para baixo
+        idx.append(r2)
+    for i in range(na):
+        for k in range(nt):
+            k2 = (k + 1) % nt
+            mb.quad(idx[i][k], idx[i][k2], idx[i + 1][k2], idx[i + 1][k])
+    c0 = mb.add((0.0, 0.0, -ymin + 0.0), root)
+    for k in range(nt):
+        mb.tri(c0, idx[0][(k + 1) % nt], idx[0][k])
 
 
 def icon_dpasta():
@@ -1403,14 +1712,15 @@ def icon_dpasta():
         for k in range(6):
             pm.tri(ctr, ring[k], ring[(k + 1) % 6])
     put(pm, "icone_pasta", [make_mat("mat_icone_pasta", rough=0.38, spec=0.6)])
-    # dentes de alho ao lado
+    # dentes de alho ao lado (LAR-433: dentes com forma de dente, nao bolinhas)
     gm = MB()
-    for (x, y, yaw, ln) in ((0.052, -0.020, 0.7, 1.0), (0.058, 0.010, -0.5, 0.9), (0.040, -0.046, 1.9, 0.85)):
+    for (L, W, yaw, x, y, sd) in ((0.031, 0.0092, math.radians(205), 0.036, -0.041, 1.0),
+                                  (0.029, 0.0086, math.radians(250), 0.052, -0.032, 2.0),
+                                  (0.027, 0.0082, math.radians(296), 0.066, -0.020, 3.0)):
         i0 = len(gm.v)
-        gp = [(0.0, -0.014), (0.0075, -0.0115), (0.0108, -0.004), (0.0098, 0.0045), (0.0058, 0.0115), (0.0018, 0.0165), (0.0, 0.0185)]
-        lathe(gm, [(r * ln, a * ln) for (r, a) in gp], (0, 0, 0), "x", 1, 14, hexc("#F3ECDD"))
-        xf(gm, i0, lambda p, x=x, y=y, yaw=yaw: rot_z(yaw)(p) + Vector((x, y, 0.0105)))
-    put(gm, "icone_alho", [make_mat("mat_icone_alho", rough=0.35, spec=0.5)])
+        garlic_clove(gm, L, W, sd)
+        xf(gm, i0, lambda p, x=x, y=y, yaw=yaw: shift(x, y, 0.0)(rot_z(yaw)(p)))
+    put(gm, "icone_alho", [make_mat("mat_icone_alho", rough=0.42, spec=0.45, coat=0.15)])
 
 
 def icon_salsichas():
