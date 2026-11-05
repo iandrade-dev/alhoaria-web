@@ -293,6 +293,6 @@ export default function CenaBancada3D({ estado, orientacao, destacado, aoTermina
       <Suspense fallback={null}><Modelos estado={estado} destacado={destacado} aoTerminar={aoTerminar} /><Pronto onReady={() => setReady(true)} /></Suspense>
       <ContactShadows position={[0, -0.036, 0]} opacity={0.35} scale={1.2} blur={2.5} far={0.2} color="#130c09" />
     </Canvas>}
-    {!failed && <button type="button" onClick={() => voltar.current()} className="absolute bottom-2 right-2 z-30 flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-full border border-[#e4b684] bg-[#37251f]/90 px-3 font-sans text-[11px] font-bold text-osso sm:text-sm"><span aria-hidden="true">⟲</span> Ver de frente</button>}
+    {!failed && <button type="button" onClick={() => voltar.current()} className={`absolute right-2 z-30 ${orientacao === "retrato" && estado.passoAtual >= 6 ? "top-2" : "bottom-2"} flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-full border border-[#e4b684] bg-[#37251f]/90 px-3 font-sans text-[11px] font-bold text-osso sm:text-sm`}><span aria-hidden="true">⟲</span> Ver de frente</button>}
   </div>;
 }
