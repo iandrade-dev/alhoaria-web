@@ -422,9 +422,15 @@ export default function CenaBancada3D({ estado, reduzido, destacado, bloqueado, 
   const receita = receitaDe(estado)!;
   const fase: Fase = estado.tela === "final" ? "final" : estado.tela === "montar" ? "montar" : "mesa";
   const camera = useMemo(() => ({ position: [0.19, 0.4, 0.63] as [number, number, number], near: 0.01, far: 4 }), []);
+  // Perda de contexto só conta como falha enquanto a cena está montada: ao desmontar (ex.: "Montar outro"),
+  // o próprio R3F força a perda do contexto, e isso não pode mandar a bancada para o modo sem 3D.
+  const falhar = useRef(aoFalhar);
+  falhar.current = aoFalhar;
+  const montada = useRef(true);
+  useEffect(() => { montada.current = true; return () => { montada.current = false; }; }, []);
   return <div className="absolute inset-0 overflow-hidden bg-[radial-gradient(ellipse_at_50%_45%,#33231d,#1a1210)]">
     <Canvas className="relative" dpr={[1, 2]} camera={camera} orthographic shadows="percentage" style={{ touchAction: "none" }}
-      onCreated={({ gl }) => { gl.domElement.addEventListener("webglcontextlost", aoFalhar, { once: true }); }}>
+      onCreated={({ gl }) => { gl.domElement.addEventListener("webglcontextlost", () => { if (montada.current) falhar.current(); }, { once: true }); }}>
       <Camera fase={fase} dog={receita.id === "dogalho"} bloqueado={bloqueado} aoMudarZona={aoMudarZona} voltar={voltar} />
       <color attach="background" args={["#1c1411"]} />
       <ambientLight intensity={1.8} color="#fff0dc" />
