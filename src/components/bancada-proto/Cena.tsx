@@ -17,8 +17,10 @@ import {
 import { CAMERAS, ESTACOES, MESA, arranjoDe, fovPara, type Arranjo, type EstacaoId, type Passo } from "./layout";
 
 const ROOT = "/assets/models/bancada/";
+// Arquivos em public/assets/models/bancada/ (contrato no blender/bancada3d/README.md). A mão é o mao-luva.glb.
+const ARQUIVOS = ["tabua.glb", "pao.glb", "pasta.glb", "costela.glb", "creme.glb", "mussarela.glb", "gratinado.glb", "macarico-mao.glb", "mao-luva.glb", "bisnaga.glb", "pote-creme.glb"] as const;
+const NOMES = ARQUIVOS.map((a) => a.replace(/\.glb$/, "")) as unknown as readonly ["tabua", "pao", "pasta", "costela", "creme", "mussarela", "gratinado", "macarico-mao", "mao-luva", "bisnaga", "pote-creme"];
 const glb = (n: string) => `${ROOT}${n}.glb`;
-const NOMES = ["tabua", "pao", "pasta", "costela", "creme", "mussarela", "gratinado", "macarico-mao", "mao-luva", "bisnaga", "pote-creme"] as const;
 useGLTF.setDecoderPath("/draco/");
 export const preCarregar = () => NOMES.forEach((n) => useGLTF.preload(glb(n)));
 
