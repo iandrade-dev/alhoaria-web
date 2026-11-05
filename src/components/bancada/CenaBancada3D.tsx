@@ -1,9 +1,10 @@
 "use client";
 
-import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ElementRef, type MutableRefObject } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { ContactShadows, useGLTF } from "@react-three/drei";
-import { MathUtils, Mesh, Plane, Vector3, type Material } from "three";
+import { ContactShadows, OrbitControls, useGLTF } from "@react-three/drei";
+import { Box3, MathUtils, Mesh, Plane, Spherical, Vector3, type Material } from "three";
+import { layouts, type Ponto } from "./layout";
 import type { EstadoBancada, PassoId } from "./passos";
 
 const ROOT = "/assets/models/bancada/";
@@ -15,10 +16,9 @@ const ease = (n: number) => 1 - Math.pow(1 - clamp(n), 3);
 useGLTF.setDecoderPath("/draco/");
 FILES.forEach((file) => useGLTF.preload(`${ROOT}${file}.glb`));
 
-type Props = { estado: EstadoBancada; orientacao: "retrato" | "paisagem"; destacado: boolean; aoTerminar: () => void };
 type Animation = { id: PassoId; elapsed: number };
 
-function Modelos({ estado, destacado, aoTerminar }: Omit<Props, "orientacao">) {
+function Modelos({ estado, destacado, aoTerminar }: Pick<Props, "estado" | "destacado" | "aoTerminar">) {
   const assets = FILES.map((file) => useGLTF(`${ROOT}${file}.glb`));
   // GLTF's cache is shared; never rotate a cached hinge or change its materials directly.
   const models = useMemo(() => assets.map((asset) => asset.scene.clone(true)), [assets[0], assets[1], assets[2], assets[3], assets[4], assets[5], assets[6], assets[7]]);
@@ -142,17 +142,60 @@ function Modelos({ estado, destacado, aoTerminar }: Omit<Props, "orientacao">) {
   </>;
 }
 
-function Enquadramento({ orientacao, terminou }: { orientacao: Props["orientacao"]; terminou: boolean }) {
+// Default view: 3/4 elevation aimed at the bread (not the board). Orbit limits are relative to it.
+const DIST = new Vector3(0.19, 0.35, 0.63);
+const AZIMUTE0 = Math.atan2(DIST.x, DIST.z);
+const GIRO = MathUtils.degToRad(35);
+const ELEVACAO = [MathUtils.degToRad(20), MathUtils.degToRad(65)] as const;
+const ZOOM = [0.7, 1.6] as const;
+const OCIOSO = 3;
+const VOLTA = 0.8;
+// Bread with the lid open (x ±0.15, z -0.12..0.052, up to ~0.15 m): its projection is the drop zone.
+const PAO = new Box3(new Vector3(-0.15, 0, -0.12), new Vector3(0.15, 0.15, 0.052));
+// The projected box (lid open) is generous; trim it a little so the drop zone stays on the bread.
+const FOLGA = 0.92;
+const POUSO = new Vector3(0, 0.04, 0);
+// Where the scene sits inside the shell (same fractions as the wrapper style below).
+const CANTO = { retrato: { top: 0.36, altura: 0.46 }, paisagem: { top: 0.11, altura: 0.89 } } as const;
+
+export type ZonaCena = { orientacao: Props["orientacao"]; pao: Ponto; raio: Ponto; pouso: Ponto };
+type Props = {
+  estado: EstadoBancada; orientacao: "retrato" | "paisagem"; destacado: boolean; aoTerminar: () => void;
+  bloqueado?: boolean; aoMudarZona?: (zona: ZonaCena) => void;
+};
+
+function Camera({ orientacao, terminou, bloqueado, aoMudarZona, voltar }: { orientacao: Props["orientacao"]; terminou: boolean; bloqueado: boolean; aoMudarZona?: Props["aoMudarZona"]; voltar: MutableRefObject<() => void> }) {
   const { camera, size } = useThree();
+  const controles = useRef<ElementRef<typeof OrbitControls>>(null);
+  const retrato = orientacao === "retrato";
+  const alvoY = retrato ? 0.10 : 0.07;
+  // R3F sets the ortho frustum in CSS pixels; zoom converts to world meters.
+  // Landscape: the canvas spans the whole shell and shows 0.66 m, so the bread is ~65-66% of the left column.
+  const zoomPadrao = size.width / (retrato ? 0.48 : 0.66);
+  const padrao = useRef({ zoom: zoomPadrao, alvo: new Vector3(0, alvoY, 0) });
+  padrao.current.zoom = zoomPadrao; padrao.current.alvo.set(0, alvoY, 0);
+  const ultima = useRef(performance.now() / 1000);
+  const ativo = useRef(false);
+  const volta = useRef<{ t: number; de: Spherical; zoom: number } | null>(null);
+  const ultimaZona = useRef<number[]>([]);
+  const larguraAnterior = useRef(0);
+
+  // Initial / orientation change: back to the default view.
   useLayoutEffect(() => {
-    // Keep the same 3/4 elevation while aiming at the bread, not the board.
-    const retrato = orientacao === "retrato";
-    const alvoY = retrato ? 0.10 : 0.07;
-    camera.position.set(0.19, alvoY + 0.35, 0.63);
+    camera.position.set(0, alvoY, 0).add(DIST);
     camera.lookAt(0, alvoY, 0);
-    // R3F sets the ortho frustum in CSS pixels; zoom converts to world meters.
-    // Landscape: the canvas spans the whole shell and shows 0.66 m, so the bread is ~65-66% of the left column.
-    camera.zoom = size.width / (retrato ? 0.48 : 0.66);
+    camera.zoom = padrao.current.zoom;
+    larguraAnterior.current = size.width;
+    volta.current = null;
+    controles.current?.target.set(0, alvoY, 0);
+    controles.current?.update();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [camera, orientacao]);
+
+  // Resize: keep the user's view, only rescale the zoom with the width.
+  useLayoutEffect(() => {
+    if (larguraAnterior.current && larguraAnterior.current !== size.width) camera.zoom *= size.width / larguraAnterior.current;
+    larguraAnterior.current = size.width;
     if (retrato) {
       // Once finished, lift the snack ~36 shell units so the final card sits below it.
       if (terminou) camera.setViewOffset(size.width, size.height, 0, 0.135 * size.height, size.width, size.height);
@@ -162,8 +205,65 @@ function Enquadramento({ orientacao, terminou }: { orientacao: Props["orientacao
       camera.setViewOffset(size.width, size.height, 0.1726 * size.width, -0.0653 * size.height, size.width, size.height);
     }
     camera.updateProjectionMatrix();
-  }, [camera, size.width, size.height, orientacao, terminou]);
-  return null;
+  }, [camera, size.width, size.height, retrato, terminou]);
+
+  const iniciarVolta = useMemo(() => () => {
+    const c = controles.current;
+    if (!c) return;
+    const de = new Spherical().setFromVector3(camera.position.clone().sub(c.target));
+    volta.current = { t: 0, de, zoom: camera.zoom };
+  }, [camera]);
+  voltar.current = iniciarVolta;
+
+  useFrame((_, delta) => {
+    const c = controles.current;
+    if (!c) return;
+    const agora = performance.now() / 1000;
+    const { zoom, alvo } = padrao.current;
+    if (bloqueado || ativo.current) ultima.current = agora;
+    const v = volta.current;
+    if (v) {
+      v.t += delta / VOLTA;
+      const k = ease(v.t);
+      const para = new Spherical().setFromVector3(DIST);
+      const s = new Spherical(MathUtils.lerp(v.de.radius, para.radius, k), MathUtils.lerp(v.de.phi, para.phi, k), MathUtils.lerp(v.de.theta, para.theta, k));
+      camera.position.copy(alvo).add(new Vector3().setFromSpherical(s));
+      camera.zoom = MathUtils.lerp(v.zoom, zoom, k);
+      camera.updateProjectionMatrix();
+      c.update();
+      if (v.t >= 1) volta.current = null;
+    } else if (agora - ultima.current > OCIOSO) {
+      const fora = camera.position.distanceTo(new Vector3().copy(alvo).add(DIST)) > 1e-3 || Math.abs(camera.zoom - zoom) > 1e-3 * zoom;
+      if (fora) iniciarVolta(); else ultima.current = agora;
+    }
+    // Project the bread to shell units for the drop zone / flight target.
+    if (!aoMudarZona) return;
+    const L = layouts[orientacao], q = CANTO[orientacao];
+    const aShell = (p: Vector3): Ponto => {
+      const n = p.clone().project(camera);
+      return { x: (n.x + 1) / 2 * L.largura, y: (q.top + (1 - n.y) / 2 * q.altura) * L.altura };
+    };
+    const xs: number[] = [], ys: number[] = [];
+    for (const x of [PAO.min.x, PAO.max.x]) for (const y of [PAO.min.y, PAO.max.y]) for (const z of [PAO.min.z, PAO.max.z]) {
+      const p = aShell(new Vector3(x, y, z)); xs.push(p.x); ys.push(p.y);
+    }
+    const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+    const pouso = aShell(POUSO);
+    const atual = [x0, x1, y0, y1, pouso.x, pouso.y];
+    const antiga = ultimaZona.current;
+    if (antiga.length && atual.every((n, i) => Math.abs(n - antiga[i]) < 0.05)) return;
+    ultimaZona.current = atual;
+    aoMudarZona({ orientacao, pao: { x: (x0 + x1) / 2, y: (y0 + y1) / 2 }, raio: { x: (x1 - x0) / 2 * FOLGA, y: (y1 - y0) / 2 * FOLGA }, pouso });
+  });
+
+  return <OrbitControls ref={controles} makeDefault enabled={!bloqueado} enablePan={false} enableDamping dampingFactor={0.1}
+    enableRotate enableZoom
+    target={[0, alvoY, 0]}
+    minAzimuthAngle={AZIMUTE0 - GIRO} maxAzimuthAngle={AZIMUTE0 + GIRO}
+    minPolarAngle={Math.PI / 2 - ELEVACAO[1]} maxPolarAngle={Math.PI / 2 - ELEVACAO[0]}
+    minZoom={zoomPadrao * ZOOM[0]} maxZoom={zoomPadrao * ZOOM[1]}
+    onStart={() => { ativo.current = true; ultima.current = performance.now() / 1000; volta.current = null; }}
+    onEnd={() => { ativo.current = false; ultima.current = performance.now() / 1000; }} />;
 }
 
 function Pronto({ onReady }: { onReady: () => void }) {
@@ -171,7 +271,8 @@ function Pronto({ onReady }: { onReady: () => void }) {
   return null;
 }
 
-export default function CenaBancada3D({ estado, orientacao, destacado, aoTerminar }: Props) {
+export default function CenaBancada3D({ estado, orientacao, destacado, aoTerminar, bloqueado = false, aoMudarZona }: Props) {
+  const voltar = useRef<() => void>(() => {});
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -181,10 +282,10 @@ export default function CenaBancada3D({ estado, orientacao, destacado, aoTermina
   const camera = useMemo(() => ({ position: [0.19, 0.48, 0.63] as [number, number, number], near: 0.01, far: 4 }), []);
   return <div className="absolute overflow-hidden bg-[radial-gradient(ellipse_at_50%_45%,#33231d,#1a1210)]" style={orientacao === "retrato" ? { left: 0, top: "36%", width: "100%", height: "46%" } : { left: 0, top: "11%", width: "100%", height: "89%" }}>
     {(!ready || failed) && <div className="absolute inset-0 bg-cover bg-center opacity-45" style={{ backgroundImage: "url('/assets/bancada/lanche-pronto.webp')" }} aria-hidden="true" />}
-    {failed ? null : <Canvas className="relative" dpr={[1, 2]} camera={camera} orthographic shadows="percentage" onCreated={({ gl }) => {
+    {failed ? null : <Canvas className="relative" dpr={[1, 2]} camera={camera} orthographic shadows="percentage" style={{ touchAction: "none" }} onCreated={({ gl }) => {
       gl.domElement.addEventListener("webglcontextlost", () => setFailed(true), { once: true });
     }}>
-      <Enquadramento orientacao={orientacao} terminou={estado.passoAtual >= 6} />
+      <Camera orientacao={orientacao} terminou={estado.passoAtual >= 6} bloqueado={bloqueado} aoMudarZona={aoMudarZona} voltar={voltar} />
       <color attach="background" args={["#241914"]} />
       <ambientLight intensity={1.8} color="#fff0dc" />
       <directionalLight position={[-0.3, 0.8, 0.48]} intensity={3.1} color="#ffe0b0" castShadow shadow-mapSize={[1024, 1024]} shadow-bias={-0.00015} shadow-radius={4} />
@@ -192,5 +293,6 @@ export default function CenaBancada3D({ estado, orientacao, destacado, aoTermina
       <Suspense fallback={null}><Modelos estado={estado} destacado={destacado} aoTerminar={aoTerminar} /><Pronto onReady={() => setReady(true)} /></Suspense>
       <ContactShadows position={[0, -0.036, 0]} opacity={0.35} scale={1.2} blur={2.5} far={0.2} color="#130c09" />
     </Canvas>}
+    {!failed && <button type="button" onClick={() => voltar.current()} className="absolute bottom-2 right-2 z-30 flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-full border border-[#e4b684] bg-[#37251f]/90 px-3 font-sans text-[11px] font-bold text-osso sm:text-sm"><span aria-hidden="true">⟲</span> Ver de frente</button>}
   </div>;
 }

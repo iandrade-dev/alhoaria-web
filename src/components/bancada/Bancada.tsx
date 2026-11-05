@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 import { PEDIDO_URL } from "@/lib/links";
 
+import type { ZonaCena } from "./CenaBancada3D";
 const CenaBancada3D = dynamic(() => import("./CenaBancada3D"), { ssr: false });
 import IconeIngrediente from "./IconeIngrediente";
 import { layouts, type LayoutBancada, type Ponto } from "./layout";
@@ -28,6 +29,7 @@ export default function Bancada() {
   const [previa, setPrevia] = useState(false);
   const [suporte, setSuporte] = useState<"neutro" | "3d" | "poster">("neutro");
   const quadro = useRef<HTMLDivElement>(null);
+  const zona = useRef<ZonaCena | null>(null);
   const drag = useRef<Arrasto | null>(null);
   const vooId = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -79,7 +81,9 @@ export default function Bancada() {
     if (!rect) return layout.bandeja;
     return { x: (e.clientX - rect.left) / rect.width * layout.largura, y: (e.clientY - rect.top) / rect.height * layout.altura };
   };
-  const dentro = (p: Ponto) => Math.abs(p.x - layout.pao.x) <= layout.raio.x && Math.abs(p.y - layout.pao.y) <= layout.raio.y;
+  // The scene reports where the bread is on screen for the current camera; the layout constants are the fallback.
+  const alvo = () => zona.current?.orientacao === orientacao ? zona.current : layout;
+  const dentro = (p: Ponto) => { const z = alvo(); return Math.abs(p.x - z.pao.x) <= z.raio.x && Math.abs(p.y - z.pao.y) <= z.raio.y; };
   const agendarAnotacao = (id: PassoId) => {
     if (timer.current) clearTimeout(timer.current);
     setAnotacao(id);
@@ -113,7 +117,7 @@ export default function Bancada() {
     vooAtual.current = proximo;
     setVoo(proximo);
   };
-  const toqueMacarico = () => comecarVoo("macarico", layout.bandeja, layout.pouso);
+  const toqueMacarico = () => comecarVoo("macarico", layout.bandeja, alvo().pouso);
   const iniciar = (e: ReactPointerEvent<HTMLButtonElement>, tipo: PassoId) => {
     if (estado.animando || vooAtual.current || terminou) return;
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -139,9 +143,9 @@ export default function Bancada() {
     drag.current = null; setArrasto(null); setPrevia(false);
     if (!d.iniciou) {
       if (d.tipo === "macarico") toqueMacarico();
-      else comecarVoo(d.tipo, layout.bandeja, layout.pouso);
+      else comecarVoo(d.tipo, layout.bandeja, alvo().pouso);
     } else if (dentro(d.ponto)) {
-      comecarVoo(d.tipo, d.ponto, layout.pouso);
+      comecarVoo(d.tipo, d.ponto, alvo().pouso);
     } else comecarVoo(d.tipo, d.ponto, layout.bandeja, true);
   };
   const cancelar = () => { drag.current = null; setArrasto(null); setPrevia(false); };
@@ -157,7 +161,7 @@ export default function Bancada() {
       <header className="mb-4 text-center sm:mb-7"><h2 className="font-display text-4xl uppercase leading-none sm:text-6xl">Monte o seu</h2><p className="font-hand text-2xl text-madeira sm:text-3xl">do seu jeito, na nossa bancada</p></header>
       <div ref={quadro} className="relative mx-auto aspect-[400/580] w-[min(100%,calc((100svh-var(--header-height)-24px)*400/580))] max-w-[640px] overflow-hidden rounded-xl border border-madeira bg-[#38251e] shadow-[0_18px_40px_rgba(36,24,18,.22)] md:aspect-video md:w-[min(100%,calc((100svh-var(--header-height)-24px)*16/9))] md:max-w-none">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_45%,#33231d,#1a1210)]" role="img" aria-label={terminou ? "Lanche finalizado na bancada da Alhoaria" : `Bancada: ${passo.pedido.toLowerCase()}. ${estado.colocados.size} de 6 etapas prontas.`} />
-        {suporte === "3d" && <CenaBancada3D key={geracao} estado={estado} orientacao={orientacao} destacado={previa} aoTerminar={finalizar} />}
+        {suporte === "3d" && <CenaBancada3D key={geracao} estado={estado} orientacao={orientacao} destacado={previa} aoTerminar={finalizar} bloqueado={!!arrasto?.iniciou} aoMudarZona={(z) => { zona.current = z; }} />}
         {suporte === "poster" && <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-[#1a1210] px-6 text-center text-osso"><img src="/assets/bancada/lanche-pronto.webp" alt="A Costela! pronta na tábua" className="max-h-[55%] w-full max-w-2xl rounded-lg object-contain" /><h3 className="font-display text-3xl">A COSTELA!</h3><p className="max-w-sm font-sans text-sm">Você pode montar com animação em outro dispositivo ou configuração com WebGL e movimento habilitados.</p><a href={PEDIDO_URL} target="_blank" rel="noopener noreferrer" className="flex min-h-11 items-center rounded-lg bg-macarico px-6 font-sans font-bold text-carvao">Peça agora<span className="sr-only"> (abre em nova aba)</span></a></div>}
         {suporte === "3d" && <div aria-hidden="true" className={orientacao === "retrato" ? "absolute inset-x-0 bottom-0 h-[18%] border-t-4 border-[#ddaa72] bg-gradient-to-b from-[#bd8958] to-[#71432f]" : "absolute right-[2%] top-1/2 h-[48%] w-[31%] -translate-y-1/2 rounded-xl border-4 border-[#d2a373] bg-gradient-to-b from-[#bd8958] to-[#71432f]"} />}
         {suporte === "3d" && <>
@@ -172,7 +176,7 @@ export default function Bancada() {
             <button type="button" onClick={reiniciar} className="min-h-11 rounded-full border border-[#e4b684] bg-[#37251f]/95 px-2 font-sans text-[11px] font-bold text-osso sm:px-3 sm:text-sm" aria-label="Recomeçar montagem">⟲ Recomeçar</button>
           </div>
           <div className="absolute z-10 flex -translate-x-1/2 -translate-y-1/2 flex-wrap justify-center gap-1 sm:gap-3" style={posicao(layout.bandeja, layout)}>
-            {passo.opcoes.map((opcao) => <button key={opcao.id} type="button" disabled={estado.animando || !!voo} onPointerDown={(e) => iniciar(e, passo.id)} onPointerMove={mover} onPointerUp={soltar} onPointerCancel={cancelar} onClick={(e) => { if (e.detail === 0 && !estado.animando && !voo) { setInteragiu(true); if (passo.id === "macarico") toqueMacarico(); else comecarVoo(passo.id, layout.bandeja, layout.pouso); } }} aria-label={`${opcao.nome}: toque ou arraste até o pão`} style={{ touchAction: "none" }} className="flex min-h-[90px] min-w-[108px] flex-col items-center justify-center rounded-xl p-1 font-sans text-[13px] font-bold leading-tight text-osso drop-shadow-[0_5px_4px_rgba(30,20,15,.7)] transition-opacity focus-visible:outline focus-visible:outline-2 focus-visible:outline-queijo disabled:opacity-50 md:min-h-[114px] md:min-w-[152px] md:text-sm md:[&_svg]:h-[93px] md:[&_svg]:w-[126px]">
+            {passo.opcoes.map((opcao) => <button key={opcao.id} type="button" disabled={estado.animando || !!voo} onPointerDown={(e) => iniciar(e, passo.id)} onPointerMove={mover} onPointerUp={soltar} onPointerCancel={cancelar} onClick={(e) => { if (e.detail === 0 && !estado.animando && !voo) { setInteragiu(true); if (passo.id === "macarico") toqueMacarico(); else comecarVoo(passo.id, layout.bandeja, alvo().pouso); } }} aria-label={`${opcao.nome}: toque ou arraste até o pão`} style={{ touchAction: "none" }} className="flex min-h-[90px] min-w-[108px] flex-col items-center justify-center rounded-xl p-1 font-sans text-[13px] font-bold leading-tight text-osso drop-shadow-[0_5px_4px_rgba(30,20,15,.7)] transition-opacity focus-visible:outline focus-visible:outline-2 focus-visible:outline-queijo disabled:opacity-50 md:min-h-[114px] md:min-w-[152px] md:text-sm md:[&_svg]:h-[93px] md:[&_svg]:w-[126px]">
               <motion.span animate={!reduzido && !interagiu ? { scale: [1, 1.06, 1] } : { scale: 1 }} transition={{ duration: 1.5, repeat: !interagiu && !reduzido ? Infinity : 0 }} className={arrasto?.tipo === passo.id ? "opacity-35" : ""}><IconeIngrediente tipo={passo.id} /></motion.span><span>{opcao.nome}</span>
             </button>)}
           </div>
