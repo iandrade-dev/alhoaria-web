@@ -98,7 +98,7 @@ export default function Bancada() {
   useEffect(() => {
     const etapa = etapaAtual(estado);
     if (estado.animando && etapa && estado.animando === etapa.id) setAnuncio(`${etapa.opcao.nome} colocado na tábua`);
-    else if (estado.animando === "sacola") setAnuncio("Lanche na sacola, pronto pra viagem");
+    else if (estado.animando === "sacola") setAnuncio("Tudo na sacola, pronto pra viagem");
   }, [estado.animando]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const preparar = useCallback((id: LancheId) => { carregarCena().then((m) => m.preCarregar(id)); }, []);

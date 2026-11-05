@@ -33,12 +33,19 @@ const SACOLA_DEPOIS = new Vector3(0, 0, -0.01);
 const PONTA = new Vector3(-0.101, -0.0703, 0);
 const DURACAO: Record<string, number> = { macarico: 2.7, sacola: 2.7, mussarela: 1.1 };
 const duracaoDe = (id: string) => DURACAO[id] ?? 0.94;
+// Sacola: cada item de mesa (porção, depois bebida) gasta ITEM_DUR + ITEM_GAP antes de a sacola fechar.
+const ITEM_DUR = 0.9;
+const ITEM_GAP = 0.3;
+const ITEM_PASSO = ITEM_DUR + ITEM_GAP;
+const T_LANCHE_DENTRO = 1.8;
+const BOCA_ALTA = 0.234 + 0.03;
+const BOCA_FUNDO = 0.234 - 0.05;
 
 type Anim = { id: string; t: number };
 type Zona = { x0: number; y0: number; x1: number; y1: number };
 type Fase = "montar" | "mesa" | "final";
 
-function ItemMesa({ nome, pos, reduzido }: { nome: string; pos: Vector3; reduzido: boolean }) {
+function ItemMesa({ nome, pos, reduzido, alvo }: { nome: string; pos: Vector3; reduzido: boolean; alvo: MutableRefObject<Object3D | null> }) {
   const { scene } = useGLTF(glb(nome));
   const obj = useMemo(() => {
     const c = scene.clone(true);
@@ -55,6 +62,7 @@ function ItemMesa({ nome, pos, reduzido }: { nome: string; pos: Vector3; reduzid
     return c;
   }, [scene]);
   const t = useRef(0);
+  useLayoutEffect(() => { alvo.current = obj; return () => { if (alvo.current === obj) alvo.current = null; }; }, [obj, alvo]);
   useLayoutEffect(() => { t.current = reduzido ? 9 : 0; obj.position.copy(pos).setY(pos.y + (reduzido ? 0 : 0.14)); if (reduzido) obj.position.y = pos.y; }, [obj, pos, reduzido]);
   useFrame((_, dt) => {
     if (t.current >= 0.5) return;
@@ -90,6 +98,15 @@ function Modelos({ estado, reduzido, destacado, aoTerminar }: ModelosProps) {
   const lid = useRef({ cur: OPEN, de: OPEN, para: OPEN, t: 1, dur: 0.6 });
   const fim = useRef(aoTerminar); fim.current = aoTerminar;
   const reduz = useRef(reduzido); reduz.current = reduzido;
+  const beb = BEBIDAS.find((b) => b.id === estado.bebida);
+  const por = PORCOES.find((p) => p.id === estado.porcao);
+  const itemBeb = useRef<Object3D | null>(null);
+  const itemPor = useRef<Object3D | null>(null);
+  // Itens que entram na sacola, na ordem: porção e depois bebida.
+  const itensSacola = () => [
+    por && itemPor.current ? { obj: itemPor.current, pos: POS_PORCAO } : null,
+    beb && itemBeb.current ? { obj: itemBeb.current, pos: POS_BEBIDA } : null,
+  ].filter((x): x is { obj: Object3D; pos: Vector3 } => !!x);
 
   const tampa = useMemo(() => objs[receita.tampa.modelo]?.getObjectByName(receita.tampa.no), [objs, receita]);
   const chama = useMemo(() => objs.macarico?.getObjectByName("chama"), [objs]);
@@ -146,6 +163,13 @@ function Modelos({ estado, reduzido, destacado, aoTerminar }: ModelosProps) {
     }
     // Animação nova.
     if (animando !== ultimo.current) {
+      // Saiu da animação da sacola (fim ou "Mudar algo" no meio): lanche e itens de mesa voltam ao repouso.
+      if (ultimo.current === "sacola" && animando !== "sacola") {
+        if (l) { l.position.set(0, 0, 0); l.scale.set(1, 1, 1); l.visible = !(final && ensacado); }
+        [[itemPor.current, POS_PORCAO], [itemBeb.current, POS_BEBIDA]].forEach(([o, p]) => {
+          if (o instanceof Object3D && p instanceof Vector3) { o.position.copy(p); o.scale.set(1, 1, 1); o.visible = true; }
+        });
+      }
       ultimo.current = animando;
       if (!animando) anim.current = null;
       else if (animando === "tampa") {
@@ -158,6 +182,7 @@ function Modelos({ estado, reduzido, destacado, aoTerminar }: ModelosProps) {
           if (sacolaAberta) sacolaAberta.visible = true;
           if (sacolaFechada) sacolaFechada.visible = false;
           if (l) l.visible = true;
+          itensSacola().forEach(({ obj, pos }) => { obj.position.copy(pos); obj.scale.set(1, 1, 1); obj.visible = true; });
         } else if (objs[animando]) objs[animando].visible = true;
         if (animando === "macarico" && objs.macarico) { objs.macarico.visible = true; clip.constant = -0.4; }
       }
@@ -195,16 +220,30 @@ function Modelos({ estado, reduzido, destacado, aoTerminar }: ModelosProps) {
     } else if (a.id === "sacola") {
       const l = lanche.current!, sac = objs.sacola;
       const TOPO = 0.234;
-      // 0-0,8 sobe e encolhe; 0,8-1,3 vai até a boca; 1,3-1,8 desce; 1,8 fecha; 2,0-2,7 a sacola vem para a tábua.
+      const itens = itensSacola();
+      const T = T_LANCHE_DENTRO + itens.length * ITEM_PASSO; // instante em que a sacola fecha
+      // 0-0,8 sobe e encolhe; 0,8-1,3 vai até a boca; 1,3-1,8 desce; depois porção e bebida, um de cada vez; fecha; 0,2 s depois a sacola vem para a tábua.
       const up = ease(t / 0.8), over = easeIO((t - 0.8) / 0.5), down = easeIO((t - 1.3) / 0.5);
       l.scale.setScalar(MathUtils.lerp(1, 0.34, up));
       l.position.set(SACOLA_ANTES.x * over, MathUtils.lerp(0, TOPO + 0.075, up) * (1 - down) + (TOPO - 0.05) * down, SACOLA_ANTES.z * over);
       l.visible = t < 1.78;
-      const fechada = t >= 1.8;
+      itens.forEach(({ obj, pos }, i) => {
+        const u = t - (T_LANCHE_DENTRO + ITEM_GAP + i * ITEM_PASSO);
+        if (u < 0) return;
+        const iu = ease(u / 0.3), io = easeIO((u - 0.3) / 0.3), id = easeIO((u - 0.6) / 0.3);
+        obj.scale.setScalar(MathUtils.lerp(1, 0.34, iu));
+        obj.position.set(
+          MathUtils.lerp(pos.x, SACOLA_ANTES.x, io),
+          MathUtils.lerp(MathUtils.lerp(pos.y, BOCA_ALTA, iu), BOCA_FUNDO, id),
+          MathUtils.lerp(pos.z, SACOLA_ANTES.z, io),
+        );
+        obj.visible = u < ITEM_DUR - 0.02;
+      });
+      const fechada = t >= T;
       if (sacolaAberta) sacolaAberta.visible = !fechada;
       if (sacolaFechada) sacolaFechada.visible = fechada;
-      sac.position.lerpVectors(SACOLA_ANTES, SACOLA_DEPOIS, easeIO((t - 2.0) / 0.7));
-      const sq = Math.sin(Math.PI * clamp((t - 1.8) / 0.25)) * 0.04;
+      sac.position.lerpVectors(SACOLA_ANTES, SACOLA_DEPOIS, easeIO((t - T - 0.2) / 0.7));
+      const sq = Math.sin(Math.PI * clamp((t - T) / 0.25)) * 0.04;
       sac.scale.set(1 + sq, 1 - sq, 1 + sq);
     } else if (o) {
       if (a.id === "pao" || a.id === "dog-brioche") {
@@ -222,7 +261,7 @@ function Modelos({ estado, reduzido, destacado, aoTerminar }: ModelosProps) {
         o.scale.set(1 + sq * 0.5, 1 - sq, 1 + sq * 0.5);
       }
     }
-    if (t >= duracaoDe(a.id)) {
+    if (t >= (a.id === "sacola" ? duracaoDe(a.id) + itensSacola().length * ITEM_PASSO : duracaoDe(a.id))) {
       anim.current = null;
       if (a.id === "macarico") { objs.macarico.visible = false; objs.macarico.position.set(0.6, 0, 0); if (chama) chama.visible = false; clip.constant = 1; }
       else if (a.id === "sacola") {
@@ -231,6 +270,7 @@ function Modelos({ estado, reduzido, destacado, aoTerminar }: ModelosProps) {
         objs.sacola.position.copy(SACOLA_DEPOIS); objs.sacola.scale.set(1, 1, 1);
         if (sacolaAberta) sacolaAberta.visible = false;
         if (sacolaFechada) sacolaFechada.visible = true;
+        itensSacola().forEach(({ obj }) => { obj.visible = false; });
       } else if (o) { o.position.set(0, 0, 0); o.scale.set(1, 1, 1); }
       fim.current();
     }
@@ -239,8 +279,8 @@ function Modelos({ estado, reduzido, destacado, aoTerminar }: ModelosProps) {
   const dog = !pao;
   const mostraBeb = estado.tela === "bebida" || estado.tela === "porcao" || estado.tela === "final";
   const mostraPor = estado.tela === "porcao" || estado.tela === "final";
-  const beb = BEBIDAS.find((b) => b.id === estado.bebida);
-  const por = PORCOES.find((p) => p.id === estado.porcao);
+  // Com o lanche ensacado no final, a mesa fica só com a tábua e a sacola fechada.
+  const mesaVazia = estado.tela === "final" && estado.ensacado;
   return <>
     <primitive object={objs.tabua} />
     <group ref={lanche}>
@@ -250,8 +290,8 @@ function Modelos({ estado, reduzido, destacado, aoTerminar }: ModelosProps) {
     </group>
     {objs.macarico && <primitive object={objs.macarico} />}
     <primitive object={objs.sacola} />
-    {mostraBeb && beb && <Suspense fallback={null}><ItemMesa key={beb.icone} nome={beb.icone} pos={POS_BEBIDA} reduzido={reduzido} /></Suspense>}
-    {mostraPor && por && <Suspense fallback={null}><ItemMesa key={por.icone} nome={por.icone} pos={POS_PORCAO} reduzido={reduzido} /></Suspense>}
+    {mostraBeb && !mesaVazia && beb && <Suspense fallback={null}><ItemMesa key={beb.icone} nome={beb.icone} pos={POS_BEBIDA} reduzido={reduzido} alvo={itemBeb} /></Suspense>}
+    {mostraPor && !mesaVazia && por && <Suspense fallback={null}><ItemMesa key={por.icone} nome={por.icone} pos={POS_PORCAO} reduzido={reduzido} alvo={itemPor} /></Suspense>}
     {destacado && <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.004, 0]} scale={[dog ? 1.3 : 1.15, dog ? 0.8 : 0.78, 1]}><ringGeometry args={[0.145, 0.16, 64]} /><meshBasicMaterial color="#ffd37d" transparent opacity={0.6} depthWrite={false} /></mesh>}
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, MESA_Y - 0.0005, 0]} receiveShadow>
       <circleGeometry args={[1.6, 64]} /><meshStandardMaterial color="#1a120e" roughness={1} metalness={0} />

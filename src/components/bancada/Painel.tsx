@@ -139,7 +139,7 @@ export function PainelFinal({ estado, enviar, copia, aoCopiar, textoManual }: { 
   return <>
     <div>
       <h2 className="font-display text-[32px] font-normal uppercase leading-none text-[#fff8e7] min-[900px]:text-[42px]">{r.nome.replace(/!$/, "")}!</h2>
-      <p className="mt-[3px] font-hand text-[22px] leading-[1.1] text-[#e8b84a] min-[900px]:text-[26px]">pronto pra viagem, do jeito da casa</p>
+      <p className="mt-[3px] font-hand text-[22px] leading-[1.1] text-[#e8b84a] min-[900px]:text-[26px]">tudo na sacola, pronto pra viagem</p>
     </div>
     <dl data-testid="resumo" className="m-0 grid grid-cols-[78px_minmax(0,1fr)] gap-x-3 gap-y-1.5 border-y border-[#3b2e27] py-2.5 text-[13.5px] leading-[1.35] min-[900px]:grid-cols-[90px_minmax(0,1fr)] min-[900px]:gap-y-2 min-[900px]:py-3 min-[900px]:text-[15px]">
       <dt className="font-medium text-[#fff8e7]/60">Lanche</dt>
