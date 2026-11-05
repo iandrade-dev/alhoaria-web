@@ -115,3 +115,67 @@ Poster: `lanche-pronto.webp`, 112 KB (<= 200 KB).
   laranja com capa traseira preta, botão vermelho, gatilho (superelipsoide), bico em tubo curvo e cabeça do queimador.
 - Funções analíticas compartilhadas (`bprof`, `zouter`, `zface`, `zunder`, `pile`, `surf_z`) garantem que todas as
   camadas encaixem.
+
+## Extras da Costela: sacola kraft, maçarico de mão e ícones (LAR-431)
+
+Script: `build_extras.py` (importa funções de `build_bancada.py` sem executá-lo; não altera nem regenera os GLBs antigos).
+
+```
+blender.exe -b --factory-startup -P blender/bancada3d/build_extras.py -- [--renders DIR] [--only models,icons,renders] [--quick]
+```
+
+Saídas: `public/assets/models/bancada/sacola.glb`, `public/assets/models/bancada/macarico-mao.glb`,
+`public/assets/bancada/icones/{pao,pasta,costela,creme,mussarela,macarico,sacola}.webp` (512x512 com alfa) e, fora do repo,
+`DIR/00-icones.png` (folha de contato), `01-sacola-fechada.png`, `02-sacola-aberta.png`, `03-macarico-mao.png`,
+`04-macarico-chama.png`, `05-cena-com-sacola.png` (padrão de DIR: `\wsl.localhost\ubuntu\home\igor\orq\runs\lar-431-extras\renders`).
+
+### sacola.glb
+
+- Raiz `sacola` com dois filhos, `sacola_fechada` e `sacola_aberta`, sobrepostos na mesma origem (mostre um e esconda o outro).
+  Item de mesa: centrado em x = 0, z = 0, apoiado em y = 0. Medidas: 0,18 m (x) x 0,11 m (z) x 0,262 m de altura;
+  a **frente** (com a estampa) é o lado **+z** do glTF.
+- `sacola_fechada`: topo achatado e dobrado duas vezes (vincos em y = 0,205 e 0,2335) com etiqueta branca sobre a dobra
+  (meshes `sacola_fechada_frente`, `_corpo`, `_etiqueta`, `_etiqueta_tinta`). `sacola_aberta`: mesmo saco com a boca aberta, casca
+  fina com face interna (`sacola_aberta_frente`, `sacola_aberta_corpo`).
+- Estampa na frente: selo circular com o "A" de xilogravura, queijo, pão e alho, e **ALHOARIA** em caixa alta serifada,
+  desenhados por script (numpy, sem fonte externa; refs `refs/ig-profile-shot.png` e `refs/logo-anota.jpg`) numa textura
+  352x512 que cobre a frente inteira (x de -0,09 a 0,09, y de 0 a 0,262; UV planar). O resto usa uma textura de fibra de
+  papel 256x256 (ladrilho de 0,06 m). Cores de vértice (`COLOR_0`) trazem o kraft e o sombreado dos vincos; materiais
+  Principled simples, sem transparência.
+- Os vincos (ondulação de ~1 mm, sulcos da dobra e prega lateral) são geometria; a estampa é textura.
+
+### macarico-mao.glb
+
+- Raiz `macarico_mao` (corpo em 5 meshes `maca_*`) + filho `chama` separado (mostrar/esconder). **Já está na posição de
+  uso**: deitado, inclinado 35° para baixo, bico para -X e para baixo (cartucho laranja `#FF6A1A` com faixa preta, cabeça preta
+  com gatilho e trava vermelha, bico de aço reto e fino com anel, queimador). Comprimento ~0,22 m.
+- Origem no centro aproximado do maçarico (média dos vértices do corpo). Coordenadas locais em glTF (x, y, z):
+  **ponta do bico** (fim do queimador) = **(-0,1010; -0,0703; 0,0000)**; direção do bico = (-0,8192; -0,5736; 0).
+  A `chama` (cone com leve torção, azul no bico e laranja na ponta, materiais emissivos, ~0,078 m) começa 3,5 mm depois da
+  ponta, na mesma direção. Para mirar a chama num ponto P, posicione o nó raiz em P - ponta (sem girar).
+- Fica fora da `tabua`/lanche (não é item de mesa): o site o faz entrar voando só na hora de gratinar.
+
+### Ícones da bandeja
+
+WebP 512x512 com alfa, câmera 3/4 de cima, luz quente, item centrado ocupando ~80 % da maior dimensão do quadro
+(enquadramento automático por alfa no script). `pao` (pão inteiro fechado, de `pao.glb`), `pasta` (bisnaga + montinho + alho),
+`costela` (`costela.glb` numa travessa oval), `creme` (pote com creme em espiral), `mussarela` (4 fatias em leque),
+`macarico` (`macarico-mao.glb` com chama), `sacola` (sacola fechada). Recipientes, travessa, fatias e alho existem só para
+o ícone e não são exportados.
+
+### Tamanho e triângulos
+
+| arquivo | tamanho | triângulos |
+|---|---:|---:|
+| sacola.glb | 111.372 B (108,8 KB) | 10.554 |
+| macarico-mao.glb | 25.800 B (25,2 KB) | 6.324 |
+
+| ícone | tamanho |
+|---|---:|
+| pao.webp | 19.910 B |
+| pasta.webp | 14.890 B |
+| costela.webp | 30.674 B |
+| creme.webp | 17.244 B |
+| mussarela.webp | 17.036 B |
+| macarico.webp | 11.560 B |
+| sacola.webp | 29.258 B |
