@@ -142,18 +142,27 @@ function Modelos({ estado, destacado, aoTerminar }: Omit<Props, "orientacao">) {
   </>;
 }
 
-function Enquadramento({ orientacao }: { orientacao: Props["orientacao"] }) {
+function Enquadramento({ orientacao, terminou }: { orientacao: Props["orientacao"]; terminou: boolean }) {
   const { camera, size } = useThree();
   useLayoutEffect(() => {
     // Keep the same 3/4 elevation while aiming at the bread, not the board.
-    const alvoY = orientacao === "retrato" ? 0.10 : 0.17;
+    const retrato = orientacao === "retrato";
+    const alvoY = retrato ? 0.10 : 0.07;
     camera.position.set(0.19, alvoY + 0.35, 0.63);
     camera.lookAt(0, alvoY, 0);
     // R3F sets the ortho frustum in CSS pixels; zoom converts to world meters.
-    // The open lid spans ~70% / ~61% of the portrait / landscape canvas.
-    camera.zoom = size.width / (orientacao === "retrato" ? 0.48 : 0.56);
+    // Landscape: the canvas spans the whole shell and shows 0.66 m, so the bread is ~65-66% of the left column.
+    camera.zoom = size.width / (retrato ? 0.48 : 0.66);
+    if (retrato) {
+      // Once finished, lift the snack ~36 shell units so the final card sits below it.
+      if (terminou) camera.setViewOffset(size.width, size.height, 0, 0.135 * size.height, size.width, size.height);
+      else camera.clearViewOffset();
+    } else {
+      // Slide the view so the bread sits in the left column (0-67% of the shell), between the buttons and the bottom.
+      camera.setViewOffset(size.width, size.height, 0.1726 * size.width, -0.0653 * size.height, size.width, size.height);
+    }
     camera.updateProjectionMatrix();
-  }, [camera, size.width, orientacao]);
+  }, [camera, size.width, size.height, orientacao, terminou]);
   return null;
 }
 
@@ -170,12 +179,12 @@ export default function CenaBancada3D({ estado, orientacao, destacado, aoTermina
   }, [failed, estado.animando, aoTerminar]);
 
   const camera = useMemo(() => ({ position: [0.19, 0.48, 0.63] as [number, number, number], near: 0.01, far: 4 }), []);
-  return <div className="absolute overflow-hidden bg-[radial-gradient(ellipse_at_50%_45%,#33231d,#1a1210)]" style={orientacao === "retrato" ? { left: 0, top: "36%", width: "100%", height: "46%" } : { left: 0, top: "11%", width: "67%", height: "89%" }}>
+  return <div className="absolute overflow-hidden bg-[radial-gradient(ellipse_at_50%_45%,#33231d,#1a1210)]" style={orientacao === "retrato" ? { left: 0, top: "36%", width: "100%", height: "46%" } : { left: 0, top: "11%", width: "100%", height: "89%" }}>
     {(!ready || failed) && <div className="absolute inset-0 bg-cover bg-center opacity-45" style={{ backgroundImage: "url('/assets/bancada/lanche-pronto.webp')" }} aria-hidden="true" />}
     {failed ? null : <Canvas className="relative" dpr={[1, 2]} camera={camera} orthographic shadows="percentage" onCreated={({ gl }) => {
       gl.domElement.addEventListener("webglcontextlost", () => setFailed(true), { once: true });
     }}>
-      <Enquadramento orientacao={orientacao} />
+      <Enquadramento orientacao={orientacao} terminou={estado.passoAtual >= 6} />
       <color attach="background" args={["#241914"]} />
       <ambientLight intensity={1.8} color="#fff0dc" />
       <directionalLight position={[-0.3, 0.8, 0.48]} intensity={3.1} color="#ffe0b0" castShadow shadow-mapSize={[1024, 1024]} shadow-bias={-0.00015} shadow-radius={4} />
