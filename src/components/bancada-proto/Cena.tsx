@@ -11,8 +11,8 @@ import {
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import {
-  ACOES, COSTELA, CREME, DOBRA, MACA, MUSS, OPEN, PASTA, TAMPA, anguloTampa, c01, cremeConcha, eBack, eIO3, eOut3, lerp, mola, pastaBico, pulso, seg,
-  type Medidas, type Pose,
+  ACOES, COSTELA, CREME, MACA, MUSS, OPEN, PASTA, TAMPA, anguloTampa, c01, cremeConcha, duracao, eIO3, eIOs, eOut3, lerp, mola, pastaBico, pegadaDe, pulso, seg,
+  tempoTrabalho, type Medidas, type Pegada, type Pose,
 } from "./acoes";
 import { CAMERAS, ESTACOES, MESA, arranjoDe, fovPara, type Arranjo, type EstacaoId, type Passo } from "./layout";
 
@@ -58,6 +58,18 @@ const OBJ = {
 const CHAMA_DIR = new Vector3(-0.8192, -0.5736, 0);
 const POSE_DE: Record<Passo, Pose> = { pasta: "mao_bisnaga", creme: "mao_colher", costela: "mao_punhado", tampa: "mao_aberta", mussarela: "mao_punhado", macarico: "mao_macarico" };
 const qBase = (p: Pose) => new Quaternion().setFromEuler(new Euler(...POSES[p].base, "YXZ"));
+// Onde a ferramenta assenta quando é solta no ar sobre o lanche: na tábua, à frente e à direita do pão.
+const NA_TABUA = new Vector3(0.15, 0, 0.1);
+/** Põe a ferramenta parada de modo que a mão, com a raiz em `qG`, pegue com o ponto útil em `ponta`. */
+function porParaPegar(f: Object3D, obj: { p: Vector3; q: Quaternion }, qG: Quaternion, ponto: Vector3, ponta: Vector3) {
+  const pG = ponta.clone().sub(ponto.clone().applyQuaternion(qG));
+  f.quaternion.copy(qG).multiply(obj.q);
+  f.position.copy(obj.p).applyQuaternion(qG).add(pG);
+}
+const cubica = (out: Vector3, a: Vector3, b: Vector3, c: Vector3, d: Vector3, k: number) => {
+  const u = 1 - k;
+  return out.set(0, 0, 0).addScaledVector(a, u * u * u).addScaledVector(b, 3 * u * u * k).addScaledVector(c, 3 * u * k * k).addScaledVector(d, k * k * k);
+};
 
 // ---------------------------------------------------------------- utilidades
 function clonar(o: Object3D) {
@@ -136,8 +148,15 @@ function Camara({ arranjo, M }: { arranjo: Arranjo; M: Medidas }) {
 }
 
 // ---------------------------------------------------------------- tudo que é 3D
-type Estacao = { id: EstacaoId; raiz: Group; ferramenta: Object3D | null; casa: { p: Vector3; q: Quaternion }; raio: number; alto: number; mats: { m: MeshStandardMaterial; cor: Color }[]; anel: Mesh; brilho: number };
-type Ativo = { id: Passo; t: number; modo: Modo; p0: Vector3; q0: Quaternion; encP: Vector3; encQ: Quaternion; vel: number; amp: number };
+type Estacao = { id: EstacaoId; raiz: Group; ferramenta: Object3D | null; casa: { p: Vector3; q: Quaternion }; apoio: Vector3; raio: number; alto: number; mats: { m: MeshStandardMaterial; cor: Color }[]; anel: Mesh; brilho: number; luz: number };
+/**
+ * Ação em andamento. Na pegada: a ferramenta vai de (p0,q0) até parar em (pR,qR) — a casa, ou a tábua se foi
+ * solta sobre o lanche —, a mão entra de (pS,qS), pega com a raiz em (pG,qG) e leva até (pW,qW), a pose do começo do trabalho.
+ */
+type Ativo = {
+  id: Passo; t: number; D: number; modo: Modo; vel: number; amp: number; g: Pegada | null;
+  p0: Vector3; q0: Quaternion; pR: Vector3; qR: Quaternion; pS: Vector3; qS: Quaternion; pG: Vector3; qG: Quaternion; pW: Vector3; qW: Quaternion;
+};
 type Mola = { p: Vector3; v: Vector3; alvo: Vector3; k: number; c: number; solta: boolean };
 
 function Mundo({ ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, congelar, arranjo, M }: Props & { arranjo: Arranjo; M: Medidas }) {
@@ -203,13 +222,17 @@ function Mundo({ ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, congela
       anel.rotation.x = -Math.PI / 2; anel.scale.setScalar(raio * 3.1); anel.renderOrder = 2;
       const ms: { m: MeshStandardMaterial; cor: Color }[] = [];
       [raiz, ferramenta].forEach((o) => o && mats(o).forEach((m) => { if (m instanceof MeshStandardMaterial) ms.push({ m, cor: m.color.clone() }); }));
-      return { id, raiz, ferramenta, casa: { p: new Vector3(), q: new Quaternion() }, raio, alto, mats: ms, anel, brilho: 0 };
+      return { id, raiz, ferramenta, casa: { p: new Vector3(), q: new Quaternion() }, apoio: new Vector3(), raio, alto, mats: ms, anel, brilho: 0, luz: 0 };
     };
-    // bisnaga em pé
+    const metal = new MeshStandardMaterial({ color: "#2a2624", roughness: 0.3, metalness: 0.85 });
+    // bisnaga de bico para baixo num suporte, como em lanchonete: a mão pega já na pose de uso
     const bis = new Group(); const bisnaga = clonar(A.bisnaga);
+    const supB = new Mesh(new LatheGeometry([[0, 0], [0.048, 0], [0.048, 0.006], [0.037, 0.01], [0.037, 0.058], [0.0325, 0.058], [0.0325, 0.012], [0, 0.012]].map(([x, y]) => new Vector2(x, y)), 36), metal);
+    supB.castShadow = true; supB.receiveShadow = true; bis.add(supB);
     // pote de creme com a colher
     const pc = new Group(); const pote = clonar(A["pote-creme"]);
     const colher = pote.getObjectByName("colher")!;
+    const colherOrig = { pai: colher.parent!, p: colher.position.clone(), q: colher.quaternion.clone() };
     pc.add(pote);
     // costela numa tigela escura
     const pk = new Group();
@@ -227,58 +250,95 @@ function Mundo({ ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, congela
     ralada.position.y = 0.034; ralada.scale.set(1, 0.42, 1); pm.add(ralada);
     const fMuss = new Mesh(fiapos(60, 0.022, ["#f3dc98", "#f6e4ae", "#ecd085"], 0.016, 0.003, 9), new MeshStandardMaterial({ vertexColors: true, roughness: 0.5 }));
     fMuss.castShadow = true;
-    // maçarico em pé num suporte
+    // maçarico de bico para baixo num coldre (a mão pega quase na pose de uso)
     const ptm = new Group();
-    const sup = new Mesh(new LatheGeometry([[0, 0], [0.045, 0], [0.045, 0.007], [0.026, 0.011], [0.023, 0.05], [0.019, 0.05], [0, 0.02]].map(([x, y]) => new Vector2(x, y)), 32),
-      new MeshStandardMaterial({ color: "#2a2624", roughness: 0.3, metalness: 0.85 }));
+    const sup = new Mesh(new LatheGeometry([[0, 0], [0.045, 0], [0.045, 0.007], [0.026, 0.011], [0.023, 0.05], [0.019, 0.05], [0, 0.02]].map(([x, y]) => new Vector2(x, y)), 32), metal);
     sup.castShadow = true; ptm.add(sup);
     const maca = clonar(A["macarico-mao"]);
-    const chamaSt = maca.getObjectByName("chama"); if (chamaSt) chamaSt.visible = false;
-    maca.rotation.set(0, 0.5, MathUtils.degToRad(-120));
+    maca.getObjectByName("chama")?.removeFromParent();
 
     const lista = {
       pasta: fazer("pasta", bis, bisnaga, 0.04, 0.19),
       creme: fazer("creme", pc, colher, 0.066, 0.08),
       costela: fazer("costela", pk, fCost, 0.075, 0.07),
       mussarela: fazer("mussarela", pm, fMuss, 0.072, 0.06),
-      macarico: fazer("macarico", ptm, maca, 0.05, 0.17),
+      macarico: fazer("macarico", ptm, maca, 0.05, 0.24),
     } as Record<EstacaoId, Estacao>;
     // anel em volta do pão quando a vez é da tampa
     const anelPao = new Mesh(new PlaneGeometry(1, 1), new MeshBasicMaterial({ map: anelTex, transparent: true, depthWrite: false, blending: AdditiveBlending, opacity: 0 }));
     anelPao.rotation.x = -Math.PI / 2; anelPao.position.set(0, 0.0015, 0); anelPao.scale.set(0.5, 0.26, 1); anelPao.renderOrder = 2;
-    return { lista, bisnaga, pote, colher, fCost, fMuss, maca, anelPao, brilhoPao: { v: 0 } };
+    return { lista, bisnaga, pote, colher, colherOrig, fCost, fMuss, maca, anelPao, brilhoPao: { v: 0 } };
   }, [A]);
 
   // Posiciona as estações conforme o arranjo e guarda a "casa" de cada ferramenta (pose no mundo).
   const mundoEst = useRef<Group>(null);
   useLayoutEffect(() => {
     const pos = ESTACOES[arranjo];
-    const { lista, bisnaga, pote, colher, fCost, fMuss, maca } = E;
+    const { lista, bisnaga, pote, colher, colherOrig, fCost, fMuss, maca } = E;
     (Object.keys(lista) as EstacaoId[]).forEach((id) => {
       const st = lista[id];
       const [x, z] = pos[id];
       st.raiz.position.set(x, MESA, z);
       st.anel.position.set(x, MESA + 0.0015, z);
     });
-    bisnaga.position.set(0, 0, 0); bisnaga.rotation.set(0, -0.3, 0);
     lista.pasta.raiz.add(bisnaga);
     pote.rotation.y = -0.7;
     lista.creme.raiz.add(pote);
+    colherOrig.pai.add(colher); colher.position.copy(colherOrig.p); colher.quaternion.copy(colherOrig.q); colher.scale.setScalar(1);
     fCost.position.set(0, 0.075, 0); lista.costela.raiz.add(fCost);
     fMuss.position.set(0, 0.052, 0); lista.mussarela.raiz.add(fMuss);
-    lista.macarico.raiz.add(maca); maca.position.set(0, 0, 0);
-    lista.macarico.raiz.updateMatrixWorld(true);
-    const b = caixa(maca); const r = lista.macarico.raiz.position;
-    maca.position.set(r.x - (b.min.x + b.max.x) / 2, r.y + 0.012 - b.min.y, r.z - (b.min.z + b.max.z) / 2);
+    lista.macarico.raiz.add(maca);
     // casa = pose no mundo; a ferramenta passa a viver solta no grupo do mundo
     const w = mundoEst.current;
     (Object.keys(lista) as EstacaoId[]).forEach((id) => {
       const st = lista[id];
       if (!st.ferramenta) return;
-      if (st.ferramenta.parent !== w) { st.raiz.updateMatrixWorld(true); w?.attach(st.ferramenta); }
-      st.casa.p.copy(st.ferramenta.position); st.casa.q.copy(st.ferramenta.quaternion);
+      st.raiz.updateMatrixWorld(true);
+      if (st.ferramenta.parent !== w) w?.attach(st.ferramenta);
     });
-    void colher;
+    // Casas pensadas para a pegada: a raiz da mão na pegada é casa * (ferramenta na mão)^-1, então cada
+    // ferramenta fica parada numa pose em que a mão chega em pé, do lado direito, sem virar.
+    {
+      // bisnaga: na mão ela já fica de bico para baixo; no suporte, o bico entra no copo
+      const r = lista.pasta.raiz.position;
+      porParaPegar(bisnaga, OBJ.bisnaga, qBase("mao_bisnaga"), new Vector3(...POSES.mao_bisnaga.ponto), new Vector3(r.x, MESA + 0.016, r.z));
+    }
+    {
+      // maçarico: no coldre de bico para baixo, inclinado ~10° (a mão vem de cima e gira para a pose de uso no caminho)
+      const qb = qBase("mao_macarico");
+      const d = CHAMA_DIR.clone().applyQuaternion(qb);
+      const qc = new Quaternion().slerp(new Quaternion().setFromUnitVectors(d, new Vector3(0, -1, 0)), 0.82);
+      const r = lista.macarico.raiz.position;
+      porParaPegar(maca, OBJ.macarico, qc.multiply(qb), new Vector3(...POSES.mao_macarico.ponto), new Vector3(r.x, MESA + 0.024, r.z));
+    }
+    {
+      // colher: continua apoiada no pote como no modelo, só girada em volta do eixo do pote para o cabo
+      // ficar do lado de onde a mão vem
+      const qG0 = colher.quaternion.clone().multiply(OBJ.colher.q.clone().invert());
+      const qd = qBase("mao_colher").multiply(qG0.invert());
+      const psi = 2 * Math.atan2(qd.y, qd.w);
+      const qy = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), psi);
+      const c = lista.creme.raiz.position;
+      colher.position.sub(c).applyQuaternion(qy).add(c);
+      colher.quaternion.premultiply(qy);
+    }
+    {
+      // punhados: o monte não tem frente, então a mão pega girada para o braço ir para a direita e para o
+      // fundo (sem atravessar a frente da cena); no caminho ela gira de volta para a pose de uso
+      const qb = qBase("mao_punhado");
+      const bw = new Vector3(...POSES.mao_punhado.braco).applyQuaternion(qb);
+      const psi = MathUtils.degToRad(40) - Math.atan2(-bw.z, bw.x);
+      const q = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), psi).multiply(qb);
+      fCost.quaternion.copy(q); fMuss.quaternion.copy(q);
+    }
+    (Object.keys(lista) as EstacaoId[]).forEach((id) => {
+      const st = lista[id]; const f = st.ferramenta;
+      if (!f) return;
+      st.casa.p.copy(f.position); st.casa.q.copy(f.quaternion);
+      // apoio: deslocamento da origem até o centro de baixo da caixa (para assentar na tábua)
+      const b = caixa(f);
+      st.apoio.set(f.position.x - (b.min.x + b.max.x) / 2, f.position.y - b.min.y, f.position.z - (b.min.z + b.max.z) / 2);
+    });
     return () => {
       // volta as ferramentas para as raízes, para o próximo arranjo recalcular a casa
       (Object.keys(lista) as EstacaoId[]).forEach((id) => {
@@ -401,11 +461,37 @@ function Mundo({ ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, congela
     outPos.copy(tmpP.ponto).sub(new Vector3(...POSES[ac.pose].ponto).applyQuaternion(outQ));
   };
 
-  const pegarCasa = (id: EstacaoId) => {
-    const st = E.lista[id];
-    const f = st.ferramenta!;
-    return { p: f.position.clone(), q: f.quaternion.clone() };
+  /** Pose da raiz da mão durante a pegada (tempo real t < g.leva). */
+  const pgTmp = useMemo(() => ({ a: new Vector3(), b: new Vector3(), c: new Vector3() }), []);
+  const posePegada = (a: Ativo, g: Pegada, t: number, outPos: Vector3, outQ: Quaternion) => {
+    const sobre = pgTmp.a.copy(a.pG); sobre.y += g.sobre;
+    if (t < g.chega) {
+      // entra de fora desacelerando (ease-out), em arco, e chega por cima da ferramenta
+      const k = t / g.chega, e = eOut3(k);
+      const c1 = pgTmp.b.lerpVectors(a.pS, sobre, 0.45); c1.y += 0.1;
+      const c2 = pgTmp.c.copy(sobre); c2.y += 0.08;
+      cubica(outPos, a.pS, c1, c2, sobre, e);
+      outQ.slerpQuaternions(a.qS, a.qG, e);
+    } else if (t < g.fecha) {
+      // assenta na ferramenta (ou desce no pote) e fica parada um instante: aí fecha
+      outPos.lerpVectors(sobre, a.pG, eIOs(seg(t, g.chega, g.assenta)));
+      outQ.copy(a.qG);
+    } else {
+      // levanta e leva até o começo do trabalho, girando para a orientação de uso (ease in-out)
+      const k = seg(t, g.fecha, g.leva);
+      const c1 = pgTmp.b.copy(a.pG); c1.y += g.ergue;
+      const c2 = pgTmp.c.copy(a.pW); c2.y += 0.06;
+      cubica(outPos, a.pG, c1, c2, a.pW, eIO3(k));
+      outQ.slerpQuaternions(a.qG, a.qW, eIOs(seg(k, 0.06, 0.94)));
+    }
   };
+  /** Pose da raiz da mão no instante real t (sem a inclinação por velocidade). */
+  const poseAcao = (a: Ativo, t: number, outPos: Vector3, outQ: Quaternion) => {
+    if (a.g && t < a.g.leva) posePegada(a, a.g, t, outPos, outQ);
+    else poseMao(a.id, tempoTrabalho(ACOES[a.id], t), a.amp, outPos, outQ);
+  };
+  /** Peso da inclinação por velocidade: zero em volta da pegada, para a troca da ferramenta ser exata. */
+  const pesoLean = (a: Ativo, t: number) => (a.g ? Math.max(1 - seg(t, a.g.chega - 0.16, a.g.chega - 0.02), seg(t, a.g.fecha + 0.04, a.g.fecha + 0.24)) : 1);
 
   useEffect(() => {
     zerar();
@@ -413,28 +499,36 @@ function Mundo({ ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, congela
       acao(id, modo) {
         if (at.current) return;
         const red = opts.current.reduzido;
-        const rap = modo === "auto";
         const ac = ACOES[id];
         const amp = red ? 0 : 1;
-        const vel = rap ? ac.D / 0.62 : red ? ac.D / 0.7 : 1;
-        const encP = new Vector3(), encQ = new Quaternion();
-        let p0 = new Vector3(), q0 = new Quaternion();
-        if (ac.pega !== null && id !== "tampa") {
+        const D = duracao(ac);
+        // auto: ~1,25x a velocidade normal; movimento reduzido: curtas e sem quique
+        const vel = red ? D / 0.8 : modo === "auto" ? 1.25 : 1;
+        const g = pegadaDe(ac);
+        const a: Ativo = {
+          id, t: 0, D, modo, vel, amp, g,
+          p0: new Vector3(), q0: new Quaternion(), pR: new Vector3(), qR: new Quaternion(), pS: new Vector3(), qS: new Quaternion(),
+          pG: new Vector3(), qG: new Quaternion(), pW: new Vector3(), qW: new Quaternion(),
+        };
+        if (g && id !== "tampa") {
           const st = E.lista[id as EstacaoId];
-          const pm = new Vector3(), qm = new Quaternion();
-          poseMao(id, ac.pega, amp, pm, qm);
-          const f = H.fer[id]!;
-          encP.copy(f.position).applyQuaternion(qm).add(pm);
-          encQ.copy(qm).multiply(f.quaternion);
-          const atual = pegarCasa(id as EstacaoId);
-          p0 = atual.p; q0 = atual.q;
+          const f = st.ferramenta!, fer = H.fer[id]!;
+          a.p0.copy(f.position); a.q0.copy(f.quaternion);
+          // solta no ar sobre o lanche: assenta na tábua ao lado do pão; senão volta/fica na casa
+          if (modo === "arraste") a.pR.copy(NA_TABUA).add(st.apoio); else a.pR.copy(st.casa.p);
+          a.qR.copy(st.casa.q);
+          // raiz da mão na pegada: a cópia na mão coincide com a ferramenta parada
+          a.qG.copy(a.qR).multiply(fer.quaternion.clone().invert());
+          a.pG.copy(a.pR).sub(fer.position.clone().applyQuaternion(a.qG));
+          poseMao(id, ac.ini!, amp, a.pW, a.qW);
+          a.pS.set(Math.max(a.pG.x, 0.07) + M.fora.x, a.pG.y + g.sobre + M.fora.y, a.pG.z + M.fora.z);
+          a.qS.setFromAxisAngle(new Vector3(0, 0, 1), -0.12).multiply(a.qG);
           delete molas.current[id as EstacaoId];
-          void st;
         }
         if (id === "pasta") { L.pasta.visible = true; L.clip.pasta.constant = -1; }
         if (id === "creme") { L.creme.visible = true; L.clip.creme.constant = -1; }
         lean.current.ok = false;
-        at.current = { id, t: 0, modo, p0, q0, encP, encQ, vel, amp };
+        at.current = a;
         Object.values(H.poses).forEach((o) => { o.visible = false; });
         H.poses[ac.pose].visible = true;
         Object.values(H.fer).forEach((f) => { if (f) f.visible = false; });
@@ -487,8 +581,13 @@ function Mundo({ ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, congela
       const pul = red ? 0.8 : 0.72 + 0.28 * Math.sin(T * 3.4);
       (st.anel.material as MeshBasicMaterial).opacity = st.brilho * pul * 0.95;
       st.anel.scale.setScalar(st.raio * 3.1 * (1 + (red ? 0 : 0.05 * Math.sin(T * 3.4))));
-      const f = 0.16 + 0.84 * st.brilho;
-      st.mats.forEach(({ m, cor }) => { m.color.copy(cor).multiplyScalar(f); m.emissive.setRGB(0.09, 0.045, 0.012).multiplyScalar(st.brilho * (red ? 0.6 : 0.5 + 0.5 * Math.sin(T * 3.4))); });
+      // a estação da ação em andamento fica com a cor normal: a ferramenta parada tem de bater com a cópia na mão
+      // (o brilho emissivo some sozinho em ~0,5 s, antes da pegada)
+      const emAcao = at.current?.id === id;
+      st.luz += ((alvo || emAcao ? 1 : 0) - st.luz) * Math.min(1, dt * 6);
+      const f = emAcao ? 1 : 0.16 + 0.84 * st.luz;
+      const em = st.brilho * (red ? 0.6 : 0.5 + 0.5 * Math.sin(T * 3.4));
+      st.mats.forEach(({ m, cor }) => { m.color.copy(cor).multiplyScalar(f); m.emissive.setRGB(0.09, 0.045, 0.012).multiplyScalar(em); });
     });
 
     {
@@ -546,39 +645,39 @@ function Mundo({ ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, congela
       const amp = a.amp;
       // mão
       const pos = tmp.b, q = tmp.q;
-      poseMao(a.id, t, amp, pos, q);
+      poseAcao(a, t, pos, q);
+      const tv = tempoTrabalho(ac, t);
       const ln = lean.current;
       if (!ln.ok) { ln.p.copy(pos); ln.v.set(0, 0, 0); ln.ok = true; }
       const vel = tmp.a.copy(pos).sub(ln.p).multiplyScalar(1 / Math.max(dt, 1e-3));
       ln.v.lerp(vel, Math.min(1, dt * 10)); ln.p.copy(pos);
-      if (!red && !(cg && cg.id === a.id)) {
-        tmp.qq.setFromEuler(tmp.e.set(MathUtils.clamp(ln.v.z * 0.35, -0.25, 0.25), 0, MathUtils.clamp(-ln.v.x * 0.3, -0.25, 0.25)));
+      const wl = pesoLean(a, t);
+      if (!red && !(cg && cg.id === a.id) && wl > 0) {
+        tmp.qq.setFromEuler(tmp.e.set(wl * MathUtils.clamp(ln.v.z * 0.35, -0.25, 0.25), 0, wl * MathUtils.clamp(-ln.v.x * 0.3, -0.25, 0.25)));
         // gira em torno do ponto útil: mantém o bico/concha no lugar e inclina o punho
         const pu = new Vector3(...POSES[ac.pose].ponto).applyQuaternion(q).add(pos);
         q.premultiply(tmp.qq);
         pos.copy(pu).sub(new Vector3(...POSES[ac.pose].ponto).applyQuaternion(q));
       }
       H.raiz.position.copy(pos); H.raiz.quaternion.copy(q);
-      // ferramenta: solta/encaixando até a mão pegar
+      // ferramenta: parada (assentando suave se estava no ar) até a mão fechar; aí troca pela cópia na mão,
+      // que nesse instante está exatamente na mesma pose no mundo
       const fer = H.fer[a.id];
-      if (ac.pega !== null && a.id !== "tampa") {
+      if (a.g && a.id !== "tampa") {
         const st = E.lista[a.id as EstacaoId]; const f = st.ferramenta!;
-        if (t < ac.pega) {
-          const tEnc = Math.min(0.4, ac.pega - 0.05);
-          const k = seg(t, 0, tEnc);
-          const ek = amp ? eBack(k, 0.7) : eIO3(k);
+        if (t < a.g.fecha) {
+          const k = eIO3(seg(t, 0, a.g.chega - 0.08));
           f.visible = true; f.scale.setScalar(1);
-          f.position.lerpVectors(a.p0, a.encP, ek);
-          if (a.modo !== "arraste") f.position.y += (amp ? 0.09 : 0.03) * Math.sin(Math.PI * k);
-          f.quaternion.slerpQuaternions(a.q0, a.encQ, eOut3(k));
+          f.position.lerpVectors(a.p0, a.pR, k);
+          f.quaternion.slerpQuaternions(a.q0, a.qR, k);
           if (fer) fer.visible = false;
         } else {
           f.visible = false;
           if (fer) fer.visible = true;
         }
       }
-      efeitos(a.id, t, amp, red);
-      if (t >= ac.D) {
+      efeitos(a.id, tv, amp, red);
+      if (t >= a.D) {
         at.current = null;
         H.raiz.visible = false;
         Object.values(H.fer).forEach((f) => { if (f) { f.visible = false; f.scale.setScalar(1); } });

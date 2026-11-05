@@ -32,11 +32,34 @@ export type Medidas = { pasta: number; costela: number; creme: number; muss: num
 
 export type Acao = {
   pose: Pose;
+  /** Duração do trabalho no "tempo do trabalho" (o mesmo de `mao` e dos efeitos). */
   D: number;
-  /** Instante em que a mão pega a ferramenta (a ferramenta solta fica encaixada até lá). null = sem ferramenta. */
-  pega: number | null;
-  /** Ponto útil da mão (bico, concha, soltura, palma) em coordenadas do mundo e inclinação extra (rad). */
+  /** Instante (tempo do trabalho) em que a mão já trouxe a ferramenta e começa a usar. null = sem ferramenta (tampa). */
+  ini: number | null;
+  /** Punhado: a mão desce no pote, fecha e sobe (em vez de assentar na ferramenta). */
+  punhado?: boolean;
+  /** Ponto útil da mão (bico, concha, soltura, palma) em coordenadas do mundo e inclinação extra (rad). Vale de `ini` em diante. */
   mao: (t: number, M: Medidas, amp: number, out: Vector3) => [number, number, number];
+};
+
+/**
+ * Pegada, no tempo real da ação: a mão entra (ease-out) até sobre a ferramenta, assenta nela, fica parada
+ * um instante e fecha (`fecha` = troca da ferramenta parada pela cópia na mão), levanta e leva (ease in-out)
+ * até a posição de trabalho, chegando em `leva`. Sem overshoot em nenhuma dessas fases.
+ */
+export type Pegada = { chega: number; assenta: number; fecha: number; leva: number; sobre: number; ergue: number };
+export const PEGADA: Record<"ferramenta" | "punhado", Pegada> = {
+  ferramenta: { chega: 0.44, assenta: 0.53, fecha: 0.6, leva: 1.04, sobre: 0.014, ergue: 0.075 },
+  punhado: { chega: 0.38, assenta: 0.54, fecha: 0.61, leva: 1.06, sobre: 0.06, ergue: 0.08 },
+};
+export const pegadaDe = (ac: Acao): Pegada | null => (ac.ini === null ? null : ac.punhado ? PEGADA.punhado : PEGADA.ferramenta);
+/** Duração real da ação (pegada + trabalho). */
+export const duracao = (ac: Acao) => { const g = pegadaDe(ac); return g ? g.leva + ac.D - ac.ini! : ac.D; };
+/** Tempo real -> tempo do trabalho. Durante a pegada avança devagar até `ini`. */
+export const tempoTrabalho = (ac: Acao, t: number) => {
+  const g = pegadaDe(ac);
+  if (!g) return t;
+  return t < g.leva ? ac.ini! * (t / g.leva) : ac.ini! + (t - g.leva);
 };
 
 const v = (out: Vector3, x: number, y: number, z: number) => out.set(x, y, z);
@@ -96,7 +119,7 @@ export const MACA = { varre: [0.84, 1.92] as const, x0: -0.135, x1: 0.14, alcanc
 
 export const ACOES: Record<Passo, Acao> = {
   pasta: {
-    pose: "mao_bisnaga", D: 2.12, pega: 0.5,
+    pose: "mao_bisnaga", D: 2.12, ini: PASTA.varre[0],
     mao(t, M, amp, out) {
       const G = tmp.set(0.075, M.pasta + 0.1, 0.035);
       const [a, b] = PASTA.varre;
@@ -111,7 +134,7 @@ export const ACOES: Record<Passo, Acao> = {
     },
   },
   creme: {
-    pose: "mao_colher", D: 2.2, pega: 0.5,
+    pose: "mao_colher", D: 2.2, ini: CREME.varre[0],
     mao(t, M, amp, out) {
       const G = tmp.set(0.07, M.creme + 0.1, 0.03);
       const [a, b] = CREME.varre;
@@ -126,7 +149,7 @@ export const ACOES: Record<Passo, Acao> = {
     },
   },
   costela: {
-    pose: "mao_punhado", D: 2.25, pega: 0.5,
+    pose: "mao_punhado", D: 2.25, ini: COSTELA.solta[0], punhado: true,
     mao(t, M, amp, out) {
       const alto = M.costela + 0.085;
       const G = tmp.set(0.12, alto + 0.03, 0.02);
@@ -148,7 +171,7 @@ export const ACOES: Record<Passo, Acao> = {
     },
   },
   tampa: {
-    pose: "mao_aberta", D: 1.78, pega: null,
+    pose: "mao_aberta", D: 1.78, ini: null,
     mao(t, M, amp, out) {
       const ang = anguloTampa(t, amp);
       const c = contatoTampa(ang, tmp2);
@@ -165,7 +188,7 @@ export const ACOES: Record<Passo, Acao> = {
     },
   },
   mussarela: {
-    pose: "mao_punhado", D: 1.95, pega: 0.5,
+    pose: "mao_punhado", D: 1.95, ini: MUSS.varre[0], punhado: true,
     mao(t, M, amp, out) {
       const alto = M.muss + 0.075;
       const G = tmp.set(0.1, alto + 0.03, 0.02);
@@ -184,7 +207,7 @@ export const ACOES: Record<Passo, Acao> = {
     },
   },
   macarico: {
-    pose: "mao_macarico", D: 2.3, pega: 0.5,
+    pose: "mao_macarico", D: 2.3, ini: MACA.varre[0],
     // aqui o ponto útil é o ALVO da chama (sobre a mussarela); Cena converte para a ponta do bico.
     mao(t, M, amp, out) {
       const G = tmp.set(0.07, M.muss + 0.05, 0.0);
