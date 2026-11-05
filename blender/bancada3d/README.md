@@ -277,3 +277,26 @@ Orçamento: cada GLB ≤ 300 KB e ≤ 20 mil triângulos.
 Renders de revisão (fora do repo): `NN-<lanche>-aberto.png`, `-montado.png` e `-explodido.png` para `pulled`, `brocolis` e
 `dogalho` (`01`..`09`), detalhes `10`..`16` (recheios sem a tampa, topo do Dogalho, cesta, tampa entreaberta) e a folha
 `00-icones.png`.
+
+
+## Acompanhamentos da mesa: bebidas e porções (LAR-431)
+
+Script: `build_acomp.py` (importa utilitários de `build_bancada.py` sem alterá-lo). Gera 5 itens de mesa, 5 ícones de bandeja e os renders de revisão:
+
+```
+blender.exe -b --factory-startup -P blender/bancada3d/build_acomp.py -- [--renders DIR] [--parts a,b|none] [--views 01..05,06,icons|none] [--quick]
+```
+
+Contrato: igual ao resto (GLB, Draco, Y para cima, metros, sem luzes/câmeras). Itens de mesa apoiados em y = 0, nó raiz com o nome do arquivo (hífen vira sublinhado). `beb-chopp`: o eixo do corpo fica na origem (a alça sai para +x); nos demais o centro do conjunto (prato + potinho) fica na origem. Na mesa, a tábua tem ~0,028 m de espessura (mesa em y = -0,028).
+
+Vidro, líquidos, gelo e gotas usam `alphaMode BLEND` (sem transmission). A ordem dos nós no GLB é alfabética; o vidro vem por último. Se houver problema de ordenação no three.js, use `renderOrder`.
+
+| arquivo | tamanho | triângulos | ícone |
+|---|---:|---:|---:|
+| beb-lata.glb | 45.156 B | 8.976 | beb-lata.webp. 13.320 B |
+| beb-chopp.glb | 47.876 B | 14.970 | beb-chopp.webp. 18.488 B |
+| beb-soda.glb | 51.512 B | 13.448 | beb-soda.webp. 17.114 B |
+| porcao-dadinho.glb | 74.544 B | 12.888 | porcao-dadinho.webp. 14.422 B |
+| porcao-batata.glb | 40.824 B | 7.032 | porcao-batata.webp. 18.118 B |
+
+Renders de revisão (fora do repo): `/home/igor/orq/runs/lar-431-acomp/renders/` (`00-icones.png`, `01`..`05` itens, `06-mesa.png`). Ícones: 512x512 WebP com alfa, item ocupando ~80 % do quadro.
