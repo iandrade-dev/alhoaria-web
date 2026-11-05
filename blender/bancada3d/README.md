@@ -401,3 +401,20 @@ laterais um pouco mais tostadas, e se funde com a mussarela nas beiradas. A cor 
 | bisnaga.glb | 15.676 B (15,3 KB) | 5.062 |
 | pote-creme.glb | 31.964 B (31,2 KB) | 10.970 |
 | gratinado.glb | 67.632 B (66,0 KB) | 8.990 (antes: 35.636 B / 11.610) |
+
+## Fundo da bancada gamificada: cozinha escura (LAR-449, protótipo)
+
+Script: `build_cozinha_fundo.py`. Ele não importa nem altera nenhum GLB: modela só o cenário (tampo escuro, parede de
+azulejo preto, prateleira com fita de luz quente, potes e réstias de alho) e renderiza no Cycles com desfoque leve de
+profundidade de campo, sem a tábua e sem as estações (o three.js desenha tudo isso por cima).
+
+```
+blender.exe -b --factory-startup -P blender/bancada3d/build_cozinha_fundo.py -- [--only retrato,paisagem] [--quick] [--q 74] [--out DIR]
+```
+
+Saídas: `public/assets/bancada/proto/cozinha-retrato.webp` (900 × 1600) e `cozinha-paisagem.webp` (1600 × 900), cada
+uma ≤ 180 KB. As câmeras são as mesmas de `src/components/bancada-proto/layout.ts` (`CAMERAS`), convertidas de three
+(x, y para cima, z para a câmera) para Blender (x, -z, y), com fov vertical e o tampo em y = -0,028 (three). Assim o
+tampo do fundo coincide com a mesa do 3D; o site corrige o fov quando a tela recorta a imagem pela largura
+(`fovPara`). Se mudar uma câmera, mude a outra. A prateleira é erguida em cada vista até ficar logo abaixo do topo do
+quadro, para a fita de luz e as réstias aparecerem nas duas.
