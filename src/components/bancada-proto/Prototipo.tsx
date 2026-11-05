@@ -79,7 +79,7 @@ export default function Prototipo() {
     try { navigator.vibrate?.(12); } catch { /* sem vibração */ }
     const prox = PASSOS[i + 1];
     if (!prox) { autoRef.current = false; setAuto(false); return; }
-    if (autoRef.current) setTimeout(() => { if (autoRef.current) disparar(prox, "auto"); }, 110);
+    if (autoRef.current) setTimeout(() => { if (autoRef.current) disparar(prox, "auto"); }, 350);
   }, [disparar]);
 
   const montaPraMim = () => {
