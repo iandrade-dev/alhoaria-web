@@ -121,8 +121,10 @@ Poster: `lanche-pronto.webp`, 112 KB (<= 200 KB).
 Script: `build_extras.py` (importa funções de `build_bancada.py` sem executá-lo; não altera nem regenera os GLBs antigos).
 
 ```
-blender.exe -b --factory-startup -P blender/bancada3d/build_extras.py -- [--renders DIR] [--only models,icons,renders] [--quick]
+blender.exe -b --factory-startup -P blender/bancada3d/build_extras.py -- [--renders DIR] [--only models,icons,renders] [--icons a,b] [--quick]
 ```
+
+`--icons pasta` (por exemplo) gera só esses ícones e não refaz a folha `00-icones.png` (padrão: todos + folha).
 
 Saídas: `public/assets/models/bancada/sacola.glb`, `public/assets/models/bancada/macarico-mao.glb`,
 `public/assets/bancada/icones/{pao,pasta,costela,creme,mussarela,macarico,sacola}.webp` (512x512 com alfa) e, fora do repo,
@@ -158,10 +160,11 @@ Saídas: `public/assets/models/bancada/sacola.glb`, `public/assets/models/bancad
 ### Ícones da bandeja
 
 WebP 512x512 com alfa, câmera 3/4 de cima, luz quente, item centrado ocupando ~80 % da maior dimensão do quadro
-(enquadramento automático por alfa no script). `pao` (pão inteiro fechado, de `pao.glb`), `pasta` (bisnaga + montinho + alho),
+(enquadramento automático por alfa no script). `pao` (pão inteiro fechado, de `pao.glb`), `pasta` (pote de vidro baixo com
+pasta de alho branca e cremosa, topo abaulado com salsinha, e 3 dentes de alho em leque na frente; LAR-433),
 `costela` (`costela.glb` numa travessa oval), `creme` (pote com creme em espiral), `mussarela` (4 fatias em leque),
 `macarico` (`macarico-mao.glb` com chama), `sacola` (sacola fechada). Recipientes, travessa, fatias e alho existem só para
-o ícone e não são exportados.
+o ícone e não são exportados. O vidro do pote é um material semitransparente (alfa 0,22, modo blended), só no ícone.
 
 ### Tamanho e triângulos
 
@@ -173,7 +176,7 @@ o ícone e não são exportados.
 | ícone | tamanho |
 |---|---:|
 | pao.webp | 19.910 B |
-| pasta.webp | 14.890 B |
+| pasta.webp | 24.338 B (LAR-433; antes 14.890 B) |
 | costela.webp | 30.674 B |
 | creme.webp | 17.244 B |
 | mussarela.webp | 17.036 B |
@@ -194,9 +197,15 @@ blender.exe -b --factory-startup -P blender/bancada3d/build_lanches.py -- [opç�
 |---|---|
 | `--renders DIR` | pasta dos PNGs de revisão (padrão: `\\wsl.localhost\ubuntu\home\igor\orq\runs\lar-431-lanches\renders`) |
 | `--parts a,b` | constrói/exporta só essas peças (padrão: todas; `none` não exporta) |
-| `--views 01,08` | renderiza só essas vistas (`01`..`16`; `none` não renderiza) |
+| `--views 01,08` | renderiza só essas vistas (`01`..`16`, `r1`..`r9`; `none` não renderiza) |
 | `--icons a,b` | gera só esses ícones (padrão: todos + folha `00-icones.png`; `none` não gera) |
 | `--quick` | renders de 600 px e poucas amostras (iteração) |
+| `--tag T` | sufixo dos renders de comparação `r1`..`r3` (padrão `depois`; use `--parts none --tag antes` com os GLBs antigos) |
+
+Vistas do refino (LAR-433): `r1` = `01-pulled-pernil-<tag>` (recheio sobre a base, sem tampa), `r2` = `02-dog-brioche-<tag>`
+(tampa a 64°), `r3` = `03-dog-salsichas-<tag>` (brioche fechado com as salsichas), `r5` = `pulled-montado-aberto`,
+`r6` = `dogalho-aberto`, `r7` = `dogalho-montado`, `r8` = `pulled-tampa-fechada` (encaixe, tampa a 17°), `r9` =
+`pulled-fechado-sem-queijo`.
 
 Saídas: `public/assets/models/bancada/{pulled-pernil,brocolis-floretes,dog-*}.glb`, ícones WebP 512x512 com alfa em
 `public/assets/bancada/icones/<id>.webp` e renders de revisão fora do repo.
@@ -207,10 +216,15 @@ Usam o `pao.glb` (base + tampa articulada, ângulo de fechar `+110°` em X, ver 
 `pasta`, `creme`, `mussarela` e `gratinado` existentes. Só o recheio é novo e ocupa o mesmo volume e o mesmo encaixe da
 `costela.glb` sob a tampa fechada.
 
-- `pulled-pernil.glb` (raiz `pulled_pernil`): ~390 fios em ~100 feixes (tubos de 3 lados, 4 trechos, cada fio com curvatura e
-  ondulação próprias) mais pedaços curtos e grossos no meio, sobre um miolo marrom claro irregular (nunca aparece base lisa).
-  Cores `#B4774A`–`#D9A066` com variações acinzentadas, pontas caramelizadas (`#7A3A18`/`#A5481F`), textura de fibras (a mesma
-  da costela, 256 px, cor + normal) multiplicada pela cor de vértice. Mais claro e dourado que a costela.
+- `pulled-pernil.glb` (raiz `pulled_pernil`, LAR-433): ~130 feixes de 2 a 4 fios grossos (3,6–5 mm, seção achatada de 4–5
+  lados) que saem juntos, se curvam em arco ou S, se abrem numa ponta, passam por cima dos vizinhos e às vezes levantam a ponta;
+  ~15 % dos feixes são lascas curtas e largas (8,5–12,5 mm). Tudo sobre um miolo irregular (calombos de carne e molho) no mesmo
+  volume abaulado da costela (`pile`/`surf_z`); cada fio é limitado à cavidade da tampa (`zunder` + 0,9 mm) e o miolo nunca
+  fica abaixo do topo da pasta. Cores: miolo rosado-dourado `#C98A5A`–`#E0B07A`, glaze avermelhado-caramelo `#8A3A1A`–`#C2652A`
+  nas pontas e por cima (quanto depende do molho de cada feixe; ~28 % dos feixes quase sem molho), crostinhas `#5C2310`.
+  Dois materiais com a mesma textura de fibras própria (256 px, cor + normal, estrias suaves): 0 = carne (roughness 0,60),
+  1 = trechos com molho e topo do miolo (roughness 0,24, clearcoat 0,3); a face vai para o material 1 quando a cor de vértice
+  é de molho (g/r < 0,585).
 - `brocolis-floretes.glb` (raiz `brocolis_floretes`): 18 floretes (cabecinha com 1 lóbulo central, 3 laterais e brotinhos por
   cima; talo claro `#B9D68A`–`#DCEBB0` deitado, com a ponta de corte à mostra) + ~34 pedacinhos soltos, sobre um miolo verde
   escuro baixo. Cabecinhas `#4E8F3A`–`#7DBA5A` com textura granulada própria (256 px, cor + normal). Cada florete é
@@ -230,17 +244,26 @@ cesta (fundo do pão em y = 6 mm). Do fundo para o topo:
   manteiga xadrez claro que forra o fundo e a parede e dobra para fora do aro em alguns trechos (o resto do aro de corda
   fica à mostra). Material do vime: parede (textura) e aro/alças (cor de vértice); papel com textura xadrez 128 px.
 - `dog-brioche.glb` (raiz `dog_brioche`, filhos `dog_brioche_base` e `dog_brioche_tampa`): pão de brioche comprido (0,224 x
-  0,082 m, 0,072 m de altura), cortado na horizontal a 40 % da altura. Casca dourada brilhante (cor de vértice,
-  `KHR_materials_clearcoat`), miolo com a textura de alvéolos do pão (512 px, ladrilho de 5 cm: furinhos finos). A base é
-  côncava para as salsichas; a tampa tem uma cavidade que cobre salsichas e molhos.
+  0,082 m, 0,072 m de altura), cortado na horizontal a 40 % da altura. A base é côncava para as salsichas; a tampa tem uma
+  cavidade que cobre salsichas e molhos. LAR-433: casca brilhante (roughness 0,36, `KHR_materials_clearcoat` 0,22) com a cor
+  na cor de vértice: dourado-escuro no topo (`#7E4413`–`#9C5719`, manchas leves de pincelado de ovo), faixa clara nas laterais
+  (`#E3AE5E`–`#EEC57C`, onde os pães encostam na forma), fundo dourado; textura de casca própria só com mosqueado muito leve
+  (256 px, ladrilho de 4 cm). Topo com leve irregularidade (0–2 mm, só para fora, para o fondue continuar assentando) e
+  pontas arredondadas e mais baixas (a partir de |x| = 0,090 m a largura, a altura do topo e a base se arredondam; antes
+  disso a seção é a mesma de `dprof`/`douter`). Miolo claro e fofo (textura própria 512 px, ladrilho de 4,5 cm, alvéolos
+  pequenos e médios, UV pelo comprimento de arco para não esticar na cavidade) com um fio fino de casca na borda do corte.
   **Dobradiça igual à do pão de alho**: pivô do nó `dog_brioche_tampa` na aresta de trás, `translation = (0, 0.0348, -0.0407)`
   (y = topo do corte, z = -meia largura do corte), eixo X. A tampa é exportada **ABERTA** com `rotation.x = -110°`
   (-1,9199 rad, quaternion `(-0.8192, 0, 0, 0.5736)`). **Para FECHAR: levar a rotação X local de -1,9199 rad até 0**
   (girar +1,9199 rad = +110°). Fechada, ela assenta sobre as salsichas; `dog_fondue`, `dog_mussarela` e `dog_palha` já estão na
   posição de tampa **FECHADA** (só mostrar depois de fechar). Pasta, salsichas e molhos ficam sobre a base (visíveis aberta).
 - `dog-pasta.glb`: camada de 3,4 mm sobre o miolo da base, com pontinhos de salsinha.
-- `dog-salsichas.glb`: duas salsichas lado a lado (0,251 e 0,243 m, raio 13,6 mm), vermelhas e brilhantes, com leve
-  arqueamento; as pontas passam ~1,4 cm do pão nas duas extremidades.
+- `dog-salsichas.glb`: duas salsichas lado a lado (0,251 e 0,243 m, raio 13,6 mm), com leve arqueamento; as pontas passam
+  ~1,4 cm do pão nas duas extremidades. LAR-433: cilindros longos que afunilam ~17 % nos últimos 3 cm e terminam numa ponta
+  arredondada alongada (9,5 mm, não meia esfera) com um biquinho da tripa; cor de salsicha `#A5442A` (embaixo) –
+  `#B8522F`–`#C8603A` (em cima), pontas mais escuras (`#7E3220`), rugas finas em hélice (torção) perto das pontas e marcas
+  sutis de defumado; leve brilho (roughness 0,30, clearcoat 0,25). Até |x| ≈ 0,09 m o topo fica onde estava (os molhos
+  continuam assentando); na ponta dos molhos (|x| = 0,104 m) a salsicha já está até 0,8 mm mais baixa.
 - `dog-molhos.glb`: zigue-zague de ketchup e de mostarda sobre as salsichas (tubos de 4 mm, fases opostas).
 - `dog-fondue.glb`: placa de 6 mm de fondue cremoso de 4 queijos sobre a tampa fechada, com línguas e fios escorrendo pelas
   laterais (material brilhante com clearcoat).
@@ -251,8 +274,8 @@ cesta (fundo do pão em y = 6 mm). Do fundo para o topo:
 ### Ícones da bandeja
 
 `public/assets/bancada/icones/<id>.webp` (512 x 512, fundo transparente, câmera 3/4 de cima, luz quente, item centrado e
-ocupando ~80 % do quadro, ≤ 60 KB): `pulled-pernil` (montinho numa travessinha), `brocolis-floretes`, `dog-brioche`
-(tampa entreaberta), `dog-pasta` (pote com dentes de alho), `dog-salsichas`, `dog-molhos` (duas bisnagas), `dog-fondue`
+ocupando ~80 % do quadro, ≤ 60 KB): `pulled-pernil` (montinho numa travessinha, com os mesmos feixes do GLB), `brocolis-floretes`, `dog-brioche`
+(tampa entreaberta), `dog-pasta` (pote com 3 dentes de alho em leque, mesma função de dente do ícone `pasta`), `dog-salsichas`, `dog-molhos` (duas bisnagas), `dog-fondue`
 (caquelon com queijo escorrendo), `dog-mussarela` (bloco e fatias) e `dog-palha` (montinho num prato de papel). Os
 recipientes (travessa, pote, bisnagas, caquelon, prato) existem só para o ícone: não são exportados em GLB. O enquadramento
 é medido na própria imagem (3 passadas ajustam distância e centro até a caixa do alfa ocupar ~80 %).
@@ -261,18 +284,20 @@ recipientes (travessa, pote, bisnagas, caquelon, prato) existem só para o ícon
 
 | arquivo | tamanho | triângulos |
 |---|---:|---:|
-| pulled-pernil.glb | 182.896 B (178,6 KB) | 14.546 |
+| pulled-pernil.glb | 253.816 B (247,9 KB) | 19.388 |
 | brocolis-floretes.glb | 225.484 B (220,2 KB) | 19.236 |
 | dog-cesta.glb | 108.828 B (106,3 KB) | 9.100 |
-| dog-brioche.glb | 140.084 B (136,8 KB) | 9.800 |
+| dog-brioche.glb | 201.316 B (196,6 KB) | 17.280 |
 | dog-pasta.glb | 21.036 B (20,5 KB) | 4.008 |
-| dog-salsichas.glb | 8.520 B (8,3 KB) | 1.280 |
+| dog-salsichas.glb | 28.412 B (27,7 KB) | 5.760 |
 | dog-molhos.glb | 14.144 B (13,8 KB) | 3.624 |
 | dog-fondue.glb | 35.884 B (35,0 KB) | 9.814 |
 | dog-mussarela.glb | 34.848 B (34,0 KB) | 8.100 |
 | dog-palha.glb | 39.108 B (38,2 KB) | 5.256 |
 
-Orçamento: cada GLB ≤ 300 KB e ≤ 20 mil triângulos.
+Orçamento: cada GLB ≤ 300 KB e ≤ 20 mil triângulos. Valores de `pulled-pernil`, `dog-brioche` e `dog-salsichas` após o
+refino LAR-433 (antes: 182.896 B / 14.546, 140.084 B / 9.800 e 8.520 B / 1.280). Ícones refeitos no LAR-433:
+`pulled-pernil.webp` 21.194 B, `dog-brioche.webp` 21.916 B, `dog-salsichas.webp` 12.732 B, `dog-pasta.webp` 15.692 B.
 
 Renders de revisão (fora do repo): `NN-<lanche>-aberto.png`, `-montado.png` e `-explodido.png` para `pulled`, `brocolis` e
 `dogalho` (`01`..`09`), detalhes `10`..`16` (recheios sem a tampa, topo do Dogalho, cesta, tampa entreaberta) e a folha

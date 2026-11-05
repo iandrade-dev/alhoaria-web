@@ -13,6 +13,7 @@ Opcoes:
     --renders DIR   pasta dos PNGs de revisao (fora do repo)
     --only a,b      etapas: models, icons, renders (padrao: todas)
     --quick         renders menores, poucas amostras (iteracao)
+    --icons a,b     so gera esses icones (padrao: todos + folha 00-icones.png)
 
 Importa as funcoes de build_bancada.py (sem executar nada dele: --parts none --views none).
 """
@@ -20,6 +21,7 @@ import bpy
 import math
 import os
 import sys
+import random
 import tempfile
 import argparse
 import importlib.util
@@ -31,6 +33,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("--renders", default=r"\\wsl.localhost\ubuntu\home\igor\orq\runs\lar-431-extras\renders")
 ap.add_argument("--only", default="all")
 ap.add_argument("--quick", action="store_true")
+ap.add_argument("--icons", default="all")
 EA = ap.parse_args(_argv)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -877,67 +880,149 @@ def prop(name, mb, mat, vc_white=True):
     return finish(mb, name, [mat], None, vc_white=vc_white)
 
 
-def garlic_bulb(c, s, name="alho"):
-    mb = MB()
-    prof = [(0.10, 0.0), (0.30, 0.02), (0.46, 0.10), (0.52, 0.26), (0.48, 0.46), (0.32, 0.68), (0.14, 0.85), (0.06, 0.95), (0.0, 1.0)]
-    seg = 28
-    rings = []
-    ivory, vio = hexc("#F4EBDC"), hexc("#D3BFD0")
-    for (r, a) in prof:
+def garlic_clove(mb, L=0.030, W=0.0085, seed=0.0, bend=0.20):
+    """Dente de alho deitado sobre o lado reto (secao em D), base larga com a raizinha, ponta fina, leve meia-lua,
+    casca marfim com estrias arroxeadas. Eixo do dente em +x (base em x = 0), apoiado em z = 0."""
+    na, nt = 20, 22
+    ivory, ivory2 = hexc("#F6EEDF"), hexc("#EFE2CB")
+    vio, root, tipc = hexc("#C9A9BE"), hexc("#B99868"), hexc("#E6D2AA")
+    rows, pts = [], []
+    for i in range(na + 1):
+        a = i / na
+        R = W * (0.62 + 0.38 * smooth(0.0, 0.30, a)) * max(0.0, 1.0 - smooth(0.40, 1.0, a)) ** 0.8
+        ay = bend * L * (a - a * a) * 1.2
         ring = []
-        for q in range(seg):
-            th = 2 * math.pi * q / seg
-            f = 1 + 0.07 * math.cos(7 * th)
-            col = lerpc(ivory, vio, smooth(0.2, 1.0, -math.cos(7 * th)) * 0.7)
-            ring.append(mb.add((c[0] + s * r * f * math.cos(th), c[1] + s * r * f * math.sin(th), c[2] + s * a), col))
-        rings.append(ring)
-    for i in range(len(prof) - 1):
-        for q in range(seg):
-            q2 = (q + 1) % seg
-            mb.quad(rings[i][q], rings[i][q2], rings[i + 1][q2], rings[i + 1][q])
-    return finish(mb, name, [make_mat("mat_alho", rough=0.55, vcol=True, spec=0.4)], None)
+        for k in range(nt):
+            th = 2 * math.pi * k / nt
+            c, sn = math.cos(th), math.sin(th)
+            ry = R * (1.0 if sn > 0 else 0.50)
+            fac = 1 + 0.035 * math.sin(5 * th + seed)
+            ring.append((L * a, ay + sn * ry * fac, c * R * 0.86 * fac, th, a))
+        rows.append(ring)
+        pts += ring
+    ymin = min(p[1] for p in pts)
+    idx = []
+    for ring in rows:
+        r2 = []
+        for (x, y, z, th, a) in ring:
+            st = smooth(0.50, 1.0, 0.5 + 0.5 * math.sin(7 * th + seed * 3.1)) * 0.70 * (1 - smooth(0.6, 0.95, a))
+            col = lerpc(lerpc(ivory, ivory2, 0.5 + 0.5 * bb.nz(x * 200, th, seed)), vio, st)
+            col = lerpc(col, root, smooth(0.10, 0.0, a) * 0.9)
+            col = lerpc(col, tipc, smooth(0.75, 1.0, a) * 0.7)
+            r2.append(mb.add((x, z, y - ymin), col))          # lado reto (y < 0) para baixo
+        idx.append(r2)
+    for i in range(na):
+        for k in range(nt):
+            k2 = (k + 1) % nt
+            mb.quad(idx[i][k], idx[i][k2], idx[i + 1][k2], idx[i + 1][k])
+    c0 = mb.add((0.0, 0.0, -ymin + 0.0), root)
+    for k in range(nt):
+        mb.tri(c0, idx[0][(k + 1) % nt], idx[0][k])
 
 
-def clove(c, s, yaw, name="dente"):
-    mb = MB()
-    prof = [(0.0, 0.0), (0.22, 0.04), (0.34, 0.25), (0.30, 0.55), (0.15, 0.85), (0.0, 1.0)]
-    seg = 18
-    rings = []
-    for (r, a) in prof:
-        ring = []
-        for q in range(seg):
-            th = 2 * math.pi * q / seg
-            ring.append(mb.add((c[0] + s * r * math.cos(th) * 0.7, c[1] + s * r * math.sin(th), c[2] + s * a), hexc("#F2E7D2")))
-        rings.append(ring)
-    for i in range(len(prof) - 1):
-        for q in range(seg):
-            q2 = (q + 1) % seg
-            mb.quad(rings[i][q], rings[i][q2], rings[i + 1][q2], rings[i + 1][q])
-    o = finish(mb, name, [make_mat("mat_dente", rough=0.5, vcol=True, spec=0.4)], None)
-    o.rotation_euler = (0.0, math.radians(82), yaw)
-    return o
+def place_mb(mb, i0, yaw, dx, dy, dz=0.0):
+    ca, sa = math.cos(yaw), math.sin(yaw)
+    for i in range(i0, len(mb.v)):
+        x, y, z = mb.v[i]
+        mb.v[i] = (dx + x * ca - y * sa, dy + x * sa + y * ca, dz + z)
+
+
+def glass_mat(name, alpha=0.22, tint=(0.90, 0.96, 0.95)):
+    m = make_mat(name, base=tint, rough=0.04, vcol=False, spec=0.9, coat=0.6)
+    b = m.node_tree.nodes["Principled BSDF"]
+    b.inputs["Alpha"].default_value = alpha
+    for attr, val in (("surface_render_method", "BLENDED"), ("blend_method", "BLEND")):
+        try:
+            setattr(m, attr, val)
+        except Exception:
+            pass
+    try:
+        m.use_backface_culling = False
+    except Exception:
+        pass
+    return m
 
 
 def build_icon_pasta():
+    """Pote de vidro baixo com pasta de alho branca e cremosa (topo abaulado com marcas de colher e salsinha) e 3 dentes
+    de alho ao lado (LAR-433: o icone antigo, bisnaga + montinho, parecia docinho)."""
     objs = []
-    cream, cap, lab = hexc("#F1E4C4"), hexc("#E39A25"), hexc("#D98B1F")
+    R0, Hj, T = 0.031, 0.036, 0.0022          # raio externo, altura e parede do pote
+    # vidro: parede externa, borda arredondada e parede interna (casca fina) + fundo grosso
     mb = MB()
-    bb.lathe(mb, [(0.0, 0.0), (0.0185, 0.0), (0.0212, 0.004), (0.0226, 0.014), (0.0230, 0.058), (0.0212, 0.076),
-                  (0.0150, 0.090), (0.0090, 0.099), (0.0085, 0.101)], (0, 0, 0), "z", 1, 40, cream)
-    objs.append(prop("bisnaga", mb, make_mat("mat_bisnaga", base=cream, rough=0.28, vcol=False, spec=0.6, coat=0.35)))
+    prof = [(0.0, 0.0), (R0 - 0.004, 0.0), (R0 - 0.0008, 0.0012), (R0, 0.004), (R0, Hj - 0.006), (R0 - 0.0012, Hj - 0.0035),
+            (R0 - 0.0012, Hj - 0.0006), (R0 - 0.0022, Hj), (R0 - T - 0.0006, Hj - 0.0005), (R0 - T, Hj - 0.003),
+            (R0 - T, 0.006), (R0 - T - 0.003, 0.0045), (0.0, 0.0045)]
+    bb.lathe(mb, prof, (0, 0, 0), "z", 1, 56, (1, 1, 1))
+    objs.append(prop("pote_vidro", mb, glass_mat("mat_pote_vidro")))
+    # roscas do gargalo (2 aneis inclinados, um pouco mais opacos para marcar o pote a 84 px)
     mb = MB()
-    bb.lathe(mb, [(0.0095, 0.098), (0.0118, 0.101), (0.0118, 0.113), (0.0092, 0.1175), (0.0050, 0.1290), (0.0, 0.1310)], (0, 0, 0), "z", 1, 28, cap)
-    objs.append(prop("bisnaga_tampa", mb, make_mat("mat_bisnaga_tampa", base=cap, rough=0.3, vcol=False, spec=0.6)))
+    for j in range(2):
+        P = []
+        for i in range(57):
+            a = 2 * math.pi * i / 56
+            P.append(Vector(((R0 - 0.0004) * math.cos(a), (R0 - 0.0004) * math.sin(a), Hj - 0.0095 - 0.0042 * j + 0.0016 * math.sin(a))))
+        bb.tube(mb, P, [0.0009] * len(P), [(1, 1, 1)] * len(P), sides=6, cap=False)
+    objs.append(prop("pote_rosca", mb, glass_mat("mat_pote_rosca", alpha=0.45)))
+    # pasta: enche o pote e sobe num domo baixo com marcas de colher
+    pc, pc2 = hexc("#F3E8D0"), hexc("#E9D8B2")
     mb = MB()
-    bb.lathe(mb, [(0.02305, 0.020), (0.02325, 0.022), (0.02325, 0.056), (0.02305, 0.058)], (0, 0, 0), "z", 1, 40, lab)
-    objs.append(prop("bisnaga_rotulo", mb, make_mat("mat_bisnaga_rotulo", base=lab, rough=0.4, vcol=False)))
+    nr, ns = 14, 56
+    rows = []
+    Rp = R0 - T - 0.0003
+    for j in range(nr + 1):
+        f = j / nr
+        ring = []
+        for k in range(ns):
+            a = 2 * math.pi * k / ns
+            r = Rp * f
+            dome = 0.0085 * (1 - f ** 2.2)
+            swirl = 0.0016 * math.sin(3 * a + 7 * f) * math.sin(math.pi * f) + 0.0007 * math.sin(7 * a - 11 * f) * f
+            z = Hj - 0.0025 + dome + swirl
+            col = lerpc(pc, pc2, 0.5 + 0.5 * math.sin(3 * a + 7 * f) * math.sin(math.pi * f))
+            ring.append(mb.add((r * math.cos(a), r * math.sin(a), z), col))
+        rows.append(ring)
+    ctr = mb.add((0, 0, Hj - 0.0025 + 0.0085 + 0.0006), pc)
+    for k in range(ns):
+        mb.tri(ctr, rows[0][k], rows[0][(k + 1) % ns])
+    for j in range(nr):
+        for k in range(ns):
+            k2 = (k + 1) % ns
+            mb.quad(rows[j][k], rows[j + 1][k], rows[j + 1][k2], rows[j][k2])
+    # corpo da pasta dentro do vidro (parede ate o fundo)
+    bot = []
+    for k in range(ns):
+        a = 2 * math.pi * k / ns
+        bot.append(mb.add((Rp * math.cos(a), Rp * math.sin(a), 0.0048), pc2))
+    for k in range(ns):
+        k2 = (k + 1) % ns
+        mb.quad(rows[nr][k], bot[k], bot[k2], rows[nr][k2])
+    # salsinha
+    rng = random.Random(8)
+    greens = [hexc("#3F7F25"), hexc("#5A9A2E"), hexc("#7DB43C")]
+    for _ in range(30):
+        a = rng.uniform(0, 6.28)
+        f = math.sqrt(rng.uniform(0, 1)) * 0.9
+        r = Rp * f
+        cz = Hj - 0.0025 + 0.0085 * (1 - f ** 2.2) + 0.0016 * math.sin(3 * a + 7 * f) * math.sin(math.pi * f) + 0.0004
+        cx, cy = r * math.cos(a), r * math.sin(a)
+        rr = rng.uniform(0.0008, 0.0016)
+        col = rng.choice(greens)
+        c0 = mb.add((cx, cy, cz + rr * 0.4), col)
+        ring = [mb.add((cx + rr * math.cos(a2), cy + rr * 0.8 * math.sin(a2), cz), mulc(col, 0.85))
+                for a2 in [2 * math.pi * q / 6 + a for q in range(6)]]
+        for q in range(6):
+            mb.tri(c0, ring[q], ring[(q + 1) % 6])
+    objs.append(prop("pasta_pote", mb, make_mat("mat_pasta_pote", rough=0.34, vcol=True, spec=0.55, coat=0.2), vc_white=False))
+    # dentes de alho ao lado
     mb = MB()
-    pc = hexc("#F4E7BE")
-    prof = [(0.0, 0.0), (0.020, 0.0), (0.0235, 0.005), (0.0215, 0.011), (0.0222, 0.016), (0.0185, 0.021), (0.0188, 0.026),
-            (0.0145, 0.031), (0.0135, 0.036), (0.0095, 0.041), (0.0070, 0.047), (0.0032, 0.052), (0.0, 0.0545)]
-    bb.lathe(mb, prof, (0.056, -0.030, 0), "z", 1, 32, pc)
-    objs.append(prop("pasta_montinho", mb, make_mat("mat_pasta_i", base=pc, rough=0.32, vcol=False, spec=0.6, coat=0.25)))
-    objs.append(garlic_bulb((-0.052, -0.026, 0.0), 0.046))
+    for (L, W, yaw, dx, dy, sd) in ((0.031, 0.0092, math.radians(200), 0.044, -0.043, 1.0),
+                                    (0.029, 0.0086, math.radians(246), 0.061, -0.035, 2.0),
+                                    (0.027, 0.0082, math.radians(292), 0.076, -0.027, 3.0)):
+        i0 = len(mb.v)
+        garlic_clove(mb, L, W, sd)
+        place_mb(mb, i0, yaw, dx, dy)
+    objs.append(prop("dentes_alho", mb, make_mat("mat_dente", rough=0.42, vcol=True, spec=0.45, coat=0.15), vc_white=False))
     return objs
 
 
@@ -1038,8 +1123,11 @@ def make_icons(outdir):
     sc = fresh(512, 512, 64)
     sc.view_settings.exposure = -0.55
 
+    want = None if EA.icons == "all" else set(EA.icons.split(","))
+
     def run(name, objs, **kw):
-        results[name] = icon_shot(name, [o for o in objs if o.type == "MESH" and not o.hide_render], outdir=outdir, **kw)
+        if want is None or name in want:
+            results[name] = icon_shot(name, [o for o in objs if o.type == "MESH" and not o.hide_render], outdir=outdir, **kw)
 
     def cleanup():
         for o in list(bpy.data.objects):
@@ -1153,7 +1241,8 @@ def main():
     os.makedirs(outdir, exist_ok=True)
     if "icons" in STEPS:
         make_icons(outdir)
-        contact_sheet(outdir)
+        if EA.icons == "all":
+            contact_sheet(outdir)
     if "renders" in STEPS:
         make_renders(outdir)
 
