@@ -325,3 +325,79 @@ Vidro, líquidos, gelo e gotas usam `alphaMode BLEND` (sem transmission). A orde
 | porcao-batata.glb | 40.824 B | 7.032 | porcao-batata.webp. 18.118 B |
 
 Renders de revisão (fora do repo): `/home/igor/orq/runs/lar-431-acomp/renders/` (`00-icones.png`, `01`..`05` itens, `06-mesa.png`). Ícones: 512x512 WebP com alfa, item ocupando ~80 % do quadro.
+
+## Bancada gamificada: mão de luva, bisnaga, pote com colher e gratinado novo (LAR-449)
+
+Script: `build_gamificado.py`. Ele importa utilitários de `build_bancada.py` sem executar nada desse arquivo e não altera
+nenhum outro GLB.
+
+```
+blender.exe -b --factory-startup -P blender/bancada3d/build_gamificado.py -- [--parts mao,bisnaga,pote,gratinado|none] [--views maos,bisnaga,colher,macarico,gratinado|none] [--renders DIR] [--antigo GLB] [--quick]
+```
+
+Os renders de revisão ficam fora do repo, em `/home/igor/orq/runs/lar-449-modelos/renders/`. São eles `maos.png`,
+`bisnaga-acao.png`, `colher-acao.png`, `macarico-acao.png`, `gratinado-antes.png` e `gratinado-depois.png`. O render
+"antes" usa uma cópia do gratinado antigo (`--antigo`, padrão `<renders>/../gratinado-antigo.glb`).
+
+O contrato é o mesmo das outras seções: GLB com Draco, Y para cima, metros, sem luzes e sem câmeras. As coordenadas
+abaixo estão em **glTF** (x, y para cima, z para a frente). Quaternions no formato `(x, y, z, w)`.
+
+### mao-luva.glb (raiz `mao_luva`)
+
+Mão direita com luva preta de nitrilo (material acetinado: roughness 0,42 e clearcoat 0,18), com rugas leves no
+punho e vincos na face palmar das juntas dobradas. O punho tem borda enrolada e fica vestido **por cima** de um
+pedaço de manga de dólmã preto, que termina num corte limpo (boca oca, ~16 cm do pulso). A palma tem ~9 cm de
+largura e a mão ~19 cm. A modelagem é por SDF: falanges em cones arredondados, palma, tenar e antebraço. A malha sai
+de surface nets com decimação. Os dedos fecham sobre a ferramenta por contato.
+
+Cinco filhos, um por pose: `mao_bisnaga`, `mao_colher`, `mao_macarico`, `mao_punhado` e `mao_aberta`. Cada filho é
+uma malha só, com 2 materiais (luva e manga) e transformação identidade. **O pivô de todos é o pulso, na origem
+`(0, 0, 0)` da raiz.** Mostre uma pose e esconda as outras. O antebraço sai do pulso para a direita e para cima,
+vindo do lado da câmera. Para encaixar a ferramenta, use a transformação do objeto (`obj`) **no espaço local da raiz
+`mao_luva`**. Pendure o nó da ferramenta na raiz da mão, ou aplique `mãoRaiz.matrixWorld × obj`.
+
+| pose | objeto segurado | posição `obj` | rotação `obj` (x, y, z, w) | ponto útil | antebraço (pulso → cotovelo) |
+|---|---|---|---|---|---|
+| `mao_bisnaga` | `bisnaga.glb`, raiz `bisnaga` (de cabeça para baixo, rótulo para +z) | (-0,0848; 0,0932; 0,0293) | (0,0744; 0; 0,9972; 0) | ponta do bico (-0,0848; -0,0968; 0,0293) | (0,95; 0,26; 0,17) |
+| `mao_colher` | `pote-creme.glb`, nó `colher` (empunhada, concha à esquerda, lado côncavo para cima) | (-0,0454; -0,0308; -0,0511) | (0,0797; 0,3176; 0,2300; 0,9164) | centro da concha (-0,1209; -0,0939; 0,0084) | (0,81; 0,42; 0,41) |
+| `mao_macarico` | `macarico-mao.glb`, raiz `macarico_mao` (**sem girar**, mesma pose de uso) | (-0,0031; -0,0724; -0,0570) | (0; 0; 0; 1) | ponta do bico (-0,1041; -0,1427; -0,0570) | (0,51; 0,45; 0,73) |
+| `mao_punhado` | nenhum: ponto de soltura do punhado | (-0,0637; -0,0659; 0,0021) | — | — | (0,86; 0,48; 0,15) |
+| `mao_aberta` | nenhum: centro da palma | (-0,0597; -0,0473; -0,0016) | — | — | (0,86; 0,48; 0,15) |
+
+Para mirar uma ponta (bico ou concha) num ponto P, ponha a raiz da mão em `P - ponta`, sem girar. No maçarico, a chama
+continua com a mesma direção da seção "macarico-mao.glb": (-0,8192; -0,5736; 0).
+
+### bisnaga.glb (raiz `bisnaga`)
+
+Bisnaga estilo diner: corpo branco-creme (`bisnaga_corpo`), faixa laranja com **ALHOARIA** em letras creme e
+filetes (`bisnaga_marca`), tampa rosqueada e bico cônico laranja (`bisnaga_tampa`). Ela fica em pé, com a base em
+y = 0 e o eixo em x = z = 0. Mede 0,19 m de altura, com raio de 0,029 m. O rótulo fica de frente para **+z**. **Ponta
+do bico: (0; 0,19; 0)**.
+
+### pote-creme.glb (raiz `pote_creme`)
+
+- `pote`: tigela de cerâmica branca esmaltada (pé sem esmalte), Ø 0,115 m e borda em y ≈ 0,064, com creme claro
+  dentro (topo em y ≈ 0,055, redemoinho leve). A origem fica no centro da base.
+- `colher`: colher de inox (0,175 m) com uma porção de creme na concha. Ela vem apoiada no pote: concha mergulhada
+  no creme e cabo encostado na borda (nó com `translation (0,0859; 0,0701; 0,0224)` e `rotation (-0,0140; -0,1211;
+  0,1140; 0,9860)`). **O pivô do nó é o ponto de pega do cabo.** No quadro local da colher, o cabo corre ao longo de
+  +x e a concha fica em -x, com o lado côncavo para +y. **Centro da concha (local): (-0,1145; -0,0103; 0)**. Ponta
+  do cabo (local): (0,0330; -0,0023; 0).
+
+### gratinado.glb (refeito)
+
+O nó continua `gratinado`, com o filho `gratinado_queijo`. A posição e o encaixe também continuam os mesmos: decalque
+sobre o topo da `mussarela`, de 0,9 mm acima dela no meio a 0,5 mm nas beiradas, com |x| ≤ 0,123 m. A varredura
+por plano de corte do site funciona igual. É uma folha única com textura de cor e normal map embutidos (JPEG
+512 × 256, UV planar x/largura). O queijo é dourado-âmbar contínuo, com bolhas de 1 a 4 mm, cristas tostadas e
+laterais um pouco mais tostadas, e se funde com a mussarela nas beiradas. A cor mais escura da textura é `#A15724`
+(âmbar-tostado). Não há manchas pretas.
+
+### Tamanho e triângulos
+
+| arquivo | tamanho | triângulos |
+|---|---:|---:|
+| mao-luva.glb | 91.996 B (89,8 KB) | 29.249 (5 poses × ~5.850) |
+| bisnaga.glb | 15.676 B (15,3 KB) | 5.062 |
+| pote-creme.glb | 31.964 B (31,2 KB) | 10.970 |
+| gratinado.glb | 67.632 B (66,0 KB) | 8.990 (antes: 35.636 B / 11.610) |
