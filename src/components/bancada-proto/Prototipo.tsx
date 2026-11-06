@@ -4,23 +4,42 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as RPointerEvent } from "react";
 import type { ApiCena, Bus, Modo, Projecao } from "./Cena";
-import { LANCHES, ORDEM_LANCHES, ehLanche, type LancheDef, type LancheId, type Passo } from "./layout";
+import {
+  LANCHES, ORDEM_LANCHES, ehLanche, opcaoDaEstacao, passoDe, type EstacaoId, type LancheDef, type LancheId, type PassoDef,
+} from "./layout";
 import type { FasePedido, ProjPedido } from "./Pedido3D";
-import PedidoHud, { TrilhaPedido } from "./PedidoHud";
-import { novoPedido, type Pedido } from "./cardapio";
+import PedidoHud, { PainelTurbinar, TrilhaPedido, somarAdicional, type FasePos } from "./PedidoHud";
+import {
+  ADICIONAIS, OPCOES, OPCOES_PADRAO, SEM_OPCAO, brl, novoPedido, opcaoDe, textoDasOpcoes, type GrupoOpcao, type Pedido,
+} from "./cardapio";
 
 const Cena = dynamic(() => import("./Cena"), { ssr: false });
 
 const FOLGA = 56; // px de folga em volta do lanche para soltar a ferramenta
 
-type Toque = { id: Passo; pointer: number; x: number; y: number; moveu: boolean };
+type Toque = { id: EstacaoId; pointer: number; x: number; y: number; moveu: boolean };
+
+/** Estação que o "Monta pra mim" usa na etapa: a primeira opção do grupo, ou a própria etapa. */
+const estacaoAuto = (p: PassoDef) => (p.grupo ? `${p.id}:${OPCOES[p.grupo][0].id}` : p.id);
+const foco = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8b84a]";
+/** Amostra de cor de cada opção (bolinha nos rótulos e nos botões do pão). */
+const AMOSTRA: Record<string, string> = {
+  parmesao: "radial-gradient(circle at 30% 35%, #f6e6ae 0 12%, transparent 13%), radial-gradient(circle at 65% 60%, #f6e6ae 0 11%, transparent 12%), radial-gradient(circle at 60% 25%, #f6e6ae 0 9%, transparent 10%), #c98a3f",
+  roseta: "radial-gradient(circle at 30% 35%, #3d6a22 0 12%, transparent 13%), radial-gradient(circle at 65% 60%, #3d6a22 0 11%, transparent 12%), radial-gradient(circle at 60% 25%, #3d6a22 0 9%, transparent 10%), #c98a3f",
+  tradicional: "#f1e6c6",
+  ervas: "radial-gradient(circle at 35% 40%, #3f6e24 0 13%, transparent 14%), radial-gradient(circle at 65% 62%, #3f6e24 0 12%, transparent 13%), #c3d58a",
+  cheddar: "#e2791f",
+  "4-queijos": "#f2e2b0",
+  mucarela: "#f6eed4",
+  colonial: "#f1c23a",
+};
 
 export default function Prototipo() {
   // undefined = ainda lendo a URL; null = tela de escolha
   const [lanche, setLanche] = useState<LancheId | null | undefined>(undefined);
   const [feitos, setFeitos] = useState(0);
-  const [pulados, setPulados] = useState<readonly Passo[]>([]);
-  const [animando, setAnimando] = useState<Passo | null>(null);
+  const [pulados, setPulados] = useState<readonly string[]>([]);
+  const [animando, setAnimando] = useState<EstacaoId | null>(null);
   const [auto, setAuto] = useState(false);
   const [pronto, setPronto] = useState(false);
   const [proj, setProj] = useState<Projecao | null>(null);
@@ -28,23 +47,29 @@ export default function Prototipo() {
   // sem WebGL (ou contexto perdido com a cena montada): aviso leve no lugar da cena
   const [semGl, setSemGl] = useState(false);
   const [sobre, setSobre] = useState(false);
-  const [segurando, setSegurando] = useState<Passo | null>(null);
+  const [segurando, setSegurando] = useState<EstacaoId | null>(null);
   const [pop, setPop] = useState<number | null>(null);
   const [anuncio, setAnuncio] = useState("");
-  const [congelar, setCongelar] = useState<{ id: Passo; t: number } | null>(null);
-  // pedido (depois do lanche pronto)
-  const [fase, setFase] = useState<FasePedido>("montagem");
+  const [congelar, setCongelar] = useState<{ id: string; t: number } | null>(null);
+  // pedido: nasce com o lanche (opções e adicionais entram na montagem; bebida e acompanhamento depois do lanche pronto)
+  const [fase, setFase] = useState<"montagem" | FasePos>("montagem");
   const [pedido, setPedido] = useState<Pedido | null>(null);
   const [projPed, setProjPed] = useState<ProjPedido | null>(null);
   const [sacolaPronta, setSacolaPronta] = useState(false);
+  // a mão do pedido (potinhos, queijo em dobro) está trabalhando: a montagem espera
+  const [ocupado, setOcupado] = useState(false);
+  // "Fechar o lanche" com a mão ainda soltando um adicional: fecha quando ela terminar
+  const [fechando, setFechando] = useState(false);
+  const [rodada, setRodada] = useState(0);
   const bus = useRef<Bus>({ drag: { ativo: false, id: null, x: 0, y: 0 } });
   const api = useRef<ApiCena | null>(null);
   const toque = useRef<Toque | null>(null);
   const suprimir = useRef(false);
   const autoRef = useRef(false);
-  const animRef = useRef<Passo | null>(null);
+  const animRef = useRef<EstacaoId | null>(null);
   const feitosRef = useRef(0);
   const projRef = useRef<Projecao | null>(null);
+  const ocupadoRef = useRef(false);
   feitosRef.current = feitos; projRef.current = proj;
 
   const def: LancheDef | null = lanche ? LANCHES[lanche] : null;
@@ -53,9 +78,14 @@ export default function Prototipo() {
   const aoPronto = useCallback(() => setPronto(true), []);
   const aoSacola = useCallback(() => setSacolaPronta(true), []);
   const aoFalhar = useCallback(() => setSemGl(true), []);
+  const aoOcupado = useCallback((o: boolean) => { ocupadoRef.current = o; setOcupado(o); }, []);
   const ativoDef = feitos < PASSOS.length ? PASSOS[feitos] : null;
-  const ativo: Passo | null = ativoDef?.id ?? null;
+  const ativo = ativoDef?.id ?? null;
   const fim = !!def && feitos >= PASSOS.length;
+  const ehPao = def?.forma === "pao";
+  const escolhendoPao = ehPao && !!pedido?.opcoes && !pedido.opcoes.pao && feitos === 0 && !auto;
+  const turbinando = fase === "montagem" && ativoDef?.tipo === "turbinar";
+  const fase3d: FasePedido = fase !== "montagem" ? fase : turbinando ? "turbinar" : "montagem";
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -71,43 +101,72 @@ export default function Prototipo() {
     const l = q.get("lanche");
     const inicial = ehLanche(l) ? l : null;
     setLanche(inicial);
+    setPedido(inicial ? novoPedido(inicial) : null);
     const c = q.get("congelar");
     if (c && inicial) { const [id, t] = c.split(":"); if (LANCHES[inicial].passos.some((p) => p.id === id)) setCongelar({ id, t: Number(t) || 1 }); }
     return () => media.removeEventListener("change", ver);
   }, []);
 
-  const disparar = useCallback((id: Passo, modo: Modo) => {
-    if (animRef.current || !api.current) return;
-    if (passosRef.current[feitosRef.current]?.id !== id) return;
-    animRef.current = id;
-    setAnimando(id);
-    setAnuncio("");
-    api.current.acao(id, modo);
-  }, []);
+  const muda = useCallback((f: (p: Pedido) => Pedido) => setPedido((p) => (p ? f(p) : p)), []);
+  const escolherOpcao = useCallback((g: GrupoOpcao, v: string) => setPedido((p) => (p?.opcoes ? { ...p, opcoes: { ...p.opcoes, [g]: v } } : p)), []);
 
-  /** Vai para a etapa seguinte (depois de fazer ou pular a etapa `i`). */
-  const avancar = useCallback((i: number) => {
-    feitosRef.current = i + 1;
-    setFeitos(i + 1);
-    setPop(i);
-    const prox = passosRef.current[i + 1];
-    if (!prox) { autoRef.current = false; setAuto(false); return; }
-    if (autoRef.current) setTimeout(() => { if (autoRef.current) disparar(prox.id, "auto"); }, 350);
+  /** Começa a ação da estação `est` (a etapa, ou uma opção dela). */
+  const disparar = useCallback((est: EstacaoId, modo: Modo) => {
+    if (animRef.current || !api.current || ocupadoRef.current) return;
+    const passo = passosRef.current[feitosRef.current];
+    if (!passo || passo.id !== passoDe(est)) return;
+    const op = opcaoDaEstacao(est);
+    if (passo.grupo && op) escolherOpcao(passo.grupo, op);
+    animRef.current = est;
+    setAnimando(est);
+    setAnuncio("");
+    api.current.acao(est, modo);
+  }, [escolherOpcao]);
+
+  /** "Monta pra mim": faz a etapa atual (Turbinar: fecha sem adicionais). */
+  const autoPasso = useCallback(() => {
+    if (!autoRef.current) return;
+    const p = passosRef.current[feitosRef.current];
+    if (!p) return;
+    if (p.tipo === "turbinar") { avancarRef.current(feitosRef.current); return; }
+    disparar(estacaoAuto(p), "auto");
   }, [disparar]);
 
-  const aoFim = useCallback((id: Passo) => {
+  /** Vai para a etapa seguinte (depois de fazer ou pular a etapa `i`; `n` etapas de uma vez). */
+  const avancar = useCallback((i: number, n = 1) => {
+    feitosRef.current = i + n;
+    setFeitos(i + n);
+    setPop(i);
+    const prox = passosRef.current[i + n];
+    if (!prox) { autoRef.current = false; setAuto(false); return; }
+    if (autoRef.current) setTimeout(autoPasso, 350);
+  }, [autoPasso]);
+  const avancarRef = useRef(avancar); avancarRef.current = avancar;
+
+  const aoFim = useCallback((est: EstacaoId) => {
     animRef.current = null;
-    const i = passosRef.current.findIndex((p) => p.id === id);
+    const i = passosRef.current.findIndex((p) => p.id === passoDe(est));
     setAnimando(null);
     setAnuncio(passosRef.current[i].feito);
     try { navigator.vibrate?.(12); } catch { /* sem vibração */ }
     avancar(i);
   }, [avancar]);
 
+  // "Fechar o lanche": espera a mão soltar o último adicional e segue para a tampa
+  useEffect(() => {
+    if (!fechando || ocupado) return;
+    setFechando(false);
+    const i = passosRef.current.findIndex((p) => p.tipo === "turbinar");
+    if (i === feitosRef.current) { setAnuncio("Lanche turbinado. Agora a tampa"); avancar(i); }
+  }, [fechando, ocupado, avancar]);
+  const fecharLanche = () => { if (turbinando) setFechando(true); };
+
   const montaPraMim = () => {
     if (fim || !ativo) return;
     autoRef.current = true; setAuto(true);
-    if (!animRef.current) disparar(ativo, "auto");
+    if (escolhendoPao) escolherOpcao("pao", OPCOES_PADRAO.pao!);
+    if (turbinando) { fecharLanche(); return; }
+    if (!animRef.current) autoPasso();
   };
   const parar = () => { autoRef.current = false; setAuto(false); };
   const pular = () => {
@@ -116,23 +175,34 @@ export default function Prototipo() {
     setAnuncio(`${ativoDef.nome}: pulado`);
     avancar(feitosRef.current);
   };
-  const zerarHud = () => {
+  /** Chip "Sem ...": a etapa fica pulada na trilha. Sem queijo, o maçarico também é pulado. */
+  const semOpcao = () => {
+    const g = ativoDef?.grupo;
+    if (animRef.current || ocupadoRef.current || !g) return;
+    const i = feitosRef.current;
+    const ids = [ativoDef.id];
+    if (g === "queijo" && PASSOS[i + 1]?.tipo === "macarico") ids.push(PASSOS[i + 1].id);
+    escolherOpcao(g, "sem");
+    setPulados((p) => [...p, ...ids]);
+    setAnuncio(`${SEM_OPCAO[g].nome}${ids.length > 1 ? " (sem maçarico)" : ""}`);
+    avancar(i, ids.length);
+  };
+  const zerarHud = (l: LancheId | null) => {
     parar();
-    setFase("montagem"); setPedido(null); setProjPed(null); setSacolaPronta(false);
+    setFase("montagem"); setPedido(l ? novoPedido(l) : null); setProjPed(null); setSacolaPronta(false); setFechando(false); setRodada((r) => r + 1);
     animRef.current = null; feitosRef.current = 0;
     setAnimando(null); setFeitos(0); setPulados([]); setPop(null); setAnuncio(""); setSegurando(null); setSobre(false);
     bus.current.drag.ativo = false; toque.current = null;
   };
-  const deNovo = () => { zerarHud(); api.current?.reiniciar(); };
-  const turbinar = () => { if (!lanche) return; setPedido(novoPedido(lanche)); setFase("turbinar"); setAnuncio("Turbinar o lanche"); };
+  const deNovo = () => { zerarHud(lanche ?? null); api.current?.reiniciar(); };
+  const seguirPedido = () => { setFase("bebida"); setAnuncio("Escolha a bebida"); };
   const seguir = () => {
-    const ordem: FasePedido[] = ["turbinar", "bebida", "acomp", "sacola"];
-    const prox = ordem[ordem.indexOf(fase) + 1];
+    const ordem: FasePos[] = ["bebida", "acomp", "sacola"];
+    const prox = fase === "montagem" ? null : ordem[ordem.indexOf(fase) + 1];
     if (prox) setFase(prox);
   };
-  const muda = useCallback((f: (p: Pedido) => Pedido) => setPedido((p) => (p ? f(p) : p)), []);
   const escolher = (id: LancheId | null) => {
-    zerarHud();
+    zerarHud(id);
     setCongelar(null); setProj(null); setPronto(false);
     setLanche(id);
   };
@@ -143,9 +213,9 @@ export default function Prototipo() {
     if (!z) return false;
     return x >= z.x0 - FOLGA && x <= z.x1 + FOLGA && y >= z.y0 - FOLGA && y <= z.y1 + FOLGA;
   };
-  const gesto = (id: Passo, temEstacao: boolean) => ({
+  const gesto = (id: EstacaoId, temEstacao: boolean) => ({
     onPointerDown: (e: RPointerEvent<HTMLButtonElement>) => {
-      if (e.button !== 0 || animRef.current || !pronto || auto) return;
+      if (e.button !== 0 || animRef.current || !pronto || auto || ocupadoRef.current) return;
       e.currentTarget.setPointerCapture(e.pointerId);
       toque.current = { id, pointer: e.pointerId, x: e.clientX, y: e.clientY, moveu: false };
       if (temEstacao) { bus.current.drag = { ativo: true, id, x: e.clientX, y: e.clientY }; setSegurando(id); }
@@ -179,7 +249,14 @@ export default function Prototipo() {
 
   const lan = proj?.lanche;
   const dica = ativoDef?.dica ?? "";
-  const podePular = !!ativoDef?.opcional && !animando && !auto && pronto;
+  const livre = !animando && !auto && pronto && !ocupado;
+  const podePular = !!ativoDef?.opcional && livre;
+  // queijo em dobro: aparece depois da primeira dose de queijo (na etapa seguinte, antes do maçarico ou da palha)
+  const iQueijo = PASSOS.findIndex((p) => p.tipo === "mussarela" || p.tipo === "dog-mussarela");
+  const podeDobro = fase === "montagem" && iQueijo >= 0 && feitos === iQueijo + 1 && !fim && !pulados.includes(PASSOS[iQueijo].id) && !auto;
+  const nDobro = pedido?.adicionais["queijo-dobro"] ?? 0;
+  const dobro = (d: number) => { if (pedido && !animando) somarAdicional(pedido, muda, setAnuncio, "queijo-dobro", d); };
+  const resumoAuto = ehPao ? `${textoDasOpcoes(OPCOES_PADRAO)} · sem adicionais` : "Sem adicionais";
   return <div className="fixed inset-0 z-[60] select-none overflow-clip bg-[#120c09] text-[#fff8e7]" style={{ WebkitTouchCallout: "none" }}>
     <style>{`
       @keyframes proto-pop { 0% { transform: scale(1) } 35% { transform: scale(1.42) } 65% { transform: scale(.92) } 100% { transform: scale(1) } }
@@ -192,8 +269,9 @@ export default function Prototipo() {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/assets/bancada/proto/cozinha-paisagem.webp" alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} />
     </picture>
-    {lanche !== undefined && !semGl && <Cena aoFalhar={aoFalhar} def={def} ativo={animando ? null : ativo} reduzido={reduzido} bus={bus} api={api} aoFim={aoFim} aoProjetar={setProj} aoPronto={aoPronto} congelar={congelar}
-      pedido={{ montado: fim && !animando, fase, atual: pedido, aoProjetar: setProjPed, aoSacola }} />}
+    {lanche !== undefined && !semGl && <Cena aoFalhar={aoFalhar} def={def} ativo={animando || escolhendoPao ? null : ativo} reduzido={reduzido} bus={bus} api={api} aoFim={aoFim} aoProjetar={setProj} aoPronto={aoPronto} congelar={congelar}
+      opcoes={pedido?.opcoes ?? null}
+      pedido={{ fase: fase3d, atual: pedido, rodada, aoProjetar: setProjPed, aoSacola, aoOcupado }} />}
 
     {/* escolha do lanche */}
     {lanche === null && <Escolha aoEscolher={escolher} />}
@@ -206,36 +284,50 @@ export default function Prototipo() {
         style={{ left: lan.x0 - FOLGA / 2, top: lan.y0 - FOLGA / 2, width: lan.x1 - lan.x0 + FOLGA, height: lan.y1 - lan.y0 + FOLGA, opacity: sobre ? 1 : 0.35,
           background: "radial-gradient(closest-side, rgba(255,190,110,.22), rgba(255,150,60,.08) 70%, transparent)" }} />}
 
-      {/* estações: botões acessíveis sobre cada uma (só a ativa responde) */}
-      {proj && fase === "montagem" && PASSOS.map(({ id, dica: d, nome }) => {
-        const vez = id === ativo && !animando && !auto && pronto;
-        const p = proj.estacoes[id];
-        let style: CSSProperties;
-        if (!p) {
+      {/* estações: botões acessíveis sobre cada uma (só as da etapa ativa respondem); nas etapas com opções, um por opção */}
+      {proj && fase === "montagem" && PASSOS.map((pd) => {
+        if (pd.tipo === "turbinar") return null;
+        const vez = pd.id === ativo && livre && !escolhendoPao;
+        const ests = Object.keys(proj.estacoes).filter((e) => passoDe(e) === pd.id);
+        if (!ests.length) {
           if (!lan) return null;
-          style = { left: lan.x0, top: lan.y0, width: lan.x1 - lan.x0, height: lan.y1 - lan.y0, borderRadius: "40%" };
-        } else {
-          style = { left: p.x - p.r, top: p.y - p.r, width: p.r * 2, height: p.r * 2, borderRadius: "50%" };
+          const style: CSSProperties = { left: lan.x0, top: lan.y0, width: lan.x1 - lan.x0, height: lan.y1 - lan.y0, borderRadius: "40%" };
+          return <button key={pd.id} type="button" data-testid={`estacao-${pd.id}`} disabled={!vez} aria-label={vez ? pd.dica : pd.nome}
+            className={`absolute z-[1] touch-none bg-transparent outline-none focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-4 focus-visible:outline-[#e8b84a] ${vez ? "cursor-grab active:cursor-grabbing" : "pointer-events-none"}`}
+            style={style} {...(vez ? gesto(pd.id, false) : {})} />;
         }
-        return <button key={id} type="button" data-testid={`estacao-${id}`} disabled={!vez} aria-label={vez ? d : nome}
-          className={`absolute touch-none bg-transparent outline-none focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-4 focus-visible:outline-[#e8b84a] ${vez ? "cursor-grab active:cursor-grabbing" : "pointer-events-none"} ${p ? "z-[2]" : "z-[1]"}`}
-          style={style} {...(vez ? gesto(id, !!p) : {})} />;
+        return ests.map((e) => {
+          const p = proj.estacoes[e];
+          const op = opcaoDaEstacao(e);
+          const opc = op && pd.grupo ? opcaoDe(pd.grupo, op) : null;
+          const style: CSSProperties = { left: p.x - p.r, top: p.y - p.r, width: p.r * 2, height: p.r * 2, borderRadius: "50%" };
+          return <button key={e} type="button" data-testid={opc ? `opcao-${pd.grupo}-${op}` : `estacao-${e}`} disabled={!vez}
+            aria-label={opc ? `${pd.nome}: ${opc.sub}${vez ? ". Toque ou arraste até o lanche" : ""}` : vez ? pd.dica : pd.nome}
+            className={`absolute z-[2] touch-none bg-transparent outline-none focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-4 focus-visible:outline-[#e8b84a] ${vez ? "cursor-grab active:cursor-grabbing" : "pointer-events-none"}`}
+            style={style} {...(vez ? gesto(e, true) : {})}>
+            {opc && vez && segurando !== e && <span aria-hidden="true" className="pointer-events-none absolute left-1/2 top-full mt-0.5 flex w-max max-w-[118px] -translate-x-1/2 items-center gap-1 rounded-lg bg-[#120c09]/80 px-2 py-1 text-[11px] font-semibold leading-tight text-[#fff8e7] shadow-[0_6px_16px_rgba(0,0,0,.45)] backdrop-blur-md min-[700px]:text-[12px]">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-[#fff8e7]/40" style={{ background: AMOSTRA[op!] }} />{opc.nome}
+            </span>}
+          </button>;
+        });
       })}
 
       {/* topo: trilha + Monta pra mim (no pedido: trilha das fases com o total) */}
       {fase !== "montagem" && pedido && <TrilhaPedido fase={fase} pedido={pedido} />}
       {fase === "montagem" && <div className="pointer-events-none absolute inset-x-0 top-0 z-[5] flex flex-wrap items-start justify-center gap-2 px-4 pt-[max(12px,env(safe-area-inset-top))] min-[700px]:justify-between min-[700px]:px-6 min-[700px]:pt-5">
-        <ol data-testid="trilha" aria-label="Camadas" className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-[#fff8e7]/10 bg-[#120c09]/70 px-2.5 py-1.5 shadow-[0_8px_24px_rgba(0,0,0,.35)] backdrop-blur-md min-[700px]:gap-2 min-[700px]:px-3 min-[700px]:py-2">
+        <ol data-testid="trilha" aria-label="Camadas" className="pointer-events-auto flex items-center gap-1 rounded-full border border-[#fff8e7]/10 bg-[#120c09]/70 px-2 py-1.5 shadow-[0_8px_24px_rgba(0,0,0,.35)] backdrop-blur-md min-[700px]:gap-2 min-[700px]:px-3 min-[700px]:py-2">
           {PASSOS.map(({ id, icone, nome }, i) => {
             const pulou = pulados.includes(id);
             const estado = i < feitos ? (pulou ? "pulada" : "feito") : i === feitos ? "ativa" : "pendente";
             const rotulo = estado === "feito" ? "feito" : estado === "pulada" ? "pulado" : estado === "ativa" ? "agora" : "depois";
-            return <li key={id} data-estado={estado} aria-label={`${nome}: ${rotulo}`}
-              className={`relative grid h-10 w-10 place-items-center rounded-full transition-[background-color,opacity] duration-300 min-[700px]:h-11 min-[700px]:w-11 ${estado === "ativa" ? "proto-anim bg-[#ff6a1a]/25 ring-2 ring-[#ff9a4a] [animation:proto-pulso_1.6s_ease-in-out_infinite]" : estado === "feito" ? "bg-[#fff8e7]/10" : estado === "pulada" ? "opacity-45 grayscale" : "opacity-40 grayscale"}`}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={`/assets/bancada/icones/${icone}.webp`} alt="" draggable={false}
-                className={`h-8 w-8 object-contain min-[700px]:h-9 min-[700px]:w-9 ${pop === i ? "proto-anim [animation:proto-pop_.5s_cubic-bezier(.3,1.6,.5,1)]" : ""}`} />
-              {estado === "feito" && <span aria-hidden="true" className={`absolute -bottom-0.5 -right-0.5 grid h-4 w-4 place-items-center rounded-full bg-[#e8b84a] text-[10px] font-black text-[#120c09] ${pop === i ? "proto-anim [animation:proto-pop_.5s_cubic-bezier(.3,1.6,.5,1)]" : ""}`}>✓</span>}
+            const popa = pop === i ? "proto-anim [animation:proto-pop_.5s_cubic-bezier(.3,1.6,.5,1)]" : "";
+            return <li key={id} data-estado={estado} data-etapa={id} aria-label={`${nome}: ${rotulo}`}
+              className={`relative grid h-9 w-9 place-items-center rounded-full transition-[background-color,opacity] duration-300 min-[700px]:h-11 min-[700px]:w-11 ${estado === "ativa" ? "proto-anim bg-[#ff6a1a]/25 ring-2 ring-[#ff9a4a] [animation:proto-pulso_1.6s_ease-in-out_infinite]" : estado === "feito" ? "bg-[#fff8e7]/10" : estado === "pulada" ? "opacity-45 grayscale" : "opacity-40 grayscale"}`}>
+              {icone
+                // eslint-disable-next-line @next/next/no-img-element
+                ? <img src={`/assets/bancada/icones/${icone}.webp`} alt="" draggable={false} className={`h-7 w-7 object-contain min-[700px]:h-9 min-[700px]:w-9 ${popa}`} />
+                : <IconeTurbinar className={`h-6 w-6 min-[700px]:h-7 min-[700px]:w-7 ${popa}`} />}
+              {estado === "feito" && <span aria-hidden="true" className={`absolute -bottom-0.5 -right-0.5 grid h-4 w-4 place-items-center rounded-full bg-[#e8b84a] text-[10px] font-black text-[#120c09] ${popa}`}>✓</span>}
               {estado === "pulada" && <span aria-hidden="true" className="absolute left-1.5 right-1.5 top-1/2 h-[2px] -rotate-45 rounded-full bg-[#fff8e7]/80" />}
             </li>;
           })}
@@ -249,24 +341,55 @@ export default function Prototipo() {
       {/* toque em qualquer lugar interrompe o "Monta pra mim" */}
       {auto && <button type="button" aria-label="Parar a montagem automática" onPointerDown={parar} className="absolute inset-0 z-[4] cursor-pointer bg-transparent" />}
 
-      {/* dica da vez (e "Pular" nas etapas opcionais) */}
-      {!fim && pronto && <div key={ativo ?? "x"} className={`proto-anim pointer-events-none absolute inset-x-0 bottom-[max(22px,env(safe-area-inset-bottom))] z-[5] flex flex-col items-center gap-2 px-6 text-center [animation:proto-sobe_.45s_ease-out] transition-opacity duration-300 min-[700px]:bottom-8 ${animando ? "opacity-0" : "opacity-100"}`}>
+      {/* qual pão? (lanches de pão de alho, antes da primeira ação) */}
+      {escolhendoPao && pronto && <div data-testid="escolha-pao" role="group" aria-label="Qual pão?"
+        className="proto-anim absolute inset-x-0 bottom-[max(18px,env(safe-area-inset-bottom))] z-[6] flex flex-col items-center gap-2.5 px-4 text-center [animation:proto-sobe_.45s_ease-out] min-[700px]:bottom-8">
+        <p className="font-hand text-[32px] leading-none text-[#fff8e7] [text-shadow:0_2px_14px_rgba(0,0,0,.85)] min-[700px]:text-[40px]">Qual pão?</p>
+        <div className="flex w-full max-w-[420px] gap-2.5">
+          {OPCOES.pao.map((o) => <button key={o.id} type="button" data-testid={`opcao-pao-${o.id}`} onClick={() => { escolherOpcao("pao", o.id); setAnuncio(`${o.texto}. Agora a pasta`); }}
+            className={`flex flex-1 items-center gap-2.5 rounded-2xl border border-[#fff8e7]/15 bg-[#120c09]/80 px-3 py-2.5 text-left shadow-[0_14px_36px_rgba(0,0,0,.45)] backdrop-blur-md transition-colors hover:border-[#ff9a4a]/70 hover:bg-[#241a16] ${foco}`}>
+            <span aria-hidden="true" className="h-9 w-9 shrink-0 rounded-full border border-[#fff8e7]/25" style={{ background: AMOSTRA[o.id] }} />
+            <span className="min-w-0"><span className="block font-hand text-[24px] leading-none">{o.nome}</span><span className="block text-[11.5px] leading-tight text-[#fff8e7]/70">{o.sub}</span></span>
+          </button>)}
+        </div>
+      </div>}
+
+      {/* dica da vez ("Pular" nas etapas opcionais, "Sem ..." nas etapas com opções, queijo em dobro depois do queijo) */}
+      {!fim && pronto && !escolhendoPao && !turbinando && <div key={ativo ?? "x"} className={`proto-anim pointer-events-none absolute inset-x-0 bottom-[max(22px,env(safe-area-inset-bottom))] z-[5] flex flex-col items-center gap-2 px-6 text-center [animation:proto-sobe_.45s_ease-out] transition-opacity duration-300 min-[700px]:bottom-8 ${animando ? "opacity-0" : "opacity-100"}`}>
         <p className="font-hand text-[30px] leading-[1.05] text-[#fff8e7] [text-shadow:0_2px_14px_rgba(0,0,0,.85)] min-[700px]:text-[38px]">
           {auto ? "Montando pra você… toque pra parar" : dica}
         </p>
+        {auto && <p data-testid="dica-auto" className="max-w-[420px] text-[12.5px] leading-snug text-[#fff8e7]/85 [text-shadow:0_1px_8px_rgba(0,0,0,.9)]">{resumoAuto}</p>}
         {podePular && <button type="button" data-testid="pular" onClick={pular}
-          className="pointer-events-auto rounded-full border border-[#fff8e7]/25 bg-[#120c09]/55 px-4 py-1.5 text-sm font-semibold text-[#fff8e7]/85 backdrop-blur-md transition-colors hover:bg-[#241a16] hover:text-[#fff8e7] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e8b84a]">
+          className={`pointer-events-auto rounded-full border border-[#fff8e7]/25 bg-[#120c09]/55 px-4 py-1.5 text-sm font-semibold text-[#fff8e7]/85 backdrop-blur-md transition-colors hover:bg-[#241a16] hover:text-[#fff8e7] ${foco}`}>
           Pular
         </button>}
+        {ativoDef?.grupo && livre && <button type="button" data-testid={`opcao-${ativoDef.grupo}-sem`} onClick={semOpcao}
+          className={`pointer-events-auto rounded-full border border-[#fff8e7]/25 bg-[#120c09]/55 px-4 py-1.5 text-sm font-semibold text-[#fff8e7]/85 backdrop-blur-md transition-colors hover:bg-[#241a16] hover:text-[#fff8e7] ${foco}`}>
+          {SEM_OPCAO[ativoDef.grupo].nome}{ativoDef.grupo === "queijo" && PASSOS[feitos + 1]?.tipo === "macarico" ? " (sem maçarico)" : ""}
+        </button>}
+        {podeDobro && <div className="pointer-events-auto flex items-center gap-1.5">
+          {nDobro > 0 && <button type="button" data-testid="queijo-dobro-menos" onClick={() => dobro(-1)} disabled={!livre} aria-label={`Tirar uma camada de ${ADICIONAIS["queijo-dobro"].nome}`}
+            className={`grid h-9 w-9 place-items-center rounded-full border border-[#fff8e7]/25 bg-[#120c09]/60 text-lg font-bold text-[#fff8e7] backdrop-blur-md hover:bg-[#241a16] disabled:opacity-50 ${foco}`}>−</button>}
+          <button type="button" data-testid="queijo-dobro" onClick={() => dobro(1)} disabled={!livre || nDobro >= ADICIONAIS["queijo-dobro"].max}
+            aria-label={`Queijo em dobro, mais uma camada, ${brl(ADICIONAIS["queijo-dobro"].preco)}${nDobro ? `, ${nDobro} no lanche` : ""}`}
+            className={`inline-flex h-9 items-center gap-1.5 rounded-full border border-[#ff9a4a] bg-[#ff6a1a]/25 px-4 text-sm font-semibold text-[#fff8e7] backdrop-blur-md hover:bg-[#ff6a1a]/40 disabled:opacity-50 ${foco}`}>
+            + Queijo em dobro ({brl(ADICIONAIS["queijo-dobro"].preco)}){nDobro > 0 && <span className="rounded-full bg-[#e8b84a] px-1.5 text-[11px] font-black text-[#120c09]">×{nDobro}</span>}
+          </button>
+        </div>}
       </div>}
+
+      {/* Turbinar, dentro do lanche, antes da tampa */}
+      {turbinando && pronto && pedido && !auto && <PainelTurbinar pedido={pedido} muda={muda} proj={projPed} zona={lan ?? null} anunciar={setAnuncio} aoFechar={fecharLanche} fechando={fechando} />}
 
       {/* fim */}
       {fim && !animando && fase === "montagem" && <div data-testid="pronto" role="status"
         className="proto-anim absolute inset-x-4 bottom-[max(18px,env(safe-area-inset-bottom))] z-[6] mx-auto max-w-[420px] rounded-2xl bg-[#fff8e7]/95 px-5 py-4 text-[#120c09] shadow-[0_18px_50px_rgba(0,0,0,.5)] [animation:proto-sobe_.5s_cubic-bezier(.2,1.3,.4,1)] min-[700px]:bottom-8">
         <p className="font-hand text-[27px] leading-none text-[#c2410c] min-[700px]:text-[32px]">Ficou com capricho!</p>
         <p className="mt-1 text-sm text-[#5c3d2e]">{def.fim}</p>
-        <button type="button" data-testid="seguir-pedido" onClick={turbinar}
-          className="mt-3 w-full rounded-full bg-[#ff6a1a] px-4 py-2.5 text-sm font-bold text-[#120c09] transition-colors hover:bg-[#ff8a3d] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8b84a]">Turbinar o lanche</button>
+        {pedido?.opcoes && <p data-testid="pronto-opcoes" className="mt-1 text-[12.5px] leading-snug text-[#7a5a48]">{textoDasOpcoes(pedido.opcoes)}</p>}
+        <button type="button" data-testid="seguir-pedido" onClick={seguirPedido}
+          className="mt-3 w-full rounded-full bg-[#ff6a1a] px-4 py-2.5 text-sm font-bold text-[#120c09] transition-colors hover:bg-[#ff8a3d] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8b84a]">Escolher a bebida</button>
         <div className="mt-2 flex gap-2">
           <button type="button" data-testid="montar-de-novo" onClick={deNovo}
             className="flex-1 rounded-full bg-[#120c09] px-4 py-2.5 text-sm font-semibold text-[#fff8e7] transition-colors hover:bg-[#2a1d18] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8b84a]">Montar de novo</button>
@@ -284,6 +407,15 @@ export default function Prototipo() {
     </>}
     <p aria-live="polite" className="sr-only">{anuncio}</p>
   </div>;
+}
+
+/** Ícone da etapa Turbinar na trilha (não há WebP para ela): um potinho com um "+". */
+function IconeTurbinar({ className = "" }: { className?: string }) {
+  return <svg viewBox="0 0 32 32" aria-hidden="true" className={className}>
+    <path d="M5 15h22l-2.2 9.2A3 3 0 0 1 21.9 27H10.1a3 3 0 0 1-2.9-2.8L5 15z" fill="#5a3a26" stroke="#ffcf8a" strokeWidth="1.6" strokeLinejoin="round" />
+    <circle cx="11" cy="13" r="2.6" fill="#b5462a" /><circle cx="16.5" cy="11.6" r="2.8" fill="#d99a3c" /><circle cx="21.5" cy="13.2" r="2.4" fill="#7a1a12" />
+    <path d="M16 3.5v7M12.5 7h7" stroke="#ff9a4a" strokeWidth="2.4" strokeLinecap="round" />
+  </svg>;
 }
 
 /** Tela leve de escolha: os 4 lanches sobre o fundo da cozinha. */

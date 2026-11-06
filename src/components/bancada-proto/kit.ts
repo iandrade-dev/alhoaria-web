@@ -8,6 +8,7 @@ import {
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { Acao, Medidas, Pose } from "./acoes";
 import type { Arranjo } from "./layout";
+import type { Opcoes } from "./cardapio";
 
 // ---------------------------------------------------------------- mão de luva
 export type InfoPose = { braco: [number, number, number]; ponto: [number, number, number]; base: [number, number, number] };
@@ -135,6 +136,49 @@ export function separar(g: BufferGeometry, fica: (src: BufferGeometry, i: number
   return out;
 }
 
+// ---------------------------------------------------------------- tinta e pontinhos (opções do pedido)
+/** Controle de uma tinta: cor puxada (força 0..1) e pontinhos de outra cor (densidade 0..1, por célula de 1/freq m). */
+export type Tinta = { cor: Color; forca: { value: number }; ponto: Color; pontos: { value: number }; freq: { value: number }; raio: { value: number } };
+/**
+ * Tinge um material em código (sem textura nova): puxa a cor para `cor` mantendo o sombreado da cor de vértice e
+ * salpica pontinhos (ervas, parmesão) num padrão 3D no espaço do objeto, então funciona com ou sem UV. Os valores
+ * mudam pelos uniforms devolvidos, sem recompilar. Respeita o escurecimento das estações (cor do material).
+ */
+export function tintavel(m: Material, freq = 110, raio = 0.3): Tinta {
+  const t: Tinta = { cor: new Color(1, 1, 1), forca: { value: 0 }, ponto: new Color(1, 1, 1), pontos: { value: 0 }, freq: { value: freq }, raio: { value: raio } };
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uTinta = { value: t.cor }; sh.uniforms.uForca = t.forca;
+    sh.uniforms.uPonto = { value: t.ponto }; sh.uniforms.uPontos = t.pontos; sh.uniforms.uFreq = t.freq; sh.uniforms.uRaio = t.raio;
+    sh.vertexShader = "varying vec3 vPosT;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\n  vPosT = position;");
+    sh.fragmentShader = "varying vec3 vPosT;\nuniform vec3 uTinta;\nuniform float uForca;\nuniform vec3 uPonto;\nuniform float uPontos;\nuniform float uFreq;\nuniform float uRaio;\n"
+      + sh.fragmentShader.replace("#include <color_fragment>", `#include <color_fragment>
+  {
+    float dimT = max(diffuse.r, max(diffuse.g, diffuse.b));
+    float lumT = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)) / max(dimT, 1e-3);
+    diffuseColor.rgb = mix(diffuseColor.rgb, uTinta * dimT * (0.4 + 0.75 * lumT), uForca);
+    if (uPontos > 0.0) {
+      vec3 pT = vPosT * uFreq;
+      vec3 cT = floor(pT);
+      float hT = fract(sin(dot(cT, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+      vec3 oT = vec3(fract(hT * 7.13), fract(hT * 3.71), fract(hT * 5.17)) * 0.5 + 0.25;
+      float dT = length(fract(pT) - oT);
+      float onT = step(1.0 - uPontos, hT) * (1.0 - smoothstep(uRaio * 0.75, uRaio, dT));
+      diffuseColor.rgb = mix(diffuseColor.rgb, uPonto * dimT, onT);
+    }
+  }`);
+  };
+  m.customProgramCacheKey = () => "tinta-v1";
+  m.needsUpdate = true;
+  return t;
+}
+/** Aplica uma tinta: cor e força; pontinhos opcionais. */
+export function pintarTinta(t: Tinta, cor: string | null, forca = 0, ponto: string | null = null, pontos = 0) {
+  if (cor) t.cor.set(cor);
+  t.forca.value = cor ? forca : 0;
+  if (ponto) t.ponto.set(ponto);
+  t.pontos.value = ponto ? pontos : 0;
+}
+
 // ---------------------------------------------------------------- estações
 export type Estacao = {
   id: string; raiz: Group; ferramenta: Object3D | null; casa: { p: Vector3; q: Quaternion }; apoio: Vector3; raio: number; alto: number;
@@ -220,6 +264,8 @@ export type Kit = {
   quadro?: (dt: number) => void;
   /** A ferramenta da estação volta com mola no fim da ação? (padrão: sim) */
   volta?: (id: string) => boolean;
+  /** Escolhas do pedido que mudam o lanche na tábua (ex.: o pão parmesão ou roseta). */
+  vestir?: (o: Opcoes | null) => void;
   /** Medidas atualizadas no layout (ex.: pontos de pegada no meio da ação). */
   M: Medidas;
 };

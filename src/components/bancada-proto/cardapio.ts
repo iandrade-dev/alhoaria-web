@@ -17,6 +17,53 @@ export const LANCHES_PRECO: Record<LancheId, { nome: string; preco: number }> = 
   dogalho: { nome: "Dogalho", preco: 2690 },
 };
 
+// ---------------------------------------------------------------- Opções do pedido (lanches de pão de alho)
+// Cada grupo do Anota AI pede "Escolha 1 item". O Dogalho não tem grupos de escolha. As opções não mudam o preço.
+export type GrupoOpcao = "pao" | "pasta" | "creme" | "queijo";
+export type Opcao = { id: string; nome: string; sub: string; texto: string };
+/** Na ordem do cardápio: a primeira de cada grupo é a do "Monta pra mim". */
+export const OPCOES: Record<GrupoOpcao, Opcao[]> = {
+  pao: [
+    { id: "parmesao", nome: "Parmesão", sub: "pão especial com parmesão", texto: "Pão parmesão" },
+    { id: "roseta", nome: "Roseta", sub: "pão especial com ervas finas", texto: "Pão roseta" },
+  ],
+  pasta: [
+    { id: "ervas", nome: "Com ervas", sub: "pasta de alho com ervas verdes", texto: "Pasta com ervas" },
+    { id: "tradicional", nome: "Tradicional", sub: "pasta de alho tradicional", texto: "Pasta de alho tradicional" },
+  ],
+  creme: [
+    { id: "cheddar", nome: "Cheddar defumado", sub: "creme de cheddar defumado", texto: "Creme cheddar defumado" },
+    { id: "4-queijos", nome: "4 queijos", sub: "creme 4 queijos", texto: "Creme 4 queijos" },
+  ],
+  queijo: [
+    { id: "mucarela", nome: "Muçarela", sub: "queijo gratinado muçarela", texto: "Muçarela" },
+    { id: "colonial", nome: "Colonial", sub: "queijo gratinado colonial", texto: "Colonial" },
+  ],
+};
+/** O chip "Sem ..." de cada grupo (o pão não tem). */
+export const SEM_OPCAO: Record<Exclude<GrupoOpcao, "pao">, { nome: string; texto: string }> = {
+  pasta: { nome: "Sem pasta", texto: "sem pasta de alho" },
+  creme: { nome: "Sem creme", texto: "sem creme de queijo" },
+  queijo: { nome: "Sem queijo", texto: "sem queijo gratinado" },
+};
+/** Escolha de cada grupo: o id da opção, "sem" ou null (ainda não escolheu). */
+export type Opcoes = Record<GrupoOpcao, string | null>;
+export const ORDEM_GRUPOS: GrupoOpcao[] = ["pao", "pasta", "creme", "queijo"];
+export const opcoesVazias = (): Opcoes => ({ pao: null, pasta: null, creme: null, queijo: null });
+/** "Monta pra mim": a primeira opção de cada grupo. */
+export const OPCOES_PADRAO: Opcoes = { pao: OPCOES.pao[0].id, pasta: OPCOES.pasta[0].id, creme: OPCOES.creme[0].id, queijo: OPCOES.queijo[0].id };
+export const opcaoDe = (g: GrupoOpcao, id: string | null) => OPCOES[g].find((o) => o.id === id) ?? null;
+/** "Pão roseta · Pasta de alho tradicional · Creme 4 queijos · Colonial" (só os grupos já escolhidos). */
+export function textoDasOpcoes(o: Opcoes) {
+  return ORDEM_GRUPOS.flatMap((g) => {
+    const v = o[g];
+    if (!v) return [];
+    if (v === "sem" && g !== "pao") return [SEM_OPCAO[g].texto];
+    const op = opcaoDe(g, v);
+    return op ? [op.texto] : [];
+  }).join(" · ");
+}
+
 // ---------------------------------------------------------------- Turbine
 export type AdicionalId = "bacon" | "tomate-seco" | "cebola-caramelizada" | "cebola-crispy" | "farofa" | "queijo-dobro";
 export type SeparadoId = "pasta-tradicional" | "pasta-ervas" | "creme-4-queijos" | "creme-cheddar";
@@ -32,6 +79,8 @@ export const ADICIONAIS: Record<AdicionalId, Item> = {
   "queijo-dobro": { nome: "Queijo gratinado em dobro", curto: "Queijo em dobro", preco: 600, max: 12 },
 };
 export const ORDEM_ADICIONAIS = Object.keys(ADICIONAIS) as AdicionalId[];
+/** Os potinhos da etapa Turbinar (o queijo em dobro entra na etapa do queijo). */
+export const POTINHOS: AdicionalId[] = ["bacon", "tomate-seco", "cebola-caramelizada", "cebola-crispy", "farofa"];
 
 /** Adicionais que vão separados (potinho com tampa ao lado do lanche). */
 export const SEPARADOS: Record<SeparadoId, Item> = {
@@ -106,6 +155,8 @@ export function economiaDoTrio(l: LancheId, sabor: SaborLata | null) {
 // ---------------------------------------------------------------- Pedido
 export type Pedido = {
   lanche: LancheId;
+  /** Escolhas da montagem (pão, pasta, creme, queijo); null no Dogalho. */
+  opcoes: Opcoes | null;
   adicionais: Partial<Record<AdicionalId, number>>;
   separados: Partial<Record<SeparadoId, number>>;
   bebida: Bebida | null;
@@ -115,12 +166,15 @@ export type Pedido = {
   /** Sabor da lata do trio quando a bebida escolhida não é lata (chopp, soda ou nenhuma). */
   lataCombo: SaborLata | null;
 };
-export const novoPedido = (lanche: LancheId): Pedido => ({ lanche, adicionais: {}, separados: {}, bebida: null, porcao: null, combo: false, lataCombo: null });
+export const novoPedido = (lanche: LancheId): Pedido => ({
+  lanche, opcoes: lanche === "dogalho" ? null : opcoesVazias(), adicionais: {}, separados: {}, bebida: null, porcao: null, combo: false, lataCombo: null,
+});
 
 /** Sabor da lata que entra no trio (null = ainda falta escolher). */
 export const saborDaLataDoCombo = (p: Pedido): SaborLata | null => (p.bebida?.id === "lata" ? p.bebida.sabor : p.lataCombo);
 
-export type Linha = { texto: string; valor: number; detalhe?: string; nivel: 0 | 1 };
+/** `obs` = as escolhas do lanche, numa linha (sem preço). */
+export type Linha = { texto: string; valor: number; detalhe?: string; obs?: string; nivel: 0 | 1 };
 
 const qtd = (n: number | undefined, max: number) => Math.max(0, Math.min(max, n ?? 0));
 
@@ -129,12 +183,13 @@ export function linhasDoPedido(p: Pedido): Linha[] {
   const out: Linha[] = [];
   const lanche = LANCHES_PRECO[p.lanche];
   const trio = p.combo ? trioDe(p.lanche) : null;
+  const obs = p.opcoes ? textoDasOpcoes(p.opcoes) || undefined : undefined;
   if (trio) {
     const sabor = saborDaLataDoCombo(p);
     const lata = sabor ? (sabor === "pureza" ? "Pureza lata" : `${SABORES_LATA[sabor].nome} lata`) : "refri lata (falta o sabor)";
-    out.push({ texto: `1x ${trio.nome}`, valor: trio.preco, detalhe: `${lanche.nome} + ${trio.batata} + ${lata}`, nivel: 0 });
+    out.push({ texto: `1x ${trio.nome}`, valor: trio.preco, detalhe: `${lanche.nome} + ${trio.batata} + ${lata}`, obs, nivel: 0 });
   } else {
-    out.push({ texto: `1x ${lanche.nome}`, valor: lanche.preco, nivel: 0 });
+    out.push({ texto: `1x ${lanche.nome}`, valor: lanche.preco, obs, nivel: 0 });
   }
   for (const id of ORDEM_ADICIONAIS) {
     const a = ADICIONAIS[id]; const n = qtd(p.adicionais[id], a.max);
@@ -166,8 +221,11 @@ export function brl(c: number) {
 /** Texto do pedido, o mesmo no "Copiar pedido" e na mensagem do WhatsApp. */
 export function textoDoPedido(p: Pedido) {
   const linhas = linhasDoPedido(p).map((l) => {
-    const base = `${l.nivel ? "   " : ""}${l.texto}: ${brl(l.valor)}`;
-    return l.detalhe ? `${base}\n${l.nivel ? "      " : "   "}(${l.detalhe})` : base;
+    const recuo = l.nivel ? "      " : "   ";
+    let s = `${l.nivel ? "   " : ""}${l.texto}: ${brl(l.valor)}`;
+    if (l.detalhe) s += `\n${recuo}(${l.detalhe})`;
+    if (l.obs) s += `\n${recuo}${l.obs}`;
+    return s;
   });
   return ["Olá! Quero fazer este pedido, montado no site da Alhoaria:", ...linhas, `Total: ${brl(totalDoPedido(p))}`].join("\n");
 }

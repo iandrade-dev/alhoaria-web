@@ -1,20 +1,21 @@
 "use client";
 
-// HUD das fases depois do lanche pronto: trilha com o total, rótulos tocáveis sobre os potinhos/bebidas/porções da
-// cena, painéis de cada fase e o resumo com o botão do WhatsApp.
+// HUD do pedido: o painel da etapa Turbinar (dentro da montagem, antes da tampa) e, depois do lanche pronto, a trilha
+// com o total, rótulos tocáveis sobre as bebidas/porções da cena, painéis de cada fase e o resumo com o WhatsApp.
 import { useRef, useState, type PointerEvent as RPointerEvent, type ReactNode } from "react";
 import {
-  ADICIONAIS, AVISO, BEBIDAS, LANCHES_PRECO, ORDEM_ADICIONAIS, ORDEM_BEBIDAS, ORDEM_PORCOES, ORDEM_SABORES_LATA, ORDEM_SABORES_SODA,
+  ADICIONAIS, AVISO, BEBIDAS, LANCHES_PRECO, ORDEM_BEBIDAS, ORDEM_PORCOES, ORDEM_SABORES_LATA, ORDEM_SABORES_SODA, POTINHOS,
   ORDEM_SEPARADOS, PORCOES, SABORES_LATA, SABORES_SODA, SEPARADOS, brl, economiaDoTrio, linkWhatsApp, linhasDoPedido, saborDaLataDoCombo, textoDoPedido,
   totalDoPedido, trioDe, type AdicionalId, type BebidaId, type Pedido, type PorcaoId, type SaborLata, type SaborSoda, type SeparadoId,
 } from "./cardapio";
 import type { FasePedido, ProjPedido } from "./Pedido3D";
 
 export type Zona = { x0: number; y0: number; x1: number; y1: number } | null;
-type Muda = (f: (p: Pedido) => Pedido) => void;
+export type Muda = (f: (p: Pedido) => Pedido) => void;
+/** Fases depois do lanche pronto. */
+export type FasePos = Exclude<FasePedido, "montagem" | "turbinar">;
 
-const FASES: { id: Exclude<FasePedido, "montagem">; nome: string }[] = [
-  { id: "turbinar", nome: "Turbinar" },
+const FASES: { id: FasePos; nome: string }[] = [
   { id: "bebida", nome: "Bebida" },
   { id: "acomp", nome: "Acompanhamento" },
   { id: "sacola", nome: "Sacola" },
@@ -23,6 +24,15 @@ const foco = "focus-visible:outline focus-visible:outline-2 focus-visible:outlin
 const chip = `inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-[13px] font-semibold transition-colors ${foco}`;
 const chipOn = "border-[#ff9a4a] bg-[#ff6a1a]/25 text-[#fff8e7]";
 const chipOff = "border-[#fff8e7]/20 bg-[#120c09]/60 text-[#fff8e7]/90 hover:bg-[#241a16]";
+
+/** Soma uma dose de um adicional (até o máximo) e anuncia. */
+export function somarAdicional(pedido: Pedido, muda: Muda, anunciar: (s: string) => void, id: AdicionalId, d = 1) {
+  const a = ADICIONAIS[id]; const n = pedido.adicionais[id] ?? 0;
+  if (d > 0 && n >= a.max) { anunciar(`${a.nome}: no máximo ${a.max}`); return; }
+  const novo = Math.max(0, Math.min(a.max, n + d));
+  muda((p) => ({ ...p, adicionais: { ...p.adicionais, [id]: Math.max(0, Math.min(a.max, (p.adicionais[id] ?? 0) + d)) } }));
+  anunciar(`${a.nome}: ${novo}`);
+}
 
 /** Trilha das fases do pedido, com o total parcial. */
 export function TrilhaPedido({ fase, pedido }: { fase: FasePedido; pedido: Pedido }) {
@@ -116,8 +126,60 @@ function ChipsSabor<T extends string>({ ordem, nomes, atual, aoEscolher, titulo 
   </div>;
 }
 
+/**
+ * Etapa Turbinar da montagem, antes da tampa: rótulos sobre os 5 potinhos (a mão joga sobre o recheio e o adicional
+ * fica dentro do lanche), a fileira dos separados e "Fechar o lanche", que segue para a tampa (dá para fechar sem nada).
+ */
+export function PainelTurbinar({ pedido, muda, proj, zona, anunciar, aoFechar, fechando }: {
+  pedido: Pedido; muda: Muda; proj: ProjPedido | null; zona: Zona; anunciar: (s: string) => void; aoFechar: () => void; fechando: boolean;
+}) {
+  const somar = (id: AdicionalId) => somarAdicional(pedido, muda, anunciar, id);
+  const tirar = (id: AdicionalId) => somarAdicional(pedido, muda, anunciar, id, -1);
+  const separado = (id: SeparadoId, d: number) => muda((p) => ({ ...p, separados: { ...p.separados, [id]: Math.max(0, Math.min(SEPARADOS[id].max, (p.separados[id] ?? 0) + d)) } }));
+  const postos = POTINHOS.filter((id) => (pedido.adicionais[id] ?? 0) > 0);
+  return <>
+    {!fechando && POTINHOS.map((id) => {
+      const a = ADICIONAIS[id]; const n = pedido.adicionais[id] ?? 0;
+      return <NaCena key={id} testid={`adicional-${id}`} ponto={proj?.[`adicional-${id}`]} nome={a.curto} preco={brl(a.preco)} conta={n} ativo={n > 0} zona={zona}
+        desligado={n >= a.max} aoUsar={() => somar(id)} rotulo={`${a.nome}, ${brl(a.preco)}${n ? `, ${n} no lanche` : ""}${n >= a.max ? " (no máximo)" : ""}`} />;
+    })}
+    <Painel testid="painel-turbinar">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <Dica>Turbine por dentro</Dica>
+          <p className="mt-1 text-[12px] leading-snug text-[#fff8e7]/75">Toque ou arraste um potinho até o lanche · Total <b data-testid="total-turbinar" className="tabular-nums text-[#ffcf8a]">{brl(totalDoPedido(pedido))}</b></p>
+        </div>
+        <button type="button" data-testid="fechar-lanche" onClick={aoFechar} disabled={fechando}
+          className={`h-11 shrink-0 rounded-full bg-[#ff6a1a] px-5 text-sm font-bold text-[#120c09] transition-colors hover:bg-[#ff8a3d] disabled:opacity-60 ${foco}`}>{fechando ? "Fechando…" : "Fechar o lanche"}</button>
+      </div>
+      <p className="mt-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#fff8e7]/60">Separados, no potinho com tampa · {brl(400)} cada</p>
+      <ul className="-mx-1 mt-1.5 flex gap-1.5 overflow-x-auto px-1 pb-1">
+        {ORDEM_SEPARADOS.map((id) => {
+          const s = SEPARADOS[id]; const n = pedido.separados[id] ?? 0;
+          return <li key={id} className={`flex shrink-0 items-center rounded-full border ${n ? "border-[#ff9a4a] bg-[#ff6a1a]/20" : "border-[#fff8e7]/20 bg-[#120c09]/60"}`}>
+            {n > 0 && <button type="button" data-testid={`separado-${id}-menos`} aria-label={`Tirar ${s.nome}`} onClick={() => separado(id, -1)}
+              className={`grid h-9 w-8 place-items-center rounded-full text-lg font-bold text-[#fff8e7] hover:bg-[#fff8e7]/10 ${foco}`}>−</button>}
+            <button type="button" data-testid={`separado-${id}`} aria-label={`Pôr ${s.nome} separado, ${brl(s.preco)}${n ? `, ${n} no pedido` : ""}`} onClick={() => separado(id, 1)}
+              className={`flex h-9 items-center gap-1.5 rounded-full pl-3 pr-2.5 text-[12px] font-semibold text-[#fff8e7] hover:bg-[#fff8e7]/10 ${n ? "pl-1" : ""} ${foco}`}>
+              {s.curto}{n > 0 && <span className="rounded-full bg-[#e8b84a] px-1.5 text-[11px] font-black text-[#120c09]">{n}</span>}<span aria-hidden="true" className="text-base leading-none text-[#ffcf8a]">+</span>
+            </button>
+          </li>;
+        })}
+      </ul>
+      {postos.length > 0 && <ul aria-label="No lanche" className="mt-2 flex flex-wrap gap-1.5 border-t border-[#fff8e7]/10 pt-2">
+        {postos.map((id) => <li key={id}>
+          <button type="button" data-testid={`tirar-${id}`} onClick={() => tirar(id)} aria-label={`Tirar um ${ADICIONAIS[id].nome}`}
+            className={`${chip} h-8 border-[#fff8e7]/15 bg-[#fff8e7]/8 px-2.5 text-[12px] text-[#fff8e7]/90 hover:bg-[#fff8e7]/15`}>
+            {ADICIONAIS[id].curto} ×{pedido.adicionais[id]} <span aria-hidden="true" className="text-[#ff9a4a]">− Tirar</span>
+          </button>
+        </li>)}
+      </ul>}
+    </Painel>
+  </>;
+}
+
 type Props = {
-  fase: Exclude<FasePedido, "montagem">; pedido: Pedido; muda: Muda; proj: ProjPedido | null; zona: Zona;
+  fase: FasePos; pedido: Pedido; muda: Muda; proj: ProjPedido | null; zona: Zona;
   aoSeguir: () => void; sacolaPronta: boolean; aoOutro: () => void; anunciar: (s: string) => void;
 };
 
@@ -127,14 +189,6 @@ export default function PedidoHud(props: Props) {
   const [copiado, setCopiado] = useState<"" | "ok" | "erro">("");
   const trio = trioDe(pedido.lanche);
 
-  const somar = (id: AdicionalId) => {
-    const a = ADICIONAIS[id]; const n = pedido.adicionais[id] ?? 0;
-    if (n >= a.max) { anunciar(`${a.nome}: no máximo ${a.max}`); return; }
-    muda((p) => ({ ...p, adicionais: { ...p.adicionais, [id]: Math.min(a.max, (p.adicionais[id] ?? 0) + 1) } }));
-    anunciar(`${a.nome}: ${n + 1}`);
-  };
-  const tirar = (id: AdicionalId) => muda((p) => ({ ...p, adicionais: { ...p.adicionais, [id]: Math.max(0, (p.adicionais[id] ?? 0) - 1) } }));
-  const separado = (id: SeparadoId, d: number) => muda((p) => ({ ...p, separados: { ...p.separados, [id]: Math.max(0, Math.min(SEPARADOS[id].max, (p.separados[id] ?? 0) + d)) } }));
   const bebida = (id: BebidaId) => {
     muda((p) => {
       if (id === "lata") return { ...p, bebida: { id, sabor: p.bebida?.id === "lata" ? p.bebida.sabor : p.lataCombo ?? "coca" }, lataCombo: null };
@@ -159,46 +213,6 @@ export default function PedidoHud(props: Props) {
     }
     setTimeout(() => setCopiado(""), 2600);
   };
-
-  // ---------------------------------------------------------------- Turbinar
-  if (fase === "turbinar") {
-    const postos = ORDEM_ADICIONAIS.filter((id) => (pedido.adicionais[id] ?? 0) > 0);
-    return <>
-      {ORDEM_ADICIONAIS.map((id) => {
-        const a = ADICIONAIS[id]; const n = pedido.adicionais[id] ?? 0;
-        return <NaCena key={id} testid={`adicional-${id}`} ponto={proj?.[`adicional-${id}`]} nome={a.curto} preco={brl(a.preco)} conta={n} ativo={n > 0} zona={zona}
-          desligado={n >= a.max} aoUsar={() => somar(id)} rotulo={`${a.nome}, ${brl(a.preco)}${n ? `, ${n} no lanche` : ""}${n >= a.max ? " (no máximo)" : ""}`} />;
-      })}
-      <Painel testid="painel-turbinar">
-        <div className="flex items-center justify-between gap-3">
-          <Dica>Toque ou arraste um potinho até o lanche</Dica>
-          <Seguir aoSeguir={aoSeguir} />
-        </div>
-        <p className="mt-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#fff8e7]/60">Separados, no potinho com tampa · {brl(400)} cada</p>
-        <ul className="-mx-1 mt-1.5 flex gap-1.5 overflow-x-auto px-1 pb-1">
-          {ORDEM_SEPARADOS.map((id) => {
-            const s = SEPARADOS[id]; const n = pedido.separados[id] ?? 0;
-            return <li key={id} className={`flex shrink-0 items-center rounded-full border ${n ? "border-[#ff9a4a] bg-[#ff6a1a]/20" : "border-[#fff8e7]/20 bg-[#120c09]/60"}`}>
-              {n > 0 && <button type="button" data-testid={`separado-${id}-menos`} aria-label={`Tirar ${s.nome}`} onClick={() => separado(id, -1)}
-                className={`grid h-9 w-8 place-items-center rounded-full text-lg font-bold text-[#fff8e7] hover:bg-[#fff8e7]/10 ${foco}`}>−</button>}
-              <button type="button" data-testid={`separado-${id}`} aria-label={`Pôr ${s.nome} separado, ${brl(s.preco)}${n ? `, ${n} no pedido` : ""}`} onClick={() => separado(id, 1)}
-                className={`flex h-9 items-center gap-1.5 rounded-full pl-3 pr-2.5 text-[12px] font-semibold text-[#fff8e7] hover:bg-[#fff8e7]/10 ${n ? "pl-1" : ""} ${foco}`}>
-                {s.curto}{n > 0 && <span className="rounded-full bg-[#e8b84a] px-1.5 text-[11px] font-black text-[#120c09]">{n}</span>}<span aria-hidden="true" className="text-base leading-none text-[#ffcf8a]">+</span>
-              </button>
-            </li>;
-          })}
-        </ul>
-        {postos.length > 0 && <ul aria-label="No lanche" className="mt-2 flex flex-wrap gap-1.5 border-t border-[#fff8e7]/10 pt-2">
-          {postos.map((id) => <li key={id}>
-            <button type="button" data-testid={`tirar-${id}`} onClick={() => tirar(id)} aria-label={`Tirar um ${ADICIONAIS[id].nome}`}
-              className={`${chip} h-8 border-[#fff8e7]/15 bg-[#fff8e7]/8 px-2.5 text-[12px] text-[#fff8e7]/90 hover:bg-[#fff8e7]/15`}>
-              {ADICIONAIS[id].curto} ×{pedido.adicionais[id]} <span aria-hidden="true" className="text-[#ff9a4a]">− Tirar</span>
-            </button>
-          </li>)}
-        </ul>}
-      </Painel>
-    </>;
-  }
 
   // ---------------------------------------------------------------- Bebida
   if (fase === "bebida") {
@@ -267,7 +281,8 @@ export default function PedidoHud(props: Props) {
       <p className="font-hand text-[28px] leading-none text-[#c2410c]">Seu pedido</p>
       <ul className="mt-2 space-y-1.5 text-[13px]">
         {linhas.map((l, i) => <li key={i} className={`flex items-start justify-between gap-3 ${l.nivel ? "pl-3 text-[#5c3d2e]" : "font-semibold"}`}>
-          <span>{l.texto}{l.detalhe && <span className="block text-[11px] font-normal text-[#7a5a48]">{l.detalhe}</span>}</span>
+          <span>{l.texto}{l.detalhe && <span className="block text-[11px] font-normal text-[#7a5a48]">{l.detalhe}</span>}
+            {l.obs && <span data-testid={i === 0 ? "resumo-opcoes" : undefined} className="block text-[11.5px] font-normal text-[#5c3d2e]">{l.obs}</span>}</span>
           <span className="shrink-0 tabular-nums">{brl(l.valor)}</span>
         </li>)}
       </ul>

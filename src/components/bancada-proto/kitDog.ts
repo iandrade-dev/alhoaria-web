@@ -414,7 +414,8 @@ export function kitDog(def: LancheDef, A: Record<string, Object3D>, M: Medidas):
     }
   };
 
-  const acoes = Object.fromEntries(def.passos.map((p) => [p.id, ACOES_DOG[p.tipo as keyof typeof ACOES_DOG]]));
+  // o Turbinar não é ação da mão da montagem (os potinhos são do pedido)
+  const acoes = Object.fromEntries(def.passos.filter((p) => p.tipo in ACOES_DOG).map((p) => [p.id, ACOES_DOG[p.tipo as keyof typeof ACOES_DOG]]));
 
   return {
     raiz: L.raiz, lanche: L.lanche,

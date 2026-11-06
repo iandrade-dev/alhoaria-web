@@ -1,9 +1,10 @@
 "use client";
 
-// Depois do lanche pronto: Turbinar (potinhos de adicionais em volta da tábua e a mão soltando punhados sobre o
-// lanche), Bebida e Acompanhamento (prateleira atrás da tábua; a mão põe o escolhido ao lado do lanche) e Sacola (a
-// mão põe os itens um a um na sacola aberta, que fecha). Tudo é declarativo: a cena compara o pedido com o que está
-// na mesa e anima uma diferença por vez.
+// O pedido na mesa. Durante a montagem: Turbinar (antes da tampa: potinhos em volta da tábua e a mão soltando punhados
+// sobre o recheio, que ficam dentro do lanche), os separados na frente do lanche e o queijo em dobro (punhado da
+// tigela do queijo). Depois do lanche pronto: Bebida e Acompanhamento (prateleira atrás da tábua; a mão põe o
+// escolhido ao lado do lanche) e Sacola (a mão põe os itens um a um na sacola aberta, que fecha). Tudo é declarativo:
+// a cena compara o pedido com o que está na mesa e anima uma diferença por vez.
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
@@ -14,17 +15,22 @@ import { POSES, caixa, clonar, qBase, type Kit } from "./kit";
 import { c01, eIn2, eIO3, eIOs, eOut3, mola, seg, type Medidas, type Pose } from "./acoes";
 import { MESA, type Arranjo } from "./layout";
 import {
-  ORDEM_ADICIONAIS, ORDEM_BEBIDAS, ORDEM_PORCOES, ORDEM_SEPARADOS, SABORES_LATA, SABORES_SODA, type AdicionalId, type Pedido,
+  ORDEM_ADICIONAIS, ORDEM_BEBIDAS, ORDEM_PORCOES, ORDEM_SEPARADOS, POTINHOS, SABORES_LATA, SABORES_SODA, type AdicionalId, type Pedido,
 } from "./cardapio";
 import { dose, potinho, potinhoSeparado, punhadoNaMao, type Altura } from "./adicionais3d";
 
+/** "turbinar" = a etapa Turbinar da montagem (antes da tampa); as outras três vêm depois do lanche pronto. */
 export type FasePedido = "montagem" | "turbinar" | "bebida" | "acomp" | "sacola";
 /** Centro e raio na tela; `t` = y do topo do objeto (para a etiqueta ir por cima). */
 export type ProjPedido = Record<string, { x: number; y: number; r: number; t: number }>;
 type Maos = { raiz: Group; poses: Record<Pose, Object3D>; fer: Record<string, Object3D | null> };
 type Props = {
   K: Kit; H: Maos; M: Medidas; arranjo: Arranjo; fase: FasePedido; pedido: Pedido | null; reduzido: boolean;
+  /** Muda a cada "Montar de novo": a mesa volta a ficar vazia. */
+  rodada: number;
   aoProjetar: (p: ProjPedido) => void; aoSacola: () => void;
+  /** A mão do pedido está trabalhando (a montagem espera). */
+  aoOcupado: (ocupado: boolean) => void;
 };
 
 const ARQ = ["beb-lata", "beb-chopp", "beb-soda", "porcao-batata", "porcao-dadinho", "sacola"] as const;
@@ -150,13 +156,17 @@ function tingir(item: Item, cor: string) {
   });
 }
 
-export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, aoProjetar, aoSacola }: Props) {
+/** Lugar de cada potinho (índices em LUG.potes; o do meio da frente fica livre para os separados). */
+const LUGAR_POTE = [0, 1, 2, 3, 5];
+
+export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rodada, aoProjetar, aoSacola, aoOcupado }: Props) {
   const cenas = useGLTF(ARQ.map(glb));
   const { camera, size } = useThree();
   const A = useMemo(() => Object.fromEntries(ARQ.map((n, i) => [n, cenas[i].scene])) as unknown as Record<(typeof ARQ)[number], Object3D>, [cenas]);
   const opts = useRef({ fase, pedido, reduzido, arranjo }); opts.current = { fase, pedido, reduzido, arranjo };
   const fimSacola = useRef(aoSacola); fimSacola.current = aoSacola;
   const projetar = useRef(aoProjetar); projetar.current = aoProjetar;
+  const ocupar = useRef(aoOcupado); ocupar.current = aoOcupado;
 
   // ------------------------------------------------ objetos
   const P = useMemo(() => {
@@ -167,7 +177,7 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, aoP
     const yEm = (x: number, z: number) => (naTabua(x, z) ? bt.max.y : MESA);
 
     // potinhos dos adicionais
-    const potes = ORDEM_ADICIONAIS.map((id, i) => { const p = potinho(id, 11 + i * 7); p.g.visible = false; raiz.add(p.g); return { id, ...p }; });
+    const potes = POTINHOS.map((id) => { const p = potinho(id, 11 + ORDEM_ADICIONAIS.indexOf(id) * 7); p.g.visible = false; raiz.add(p.g); return { id, ...p }; });
     // prateleiras: bandeja escura atrás da tábua
     const bandeja = (larg: number) => {
       const m = new Mesh(new BoxGeometry(larg, 0.012, 0.13), new MeshStandardMaterial({ color: "#3a2618", roughness: 0.6 }));
@@ -213,25 +223,55 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, aoP
     voltas: [] as { obj: Object3D; t: number }[],
     slots: { b1: null, b2: null, p1: null, p2: null } as Record<SlotId, Item | null>,
     copos: new Map<string, { obj: Group; t: number; x: number; z: number }>(),
-    fade: { est: 0, potes: 0, beb: 0, por: 0, sacola: 0 },
+    fade: { est: 1, potes: 0, beb: 0, por: 0, sacola: 0 },
     sacola: "nada" as "nada" | "rodando" | "pronta",
     fila: [] as (() => Anim | null)[],
     proj: "",
+    ocupado: false,
   });
 
-  /** Superfície do lanche: grade de alturas por raio de cima para baixo (só o que está visível). */
-  const alturas = (): Altura => {
+  // "Montar de novo": a mesa volta vazia (doses, separados, bebidas) e as doses serão refeitas na superfície nova
+  const rodadaVista = useRef(rodada);
+  useEffect(() => {
+    if (rodadaVista.current === rodada) return;
+    rodadaVista.current = rodada;
+    const s = S.current;
+    if (s.anim) { s.anim.punhado?.removeFromParent(); s.anim = null; H.raiz.visible = false; }
+    P.cobertura.clear();
+    s.doses = {}; s.naMesa = {}; s.alt = null; s.quedas = []; s.saindo = []; s.fila = [];
+    s.copos.forEach((c) => c.obj.removeFromParent()); s.copos.clear();
+    (Object.keys(s.slots) as SlotId[]).forEach((k) => { s.slots[k]?.obj.removeFromParent(); s.slots[k] = null; });
+  }, [rodada, P, H]);
+
+  /**
+   * Superfície do lanche: grade de alturas por raio de cima para baixo (só o que está visível). `semTampa`: ignora a
+   * tampa (aberta, em pé atrás do pão, na etapa Turbinar).
+   */
+  const alturas = (semTampa = false): Altura => {
     const [x0, x1] = K.caixa.x, z0 = -0.075, z1 = 0.075, nx = 25, nz = 9;
     const r = new Raycaster(); const dir = new Vector3(0, -1, 0); const o = new Vector3();
-    const visivel = (n: Object3D | null): boolean => { for (let p = n; p; p = p.parent) { if (!p.visible) return false; if (p === K.lanche) return true; } return true; };
+    const visivel = (n: Object3D | null): boolean => {
+      for (let p = n; p; p = p.parent) { if (!p.visible || (semTampa && p.name.includes("tampa"))) return false; if (p === K.lanche) return true; }
+      return true;
+    };
     K.lanche.updateMatrixWorld(true);
     const h: number[] = [];
     for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
       o.set(x0 + ((x1 - x0) * i) / (nx - 1), 0.6, z0 + ((z1 - z0) * j) / (nz - 1));
       r.set(o, dir);
       const hit = r.intersectObject(K.lanche, true).find((x) => visivel(x.object) && !P.cobertura.getObjectById(x.object.id));
-      h.push(hit ? hit.point.y : 0);
+      h.push(hit ? hit.point.y : NaN);
     }
+    // fora do lanche (o raio não acertou nada): repete a altura vizinha, para a borda da camada não despencar até a tábua
+    for (let volta = 0; volta < nx && h.some(Number.isNaN); volta++) {
+      const ant = h.slice();
+      for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+        if (!Number.isNaN(ant[j * nx + i])) continue;
+        const viz = [[i - 1, j], [i + 1, j], [i, j - 1], [i, j + 1]].filter(([a, b]) => a >= 0 && a < nx && b >= 0 && b < nz).map(([a, b]) => ant[b * nx + a]).filter((v) => !Number.isNaN(v));
+        if (viz.length) h[j * nx + i] = Math.max(...viz);
+      }
+    }
+    for (let k = 0; k < h.length; k++) if (Number.isNaN(h[k])) h[k] = 0;
     return (x, z) => {
       const fx = c01((x - x0) / (x1 - x0)) * (nx - 1), fz = c01((z - z0) / (z1 - z0)) * (nz - 1);
       const i = Math.min(nx - 2, Math.floor(fx)), j = Math.min(nz - 2, Math.floor(fz)), u = fx - i, v = fz - j;
@@ -242,12 +282,14 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, aoP
   const dosesDe = (id: AdicionalId) => {
     const s = S.current;
     if (!s.doses[id]) {
-      if (!s.alt) s.alt = alturas();
+      // os potinhos vão sobre o recheio (tampa aberta); o queijo em dobro, sobre o queijo da tampa fechada
+      const queijo = id === "queijo-dobro";
+      const alt = queijo ? alturas() : (s.alt ??= alturas(true));
       const k = ORDEM_ADICIONAIS.indexOf(id);
       const larg = (K.caixa.x[1] - K.caixa.x[0]) * 0.4;
       const off: [number, number] = [[-0.012, 0.01, 0.006, -0.008, 0.012, 0][k], [-0.014, 0.014, -0.004, 0.01, 0.002, 0][k]];
       s.doses[id] = [0, 1, 2].map((i) => {
-        const d = dose(id, i, s.alt!, larg, 101 + k * 17 + i * 5, off);
+        const d = dose(id, i, alt, larg, 101 + k * 17 + i * 5, off);
         d.visible = false; P.cobertura.add(d); return d;
       });
     }
@@ -304,9 +346,16 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, aoP
   };
 
   // ------------------------------------------------ animações
+  /** Onde a mão pega o punhado: o potinho do Turbinar ou, no queijo em dobro, a tigela do queijo escolhido. */
+  const pegaDe = (id: AdicionalId): Vector3 => {
+    const pote = P.potes.find((p) => p.id === id);
+    if (pote) { const v = pote.g.position.clone(); v.y += pote.alto + 0.006; return v; }
+    const q = opts.current.pedido?.opcoes?.queijo;
+    const st = K.estacoes[`mussarela:${q}`] ?? K.estacoes["dog-mussarela"] ?? Object.values(K.estacoes)[0];
+    const v = st.raiz.position.clone(); v.y = MESA + st.alto + 0.012; return v;
+  };
   const animPunhado = (id: AdicionalId, i: number): Anim => {
-    const pote = P.potes.find((p) => p.id === id)!;
-    const pega = pote.g.position.clone(); pega.y += pote.alto + 0.006;
+    const pega = pegaDe(id);
     const d = dosesDe(id)[i];
     const alvo = d.position.clone(); alvo.y += 0.05;
     const mao = punhadoNaMao(id, 300 + i);
@@ -465,30 +514,31 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, aoP
     const dt = pausa ? 0 : Math.min(delta, 0.1);
     const { fase, reduzido: red, arranjo: arr } = opts.current;
     const s = S.current;
-    const ativo = fase !== "montagem";
 
     // ---- entra/sai de cada grupo
-    const alvo = { est: ativo ? 0 : 1, potes: fase === "turbinar" ? 1 : 0, beb: fase === "bebida" ? 1 : 0, por: fase === "acomp" ? 1 : 0, sacola: fase === "sacola" ? 1 : 0 };
+    const alvo = { est: fase === "montagem" ? 1 : 0, potes: fase === "turbinar" ? 1 : 0, beb: fase === "bebida" ? 1 : 0, por: fase === "acomp" ? 1 : 0, sacola: fase === "sacola" ? 1 : 0 };
+    const antesEst = s.fade.est;
     (Object.keys(alvo) as (keyof typeof alvo)[]).forEach((k) => {
       const v = s.fade[k]; const t = alvo[k];
       s.fade[k] = t > v ? Math.min(t, v + dt / (red ? 0.25 : 0.45)) : Math.max(t, v - dt / (red ? 0.2 : 0.3));
     });
     const esc = (k: number, cresce: boolean) => (k >= 1 ? 1 : Math.max(0.001, cresce && !red ? mola(k, 0.6) : eOut3(k)));
-    if (ativo) {
-      // estações da montagem saem (só depois do lanche pronto)
+    if (s.fade.est < 1 || antesEst < 1) {
+      // estações da montagem saem no Turbinar (os potinhos ocupam o lugar delas) e voltam para a tampa; saem de vez
+      // depois do lanche pronto. Só a escala muda: a visibilidade de cada peça continua a da montagem.
       const k = s.fade.est;
       // tudo o que mora no grupo das estações (raízes, ferramentas soltas no mundo, peças extras como a 2a bisnaga)
       const e = Math.max(0.001, eIO3(k));
       const grupos = new Set<Object3D>();
-      Object.values(K.estacoes).forEach((st) => { st.anel.visible = false; if (st.raiz.parent) grupos.add(st.raiz.parent); });
+      Object.values(K.estacoes).forEach((st) => { if (st.raiz.parent) grupos.add(st.raiz.parent); });
       grupos.forEach((w) => w.children.forEach((o) => {
         if (Object.values(K.estacoes).some((st) => st.anel === o)) return;
-        o.scale.setScalar(e); o.visible = k > 0.01;
+        o.scale.setScalar(e);
       }));
     }
     const lu = LUG[arr];
     P.potes.forEach((p, i) => {
-      const [x, z] = lu.potes[i];
+      const [x, z] = lu.potes[LUGAR_POTE[i]];
       p.g.position.set(x, MESA, z);
       const k = c01(s.fade.potes * 1.25 - i * 0.05);
       p.g.visible = k > 0.01; p.g.scale.setScalar(esc(k, alvo.potes === 1));
@@ -557,12 +607,14 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, aoP
 
     // ---- animação da mão
     let ok = true;
-    if (!s.anim && ativo) {
+    if (!s.anim) {
       ok = conciliar();
       if (!s.anim && fase === "sacola" && ok && s.sacola === "nada" && s.fade.sacola >= 1) { s.sacola = "rodando"; encherFila(); }
       while (!s.anim && s.fila.length) s.anim = s.fila.shift()!();
     }
-    (window as unknown as { __pedidoQuieto: boolean }).__pedidoQuieto = ok && !s.anim && !s.fila.length && s.quedas.length === 0 && s.saindo.length === 0;
+    const quieto = ok && !s.anim && !s.fila.length && s.quedas.length === 0 && s.saindo.length === 0;
+    (window as unknown as { __pedidoQuieto: boolean }).__pedidoQuieto = quieto;
+    if (s.ocupado === quieto) { s.ocupado = !quieto; ocupar.current(!quieto); }
     const a = s.anim;
     if (a) {
       a.t += dt * (red ? 1.5 : 1);

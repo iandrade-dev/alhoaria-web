@@ -2,6 +2,7 @@
 // blender/bancada3d/build_cozinha_fundo.py), posição das estações em volta da tábua e os dados de cada lanche.
 // Coordenadas three.js: x para a direita, y para cima, z para a câmera; origem no centro do topo da tábua.
 import { ORDEM_LANCHES, RECEITAS, type LancheId } from "../bancada/passos";
+import { OPCOES, type GrupoOpcao } from "./cardapio";
 
 export { ORDEM_LANCHES, RECEITAS, type LancheId };
 
@@ -20,13 +21,26 @@ export const CAMERAS: Record<Arranjo, Camera> = {
 /** Tipos de ação (coreografia da mão). Os lanches de pão de alho repetem os da Costela; o Dogalho tem os seus. */
 export type Tipo =
   | "pasta" | "creme" | "recheio" | "tampa" | "mussarela" | "macarico"
-  | "dog-pasta" | "dog-salsichas" | "dog-molhos" | "dog-tampa" | "dog-fondue" | "dog-mussarela" | "dog-palha";
+  | "dog-pasta" | "dog-salsichas" | "dog-molhos" | "dog-tampa" | "dog-fondue" | "dog-mussarela" | "dog-palha"
+  | "turbinar";
 
-/** Id de uma etapa (é também o `data-testid="estacao-<id>"`). A tampa não tem estação: o gesto é sobre o pão. */
+/**
+ * Id de uma etapa (é também o `data-testid="estacao-<id>"`). A tampa não tem estação: o gesto é sobre o pão; o
+ * Turbinar também não (os potinhos são do pedido). Etapas com opções têm uma estação por opção, com o id
+ * `<etapa>:<opção>` (ex.: `pasta:ervas`); o botão dela é o `data-testid="opcao-<grupo>-<opção>"`.
+ */
 export type Passo = string;
 export type EstacaoId = string;
+/** Etapa de uma estação (`pasta:ervas` -> `pasta`). */
+export const passoDe = (est: EstacaoId): Passo => est.split(":")[0];
+/** Opção de uma estação (`pasta:ervas` -> `ervas`; null se a estação não é de opção). */
+export const opcaoDaEstacao = (est: EstacaoId): string | null => est.split(":")[1] ?? null;
 
-export type PassoDef = { id: Passo; tipo: Tipo; icone: string; nome: string; dica: string; feito: string; opcional?: boolean };
+export type PassoDef = {
+  id: Passo; tipo: Tipo; icone: string; nome: string; dica: string; feito: string; opcional?: boolean;
+  /** Etapa com opções do pedido (uma estação por opção e o chip "Sem ..."). */
+  grupo?: Exclude<GrupoOpcao, "pao">;
+};
 /** Onde cada estação fica na bancada: x, z e, opcional, giro em y (rad). */
 export type Lugar = [number, number] | [number, number, number];
 export type LancheDef = {
@@ -45,54 +59,66 @@ export type LancheDef = {
 };
 
 // ---------------------------------------------------------------- pão de alho (Costela, Pulled Pork!, Brócolis & Queijo!)
-// Posições da Costela (aprovadas): não mexer. Os outros dois lanches de pão usam as mesmas.
+// Posições da Costela (aprovadas), agora com duas bisnagas, dois potes de creme e duas tigelas de queijo (uma por
+// opção do pedido). Os outros dois lanches de pão usam as mesmas.
 const LUGARES_PAO = (recheio: string): Record<Arranjo, Record<EstacaoId, Lugar>> => ({
   retrato: {
-    pasta: [-0.15, -0.25],
-    creme: [0.14, -0.26],
-    [recheio]: [-0.165, 0.27],
-    mussarela: [0.025, 0.3],
+    "pasta:ervas": [-0.215, -0.235],
+    "pasta:tradicional": [-0.1, -0.275],
+    "creme:cheddar": [0.08, -0.29],
+    "creme:4-queijos": [0.21, -0.235],
+    [recheio]: [-0.195, 0.24],
+    "mussarela:mucarela": [-0.058, 0.3],
+    "mussarela:colonial": [0.072, 0.3],
     macarico: [0.205, 0.25],
   },
   paisagem: {
-    pasta: [-0.36, -0.11],
+    "pasta:ervas": [-0.3, -0.15],
+    "pasta:tradicional": [-0.41, -0.06],
     [recheio]: [-0.38, 0.15],
-    creme: [0.42, -0.15],
-    mussarela: [0.42, 0.17],
-    macarico: [0.21, -0.27],
+    "creme:cheddar": [0.31, -0.19],
+    "creme:4-queijos": [0.44, -0.1],
+    "mussarela:mucarela": [0.31, 0.19],
+    "mussarela:colonial": [0.44, 0.1],
+    macarico: [0.17, -0.28],
   },
 });
+/** Estações de opção de uma etapa do pão de alho (uma por opção do grupo, na ordem do cardápio). */
+export const estacoesDaOpcao = (passo: string, grupo: Exclude<GrupoOpcao, "pao">) => OPCOES[grupo].map((o) => `${passo}:${o.id}`);
+
+const TURBINAR: PassoDef = { id: "turbinar", tipo: "turbinar", icone: "", nome: "Turbinar", dica: "Toque ou arraste um potinho até o lanche", feito: "Lanche turbinado" };
 
 const COSTELA: LancheDef = {
   id: "costela", forma: "pao", nome: RECEITAS.costela.nome, foto: RECEITAS.costela.foto, recheio: "costela",
   fim: "A Costela, montada do seu jeito.",
   passos: [
-    { id: "pasta", tipo: "pasta", icone: "pasta", nome: "Pasta de alho", dica: "Arraste a bisnaga até o pão", feito: "Pasta de alho no pão" },
-    { id: "creme", tipo: "creme", icone: "creme", nome: "Creme de alho", dica: "Arraste a colher de creme até o pão", feito: "Creme espalhado" },
+    { id: "pasta", tipo: "pasta", icone: "pasta", nome: "Pasta de alho", dica: "Escolha a pasta e arraste até o pão", feito: "Pasta de alho no pão", grupo: "pasta" },
     { id: "costela", tipo: "recheio", icone: "costela", nome: "Costela", dica: "Arraste um punhado de costela até o pão", feito: "Costela no lugar" },
+    { id: "creme", tipo: "creme", icone: "creme", nome: "Creme de queijo", dica: "Escolha o creme e arraste até a carne", feito: "Creme por cima da carne", grupo: "creme" },
+    TURBINAR,
     { id: "tampa", tipo: "tampa", icone: "pao", nome: "Tampa", dica: "Deslize no pão pra fechar a tampa", feito: "Tampa fechada" },
-    { id: "mussarela", tipo: "mussarela", icone: "mussarela", nome: "Mussarela", dica: "Arraste a mussarela até o lanche", feito: "Mussarela derretendo" },
+    { id: "mussarela", tipo: "mussarela", icone: "mussarela", nome: "Queijo gratinado", dica: "Escolha o queijo e arraste até o lanche", feito: "Queijo derretendo", grupo: "queijo" },
     { id: "macarico", tipo: "macarico", icone: "macarico", nome: "Maçarico", dica: "Arraste o maçarico até o lanche", feito: "Gratinado no maçarico" },
   ],
   estacoes: LUGARES_PAO("costela"),
   arquivos: ["tabua", "pao", "pasta", "costela", "creme", "mussarela", "gratinado", "macarico-mao", "mao-luva", "bisnaga", "pote-creme"],
 };
 
-/** Pulled Pork! e Brócolis & Queijo!: a mesma sequência da Costela; nomes e dicas vêm da receita. */
+/** Pulled Pork! e Brócolis & Queijo!: a mesma sequência da Costela; o nome do recheio vem da receita. */
 function lancheDePao(id: "pulled" | "brocolis", fim: string, punhado: string, feitoRecheio: string): LancheDef {
   const r = RECEITAS[id];
-  const etapa = (eid: string) => r.etapas.find((e) => e.id === eid)!;
   const rech = r.etapas[2];
   const recheio = rech.id as "pulled-pernil" | "brocolis-floretes";
   return {
     id, forma: "pao", nome: r.nome, foto: r.foto, recheio, fim,
     passos: [
-      { id: "pasta", tipo: "pasta", icone: "pasta", nome: etapa("pasta").nome, dica: "Arraste a bisnaga até o pão", feito: "Pasta de alho no pão" },
-      { id: "creme", tipo: "creme", icone: "creme", nome: etapa("creme").nome, dica: "Arraste a colher de creme até o pão", feito: "Creme espalhado" },
+      { id: "pasta", tipo: "pasta", icone: "pasta", nome: "Pasta de alho", dica: "Escolha a pasta e arraste até o pão", feito: "Pasta de alho no pão", grupo: "pasta" },
       { id: recheio, tipo: "recheio", icone: recheio, nome: rech.nome, dica: `Arraste um punhado de ${punhado} até o pão`, feito: feitoRecheio },
+      { id: "creme", tipo: "creme", icone: "creme", nome: "Creme de queijo", dica: `Escolha o creme e arraste até ${id === "brocolis" ? "o brócolis" : "a carne"}`, feito: `Creme por cima ${id === "brocolis" ? "do brócolis" : "da carne"}`, grupo: "creme" },
+      TURBINAR,
       { id: "tampa", tipo: "tampa", icone: "pao", nome: "Tampa", dica: "Deslize no pão pra fechar a tampa", feito: "Tampa fechada" },
-      { id: "mussarela", tipo: "mussarela", icone: "mussarela", nome: etapa("mussarela").nome, dica: "Arraste a mussarela até o lanche", feito: "Mussarela derretendo" },
-      { id: "macarico", tipo: "macarico", icone: "macarico", nome: etapa("macarico").nome, dica: "Arraste o maçarico até o lanche", feito: "Gratinado no maçarico" },
+      { id: "mussarela", tipo: "mussarela", icone: "mussarela", nome: "Queijo gratinado", dica: "Escolha o queijo e arraste até o lanche", feito: "Queijo derretendo", grupo: "queijo" },
+      { id: "macarico", tipo: "macarico", icone: "macarico", nome: "Maçarico", dica: "Arraste o maçarico até o lanche", feito: "Gratinado no maçarico" },
     ],
     estacoes: LUGARES_PAO(recheio),
     arquivos: ["tabua", "pao", "pasta", recheio, "creme", "mussarela", "gratinado", "macarico-mao", "mao-luva", "bisnaga", "pote-creme"],
@@ -108,6 +134,7 @@ const DOGALHO: LancheDef = {
     { id: "dog-pasta", tipo: "dog-pasta", icone: "dog-pasta", nome: dogEtapa("dog-pasta").nome, dica: "Arraste a bisnaga até o brioche", feito: "Pasta de alho no brioche" },
     { id: "dog-salsichas", tipo: "dog-salsichas", icone: "dog-salsichas", nome: dogEtapa("dog-salsichas").nome, dica: "Arraste as salsichas até o brioche", feito: "Salsichas no lugar" },
     { id: "dog-molhos", tipo: "dog-molhos", icone: "dog-molhos", nome: dogEtapa("dog-molhos").nome, dica: "Arraste o ketchup até o brioche", feito: "Ketchup e mostarda", opcional: true },
+    TURBINAR,
     { id: "tampa", tipo: "dog-tampa", icone: "dog-brioche", nome: "Tampa", dica: "Deslize no brioche pra fechar a tampa", feito: "Tampa fechada" },
     { id: "dog-fondue", tipo: "dog-fondue", icone: "dog-fondue", nome: dogEtapa("dog-fondue").nome, dica: "Arraste a colher de fundue até o lanche", feito: "Fundue por cima" },
     { id: "dog-mussarela", tipo: "dog-mussarela", icone: "dog-mussarela", nome: dogEtapa("dog-mussarela").nome, dica: "Arraste a mussarela até o lanche", feito: "Mussarela derretendo" },

@@ -1,6 +1,7 @@
-// Kit dos lanches de pão de alho (A Costela, Pulled Pork!, Brócolis & Queijo!): pão aberto na tábua, pasta, creme,
-// recheio em 3 punhados, tampa, mussarela e maçarico. A coreografia e as posições são as aprovadas na Costela;
-// só o recheio (GLB, pote da estação e punhado da mão) muda.
+// Kit dos lanches de pão de alho (A Costela, Pulled Pork!, Brócolis & Queijo!): pão aberto na tábua, pasta, recheio
+// em 3 punhados, creme por cima do recheio, tampa, queijo e maçarico. A coreografia e as posições são as aprovadas na
+// Costela; só o recheio (GLB, pote da estação e punhado da mão) muda. Pasta, creme e queijo têm uma estação por opção
+// do pedido (`pasta:ervas`, `creme:cheddar`, `mussarela:colonial`...): a ação é a mesma, muda a cor da camada.
 import {
   AdditiveBlending, BoxGeometry, CylinderGeometry, Euler, Group, InstancedMesh, LatheGeometry, MathUtils, Matrix4, Mesh, MeshBasicMaterial,
   MeshStandardMaterial, Object3D, Plane, PlaneGeometry, PointLight, Quaternion, Vector2, Vector3,
@@ -10,9 +11,10 @@ import {
 } from "./acoes";
 import {
   CHAMA_DIR, OBJ, POSES, anelTextura, apoiar, caixa, clipar, clonar, devolverAsRaizes, fazerEstacao, fiapos, floretes, gradiente, guardarCasas, mats,
-  planoX, porParaPegar, qBase, soltarNoMundo, tigela, type Estacao, type Kit,
+  pintarTinta, planoX, porParaPegar, qBase, soltarNoMundo, tigela, tintavel, type Estacao, type Kit, type Tinta,
 } from "./kit";
-import { MESA, type LancheDef } from "./layout";
+import { MESA, estacoesDaOpcao, opcaoDaEstacao, passoDe, type LancheDef } from "./layout";
+import type { Opcoes } from "./cardapio";
 
 type Recheio = NonNullable<LancheDef["recheio"]>;
 /** Punhado do recheio (o que a mão leva e o que cai no pão). */
@@ -25,9 +27,30 @@ function punhadoDe(recheio: Recheio) {
   return new Mesh(fiapos(46, 0.024, ["#6b3418", "#8a4521", "#4a2010", "#a85a2c"], 0.026, 0.006, 11), new MeshStandardMaterial({ vertexColors: true, roughness: 0.55 }));
 }
 
+// ---------------------------------------------------------------- cores de cada opção
+/** Pasta: a camada e o corpo da bisnaga (tradicional = a cor do modelo, creme; com ervas = verde-claro com pontinhos). */
+const PASTA_COR: Record<string, { cor: string | null; forca: number; ponto: string | null; pontos: number; bisnaga: string | null }> = {
+  tradicional: { cor: "#f1e6c6", forca: 0.35, ponto: null, pontos: 0, bisnaga: "#f3ead2" },
+  ervas: { cor: "#c3d58a", forca: 0.78, ponto: "#3f6e24", pontos: 0.5, bisnaga: "#c7da8f" },
+};
+const CREME_COR: Record<string, string> = { cheddar: "#f39a2a", "4-queijos": "#f2e2b0" };
+/** Queijo: fiapos da tigela/punhado, tinta da camada derretida e do gratinado. */
+const QUEIJO_COR: Record<string, { fiapos: string[]; cor: string; forca: number; grat: number }> = {
+  mucarela: { fiapos: ["#f7f0d6", "#f3e8c2", "#efe2b4"], cor: "#f6eed4", forca: 0.4, grat: 0 },
+  colonial: { fiapos: ["#f2c445", "#ebb631", "#f5d26a"], cor: "#f1c23a", forca: 0.62, grat: 0.28 },
+};
+/** Pão: pontinhos na casca (parmesão claro/dourado, roseta com ervas verdes). */
+const PAO_COR: Record<string, { cor: string | null; forca: number; ponto: string; pontos: number }> = {
+  parmesao: { cor: "#e9b871", forca: 0.12, ponto: "#f6e6ae", pontos: 0.62 },
+  roseta: { cor: null, forca: 0, ponto: "#3d6a22", pontos: 0.55 },
+};
+
 export function kitPao(def: LancheDef, A: Record<string, Object3D>, M: Medidas): Kit {
   const recheio = def.recheio!;
   const idRecheio = def.passos.find((p) => p.tipo === "recheio")!.id;
+  const estPasta = estacoesDaOpcao("pasta", "pasta");
+  const estCreme = estacoesDaOpcao("creme", "creme");
+  const estQueijo = estacoesDaOpcao("mussarela", "queijo");
 
   // ------------------------------------------------ lanche
   const L = (() => {
@@ -55,33 +78,54 @@ export function kitPao(def: LancheDef, A: Record<string, Object3D>, M: Medidas):
     mussPiv.add(muss);
     lanche.add(pao, pasta, ...partes, creme, mussPiv, gratinado);
     raiz.add(tabua, lanche);
+    // tintas das opções (pão: casca e, mais ralo, o miolo, que é o que aparece com o pão aberto; camadas inteiras)
+    const tinta = {
+      pao: mats(pao).filter((m) => m.name.includes("casca")).map((m) => tintavel(m, 78, 0.32)),
+      miolo: mats(pao).filter((m) => m.name.includes("miolo")).map((m) => tintavel(m, 78, 0.3)),
+      pasta: mats(pasta).map((m) => tintavel(m, 260, 0.26)),
+      creme: mats(creme).map((m) => tintavel(m)),
+      muss: mats(muss).map((m) => tintavel(m)),
+      grat: mats(gratinado).map((m) => tintavel(m)),
+    };
     // medidas
     M.pasta = caixa(pasta).max.y;
     M.costela = caixa(partes[1]).max.y;
-    // O creme fica por cima do recheio no modelo; como ele vem antes no passo a passo, assenta na pasta
-    // e sobe junto com o recheio quando ele cresce.
-    const cremeTopo = caixa(creme).max.y;
-    M.creme = M.pasta + 0.012;
-    const cremeDy = cremeTopo - M.creme;
+    // o creme vem depois do recheio e fica por cima dele, na posição do modelo
+    M.creme = caixa(creme).max.y;
     const bm = caixa(muss);
     M.muss = bm.max.y - 0.006;
     mussPiv.position.set(0, bm.min.y + 0.03, 0); muss.position.set(0, -(bm.min.y + 0.03), 0);
-    return { raiz, lanche, tampa, pasta, creme, partes, mussPiv, muss, gratinado, clip, cremeDy };
+    return { raiz, lanche, tampa, pasta, creme, partes, mussPiv, muss, gratinado, clip, tinta };
   })();
+  const tingir = (ts: Tinta[], cor: string | null, forca: number, ponto: string | null = null, pontos = 0) => ts.forEach((t) => pintarTinta(t, cor, forca, ponto, pontos));
 
   // ------------------------------------------------ estações
   const E = (() => {
     const anelTex = anelTextura();
-    const metal = new MeshStandardMaterial({ color: "#2a2624", roughness: 0.3, metalness: 0.85 });
-    // bisnaga de bico para baixo num suporte, como em lanchonete: a mão pega já na pose de uso
-    const bis = new Group(); const bisnaga = clonar(A.bisnaga);
-    const supB = new Mesh(new LatheGeometry([[0, 0], [0.048, 0], [0.048, 0.006], [0.037, 0.01], [0.037, 0.058], [0.0325, 0.058], [0.0325, 0.012], [0, 0.012]].map(([x, y]) => new Vector2(x, y)), 36), metal);
-    supB.castShadow = true; supB.receiveShadow = true; bis.add(supB);
-    // pote de creme com a colher
-    const pc = new Group(); const pote = clonar(A["pote-creme"]);
-    const colher = pote.getObjectByName("colher")!;
-    const colherOrig = { pai: colher.parent!, p: colher.position.clone(), q: colher.quaternion.clone() };
-    pc.add(pote);
+    const metal = () => new MeshStandardMaterial({ color: "#2a2624", roughness: 0.3, metalness: 0.85 });
+    const geoSup = new LatheGeometry([[0, 0], [0.048, 0], [0.048, 0.006], [0.037, 0.01], [0.037, 0.058], [0.0325, 0.058], [0.0325, 0.012], [0, 0.012]].map(([x, y]) => new Vector2(x, y)), 36);
+    // pasta: uma bisnaga por opção, de bico para baixo num suporte, como em lanchonete (a mão pega já na pose de uso)
+    const bisnagas: Record<string, Object3D> = {};
+    const lista: Record<string, Estacao> = {};
+    estPasta.forEach((id) => {
+      const g = new Group();
+      const sup = new Mesh(geoSup, metal()); sup.castShadow = true; sup.receiveShadow = true; g.add(sup);
+      const b = clonar(A.bisnaga);
+      const c = PASTA_COR[opcaoDaEstacao(id)!];
+      mats(b).filter((m) => m.name.includes("corpo")).forEach((m) => pintarTinta(tintavel(m, 420, 0.26), c.bisnaga, 0.75, c.ponto, c.pontos));
+      bisnagas[id] = b;
+      lista[id] = fazerEstacao(id, g, b, 0.04, 0.19, anelTex);
+    });
+    // creme: um pote por opção, cada um com a sua colher
+    const potes: Record<string, { pote: Object3D; colher: Object3D; orig: { pai: Object3D; p: Vector3; q: Quaternion } }> = {};
+    estCreme.forEach((id) => {
+      const g = new Group(); const pote = clonar(A["pote-creme"]);
+      mats(pote).filter((m) => m.name.includes("creme_pote")).forEach((m) => pintarTinta(tintavel(m), CREME_COR[opcaoDaEstacao(id)!], 0.95));
+      const colher = pote.getObjectByName("colher")!;
+      potes[id] = { pote, colher, orig: { pai: colher.parent!, p: colher.position.clone(), q: colher.quaternion.clone() } };
+      g.add(pote);
+      lista[id] = fazerEstacao(id, g, colher, 0.066, 0.08, anelTex);
+    });
     // recheio numa tigela escura
     const pk = new Group();
     pk.add(tigela(0.072, 0.052, "#2b211c"));
@@ -97,42 +141,55 @@ export function kitPao(def: LancheDef, A: Record<string, Object3D>, M: Medidas):
     }
     const fCost = punhadoDe(recheio);
     fCost.castShadow = true;
-    // mussarela ralada numa tigela de barro
-    const pm = new Group();
-    pm.add(tigela(0.07, 0.048, "#8c4a2b"));
-    const ralada = new Mesh(fiapos(260, 0.058, ["#f3dc98", "#f6e4ae", "#ecd085"], 0.016, 0.0028, 5), new MeshStandardMaterial({ vertexColors: true, roughness: 0.5 }));
-    ralada.position.y = 0.034; ralada.scale.set(1, 0.42, 1); pm.add(ralada);
-    const fMuss = new Mesh(fiapos(60, 0.022, ["#f3dc98", "#f6e4ae", "#ecd085"], 0.016, 0.003, 9), new MeshStandardMaterial({ vertexColors: true, roughness: 0.5 }));
-    fMuss.castShadow = true;
+    lista[idRecheio] = fazerEstacao(idRecheio, pk, fCost, 0.075, 0.07, anelTex);
+    // queijo ralado: uma tigela de barro por opção (um pouco menores, para caberem as duas na frente)
+    const punhadosQueijo: Record<string, Mesh> = {};
+    estQueijo.forEach((id, i) => {
+      const cores = QUEIJO_COR[opcaoDaEstacao(id)!].fiapos;
+      const pm = new Group();
+      const k = 0.88;
+      const tg = tigela(0.07, 0.048, "#8c4a2b"); tg.scale.setScalar(k); pm.add(tg);
+      const ralada = new Mesh(fiapos(260, 0.058, cores, 0.016, 0.0028, 5 + i), new MeshStandardMaterial({ vertexColors: true, roughness: 0.5 }));
+      ralada.position.y = 0.034 * k; ralada.scale.set(k, 0.42 * k, k); pm.add(ralada);
+      const f = new Mesh(fiapos(60, 0.022, cores, 0.016, 0.003, 9 + i), new MeshStandardMaterial({ vertexColors: true, roughness: 0.5 }));
+      f.castShadow = true;
+      punhadosQueijo[id] = f;
+      lista[id] = fazerEstacao(id, pm, f, 0.064, 0.055, anelTex);
+    });
     // maçarico de bico para baixo num coldre (a mão pega quase na pose de uso)
     const ptm = new Group();
-    const sup = new Mesh(new LatheGeometry([[0, 0], [0.045, 0], [0.045, 0.007], [0.026, 0.011], [0.023, 0.05], [0.019, 0.05], [0, 0.02]].map(([x, y]) => new Vector2(x, y)), 32), metal);
+    const sup = new Mesh(new LatheGeometry([[0, 0], [0.045, 0], [0.045, 0.007], [0.026, 0.011], [0.023, 0.05], [0.019, 0.05], [0, 0.02]].map(([x, y]) => new Vector2(x, y)), 32), metal());
     sup.castShadow = true; ptm.add(sup);
     const maca = clonar(A["macarico-mao"]);
     maca.getObjectByName("chama")?.removeFromParent();
-
-    const lista: Record<string, Estacao> = {
-      pasta: fazerEstacao("pasta", bis, bisnaga, 0.04, 0.19, anelTex),
-      creme: fazerEstacao("creme", pc, colher, 0.066, 0.08, anelTex),
-      [idRecheio]: fazerEstacao(idRecheio, pk, fCost, 0.075, 0.07, anelTex),
-      mussarela: fazerEstacao("mussarela", pm, fMuss, 0.072, 0.06, anelTex),
-      macarico: fazerEstacao("macarico", ptm, maca, 0.05, 0.24, anelTex),
-    };
-    return { lista, bisnaga, pote, colher, colherOrig, fCost, fMuss, maca };
+    lista.macarico = fazerEstacao("macarico", ptm, maca, 0.05, 0.24, anelTex);
+    return { lista, bisnagas, potes, fCost, punhadosQueijo, maca };
   })();
 
   // ------------------------------------------------ ferramentas na mão (no espaço da raiz da mão)
   const F = (() => {
-    const bis = clonar(A.bisnaga); bis.position.copy(OBJ.bisnaga.p); bis.quaternion.copy(OBJ.bisnaga.q);
-    const pote2 = clonar(A["pote-creme"]);
-    const col = pote2.getObjectByName("colher")!; col.removeFromParent(); col.position.copy(OBJ.colher.p); col.quaternion.copy(OBJ.colher.q);
+    const fer: Record<string, Object3D | null> = { tampa: null };
+    const corpos: Record<string, Tinta[]> = {};
+    estPasta.forEach((id) => {
+      const bis = clonar(A.bisnaga); bis.position.copy(OBJ.bisnaga.p); bis.quaternion.copy(OBJ.bisnaga.q);
+      const c = PASTA_COR[opcaoDaEstacao(id)!];
+      corpos[id] = mats(bis).filter((m) => m.name.includes("corpo")).map((m) => tintavel(m, 420, 0.26));
+      corpos[id].forEach((t) => pintarTinta(t, c.bisnaga, 0.75, c.ponto, c.pontos));
+      fer[id] = bis;
+    });
+    estCreme.forEach((id) => {
+      const pote2 = clonar(A["pote-creme"]);
+      const col = pote2.getObjectByName("colher")!; col.removeFromParent(); col.position.copy(OBJ.colher.p); col.quaternion.copy(OBJ.colher.q);
+      fer[id] = col;
+    });
     const mac = clonar(A["macarico-mao"]); mac.position.copy(OBJ.macarico.p); mac.quaternion.copy(OBJ.macarico.q);
     const chama = mac.getObjectByName("chama")!;
     chama.traverse((n) => { if (n instanceof Mesh) { n.castShadow = false; } });
+    fer.macarico = mac;
     const solta = new Vector3(...POSES.mao_punhado.ponto);
     const cost = E.fCost.clone(); cost.position.copy(solta).add(new Vector3(0, 0.01, 0));
-    const muss = E.fMuss.clone(); muss.position.copy(solta).add(new Vector3(0, 0.01, 0));
-    const fer: Record<string, Object3D | null> = { pasta: bis, creme: col, macarico: mac, [idRecheio]: cost, mussarela: muss, tampa: null };
+    fer[idRecheio] = cost;
+    estQueijo.forEach((id) => { const m = E.punhadosQueijo[id].clone(); m.position.copy(solta).add(new Vector3(0, 0.01, 0)); fer[id] = m; });
     return { fer, chama };
   })();
 
@@ -156,29 +213,32 @@ export function kitPao(def: LancheDef, A: Record<string, Object3D>, M: Medidas):
   // Posiciona as estações conforme o arranjo e guarda a "casa" de cada ferramenta (pose no mundo).
   const layout: Kit["layout"] = (arranjo, w) => {
     const pos = def.estacoes[arranjo];
-    const { lista, bisnaga, pote, colher, colherOrig, fCost, fMuss, maca } = E;
+    const { lista, bisnagas, potes, fCost, punhadosQueijo, maca } = E;
     Object.keys(lista).forEach((id) => {
       const st = lista[id];
       const [x, z] = pos[id];
       st.raiz.position.set(x, MESA, z);
       st.anel.position.set(x, MESA + 0.0015, z);
     });
-    lista.pasta.raiz.add(bisnaga);
-    pote.rotation.y = -0.7;
-    lista.creme.raiz.add(pote);
-    colherOrig.pai.add(colher); colher.position.copy(colherOrig.p); colher.quaternion.copy(colherOrig.q); colher.scale.setScalar(1);
+    estPasta.forEach((id) => lista[id].raiz.add(bisnagas[id]));
+    estCreme.forEach((id) => {
+      const { pote, colher, orig } = potes[id];
+      pote.rotation.y = -0.7;
+      lista[id].raiz.add(pote);
+      orig.pai.add(colher); colher.position.copy(orig.p); colher.quaternion.copy(orig.q); colher.scale.setScalar(1);
+    });
     fCost.position.set(0, 0.075, 0); lista[idRecheio].raiz.add(fCost);
-    fMuss.position.set(0, 0.052, 0); lista.mussarela.raiz.add(fMuss);
+    estQueijo.forEach((id) => { punhadosQueijo[id].position.set(0, 0.046, 0); lista[id].raiz.add(punhadosQueijo[id]); });
     lista.macarico.raiz.add(maca);
     // casa = pose no mundo; a ferramenta passa a viver solta no grupo do mundo
     soltarNoMundo(lista, w);
     // Casas pensadas para a pegada: a raiz da mão na pegada é casa * (ferramenta na mão)^-1, então cada
     // ferramenta fica parada numa pose em que a mão chega em pé, do lado direito, sem virar.
-    {
+    estPasta.forEach((id) => {
       // bisnaga: na mão ela já fica de bico para baixo; no suporte, o bico entra no copo
-      const r = lista.pasta.raiz.position;
-      porParaPegar(bisnaga, OBJ.bisnaga, qBase("mao_bisnaga"), new Vector3(...POSES.mao_bisnaga.ponto), new Vector3(r.x, MESA + 0.016, r.z));
-    }
+      const r = lista[id].raiz.position;
+      porParaPegar(bisnagas[id], OBJ.bisnaga, qBase("mao_bisnaga"), new Vector3(...POSES.mao_bisnaga.ponto), new Vector3(r.x, MESA + 0.016, r.z));
+    });
     {
       // maçarico: no coldre de bico para baixo, inclinado ~10° (a mão vem de cima e gira para a pose de uso no caminho)
       const qb = qBase("mao_macarico");
@@ -187,17 +247,18 @@ export function kitPao(def: LancheDef, A: Record<string, Object3D>, M: Medidas):
       const r = lista.macarico.raiz.position;
       porParaPegar(maca, OBJ.macarico, qc.multiply(qb), new Vector3(...POSES.mao_macarico.ponto), new Vector3(r.x, MESA + 0.024, r.z));
     }
-    {
+    estCreme.forEach((id) => {
       // colher: continua apoiada no pote como no modelo, só girada em volta do eixo do pote para o cabo
       // ficar do lado de onde a mão vem
+      const colher = potes[id].colher;
       const qG0 = colher.quaternion.clone().multiply(OBJ.colher.q.clone().invert());
       const qd = qBase("mao_colher").multiply(qG0.invert());
       const psi = 2 * Math.atan2(qd.y, qd.w);
       const qy = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), psi);
-      const c = lista.creme.raiz.position;
+      const c = lista[id].raiz.position;
       colher.position.sub(c).applyQuaternion(qy).add(c);
       colher.quaternion.premultiply(qy);
-    }
+    });
     {
       // punhados: o monte não tem frente, então a mão pega girada para o braço ir para a direita e para o
       // fundo (sem atravessar a frente da cena); no caminho ela gira de volta para a pose de uso
@@ -205,21 +266,23 @@ export function kitPao(def: LancheDef, A: Record<string, Object3D>, M: Medidas):
       const bw = new Vector3(...POSES.mao_punhado.braco).applyQuaternion(qb);
       const psi = MathUtils.degToRad(40) - Math.atan2(-bw.z, bw.x);
       const q = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), psi).multiply(qb);
-      fCost.quaternion.copy(q); fMuss.quaternion.copy(q);
+      fCost.quaternion.copy(q);
+      estQueijo.forEach((id) => punhadosQueijo[id].quaternion.copy(q));
     }
     guardarCasas(lista);
     return () => devolverAsRaizes(lista, w);
   };
 
   const final = (id: string) => {
+    const p = passoDe(id);
     FX.fio.visible = false; FX.brilho.visible = false; FX.luz.intensity = 0; FX.ralada.visible = false; FX.quedas.forEach((q2) => { q2.visible = false; });
     F.chama.visible = false;
-    if (id === "pasta") { L.pasta.visible = true; L.clip.pasta.constant = 1; }
-    if (id === "creme") { L.creme.visible = true; L.clip.creme.constant = 1; }
-    if (id === idRecheio) L.partes.forEach((p) => { p.visible = true; p.scale.set(1, 1, 1); });
-    if (id === "tampa") L.tampa.rotation.x = 0;
-    if (id === "mussarela") { L.mussPiv.visible = true; L.mussPiv.scale.set(1, 1, 1); L.clip.muss.constant = 1; }
-    if (id === "macarico") { L.gratinado.visible = true; L.clip.grat.constant = 1; }
+    if (p === "pasta") { L.pasta.visible = true; L.clip.pasta.constant = 1; }
+    if (p === "creme") { L.creme.visible = true; L.clip.creme.constant = 1; }
+    if (p === idRecheio) L.partes.forEach((pt) => { pt.visible = true; pt.scale.set(1, 1, 1); });
+    if (p === "tampa") L.tampa.rotation.x = 0;
+    if (p === "mussarela") { L.mussPiv.visible = true; L.mussPiv.scale.set(1, 1, 1); L.clip.muss.constant = 1; }
+    if (p === "macarico") { L.gratinado.visible = true; L.clip.grat.constant = 1; }
   };
   const zerar = () => {
     L.pasta.visible = false; L.creme.visible = false; L.mussPiv.visible = false; L.gratinado.visible = false;
@@ -234,7 +297,8 @@ export function kitPao(def: LancheDef, A: Record<string, Object3D>, M: Medidas):
   const fxTmp = { a: new Vector3(), b: new Vector3(), q: new Quaternion(), m: new Matrix4(), s: new Vector3(), e: new Euler() };
   const efeitos: Kit["efeitos"] = (id, t, amp, red, c) => {
     const H = { raiz: c.mao };
-    if (id === "pasta") {
+    const p = passoDe(id);
+    if (p === "pasta") {
       const [a, b] = PASTA.varre;
       const u = seg(t, a, b);
       const bico = pastaBico(u, M, fxTmp.a);
@@ -256,14 +320,14 @@ export function kitPao(def: LancheDef, A: Record<string, Object3D>, M: Medidas):
       // bisnaga apertada: encolhe um pouco
       const sq = seg(t, a - 0.08, a + 0.02) * (1 - seg(t, b, b + 0.12));
       const wob = red ? 0 : 0.015 * Math.sin(t * 40) * sq;
-      F.fer.pasta!.scale.set(1 - 0.09 * sq + wob, 1 + 0.03 * sq, 1 - 0.09 * sq - wob);
-    } else if (id === "creme") {
+      F.fer[id]?.scale.set(1 - 0.09 * sq + wob, 1 + 0.03 * sq, 1 - 0.09 * sq - wob);
+    } else if (p === "creme") {
       const [a, b] = CREME.varre;
       const u = seg(t, a, b);
       let mx = -1;
       if (t >= a) for (let i = 0; i <= 24; i++) { const ui = (u * i) / 24; mx = Math.max(mx, cremeConcha(ui, M, fxTmp.a).x); }
       L.clip.creme.constant = t < a ? -1 : t < b ? mx + 0.012 : 1;
-    } else if (id === idRecheio) {
+    } else if (p === idRecheio) {
       const { xs, solta, queda } = COSTELA;
       solta.forEach((s, i) => {
         const q = FX.quedas[i];
@@ -296,13 +360,13 @@ export function kitPao(def: LancheDef, A: Record<string, Object3D>, M: Medidas):
       // o punhado na mão diminui a cada soltura
       const saiu = solta.reduce((s, si) => s + seg(t, si, si + 0.08), 0);
       F.fer[idRecheio]!.scale.setScalar(Math.max(0.001, 1 - saiu / 3));
-    } else if (id === "tampa") {
+    } else if (p === "tampa") {
       L.tampa.rotation.x = anguloTampa(t, amp);
       const [a, b] = TAMPA.aperta;
-      const p = pulso(t, a, b) * (amp ? 1 : 0.4);
-      L.lanche.scale.set(1 + 0.02 * p, 1 - 0.055 * p, 1 + 0.02 * p);
+      const pu = pulso(t, a, b) * (amp ? 1 : 0.4);
+      L.lanche.scale.set(1 + 0.02 * pu, 1 - 0.055 * pu, 1 + 0.02 * pu);
       if (t > b) { const k = seg(t, b, b + 0.4); const e = amp ? 1 + 0.03 * Math.sin(Math.PI * k * 2) * (1 - k) : 1; L.lanche.scale.set(1, e, 1); }
-    } else if (id === "mussarela") {
+    } else if (p === "mussarela") {
       const ac = ACOES.mussarela;
       const [a, b] = MUSS.varre;
       L.mussPiv.visible = t > a + 0.12;
@@ -322,24 +386,23 @@ export function kitPao(def: LancheDef, A: Record<string, Object3D>, M: Medidas):
         const vida = t - nasce;
         const fall = 0.2;
         let esc = 0;
-        const p = fxTmp.a;
+        const pp = fxTmp.a;
         if (vida > 0) {
           const xi = lerp(MUSS.x0, MUSS.x1, r0) + (r1 - 0.5) * 0.03;
           const zi = (r2 - 0.5) * 0.06;
           const yi = M.muss + 0.06;
-          const k = c01(vida / fall);
-          p.set(xi, lerp(yi, M.muss - 0.002, k * k), zi);
-          if (vida < 0.02) p.lerp(solta, 1 - vida / 0.02);
+          const kk = c01(vida / fall);
+          pp.set(xi, lerp(yi, M.muss - 0.002, kk * kk), zi);
+          if (vida < 0.02) pp.lerp(solta, 1 - vida / 0.02);
           esc = vida < fall ? 1 : 1 - c01((vida - fall) / 0.25);
         }
         fxTmp.q.setFromEuler(fxTmp.e.set(r3 * 3, r4 * 3, (r3 + r4) * 2));
-        fxTmp.m.compose(p, fxTmp.q, fxTmp.s.setScalar(Math.max(0.0001, esc)));
+        fxTmp.m.compose(pp, fxTmp.q, fxTmp.s.setScalar(Math.max(0.0001, esc)));
         FX.ralada.setMatrixAt(i, fxTmp.m);
       }
       FX.ralada.instanceMatrix.needsUpdate = true;
-      const fm = F.fer.mussarela!;
-      fm.scale.setScalar(Math.max(0.001, 1 - 0.85 * u));
-    } else if (id === "macarico") {
+      F.fer[id]?.scale.setScalar(Math.max(0.001, 1 - 0.85 * u));
+    } else if (p === "macarico") {
       const [a, b] = MACA.varre;
       const on = t > a - 0.06 && t < b + 0.02;
       F.chama.visible = on;
@@ -359,7 +422,24 @@ export function kitPao(def: LancheDef, A: Record<string, Object3D>, M: Medidas):
     }
   };
 
-  const acoes = Object.fromEntries(def.passos.map((p) => [p.id, ACOES[p.tipo as keyof typeof ACOES]]));
+  // cada estação de opção faz a ação da sua etapa
+  const acoes: Kit["acoes"] = {};
+  def.passos.forEach((p) => { const ac = ACOES[p.tipo as keyof typeof ACOES]; if (ac) acoes[p.id] = ac; });
+  Object.keys(E.lista).forEach((id) => { if (!acoes[id]) acoes[id] = acoes[passoDe(id)]; });
+
+  /** A camada da opção escolhida: a cor sai da estação (`pasta:ervas`) no começo da ação. */
+  const vestirCamada = (id: string) => {
+    const p = passoDe(id), o = opcaoDaEstacao(id);
+    if (!o) return;
+    if (p === "pasta") { const c = PASTA_COR[o]; tingir(L.tinta.pasta, c.cor, c.forca, c.ponto, c.pontos); (FX.fio.material as MeshStandardMaterial).color.set(c.cor ?? "#f2e7c8"); }
+    if (p === "creme") tingir(L.tinta.creme, CREME_COR[o], 0.9);
+    if (p === "mussarela") {
+      const c = QUEIJO_COR[o];
+      tingir(L.tinta.muss, c.cor, c.forca);
+      tingir(L.tinta.grat, c.grat ? c.cor : null, c.grat);
+      (FX.ralada.material as MeshStandardMaterial).color.set(c.fiapos[0]);
+    }
+  };
 
   return {
     raiz: L.raiz, lanche: L.lanche,
@@ -376,13 +456,20 @@ export function kitPao(def: LancheDef, A: Record<string, Object3D>, M: Medidas):
       });
     },
     inicio: (id) => {
-      if (id === "pasta") { L.pasta.visible = true; L.clip.pasta.constant = -1; }
-      if (id === "creme") { L.creme.visible = true; L.clip.creme.constant = -1; }
+      vestirCamada(id);
+      const p = passoDe(id);
+      if (p === "pasta") { L.pasta.visible = true; L.clip.pasta.constant = -1; }
+      if (p === "creme") { L.creme.visible = true; L.clip.creme.constant = -1; }
     },
     efeitos,
-    quadro: () => {
-      const g = L.partes.reduce((s, p) => s + (p.visible ? Math.min(1, p.scale.y) : 0), 0) / 3;
-      L.creme.position.y = -L.cremeDy * (1 - g);
+    vestir: (o: Opcoes | null) => {
+      const c = o?.pao ? PAO_COR[o.pao] : null;
+      L.tinta.pao.forEach((t) => pintarTinta(t, c?.cor ?? null, c?.forca ?? 0, c?.ponto ?? null, c?.pontos ?? 0));
+      L.tinta.miolo.forEach((t) => pintarTinta(t, null, 0, c?.ponto ?? null, (c?.pontos ?? 0) * 0.55));
+      // as camadas já feitas seguem a escolha (ex.: depois de "Montar de novo" com outra opção)
+      if (o?.pasta && o.pasta !== "sem") vestirCamada(`pasta:${o.pasta}`);
+      if (o?.creme && o.creme !== "sem") vestirCamada(`creme:${o.creme}`);
+      if (o?.queijo && o.queijo !== "sem") vestirCamada(`mussarela:${o.queijo}`);
     },
     M,
   };

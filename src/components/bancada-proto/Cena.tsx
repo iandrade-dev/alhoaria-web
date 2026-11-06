@@ -12,9 +12,9 @@ import { CHAMA_DIR, POSES, anelTextura, qBase, type Kit, type Volta } from "./ki
 import { c01, duracao, eIO3, eIOs, eOut3, mola, pegadaDe, seg, tempoTrabalho, type Medidas, type Pegada } from "./acoes";
 import { kitPao } from "./kitPao";
 import { kitDog } from "./kitDog";
-import { CAMERAS, MESA, arranjoDe, fovPara, type Arranjo, type EstacaoId, type LancheDef, type Passo } from "./layout";
+import { CAMERAS, MESA, arranjoDe, fovPara, passoDe, type Arranjo, type EstacaoId, type LancheDef, type Passo } from "./layout";
 import Pedido3D, { type FasePedido, type ProjPedido } from "./Pedido3D";
-import type { Pedido } from "./cardapio";
+import type { Opcoes, Pedido } from "./cardapio";
 
 const ROOT = "/assets/models/bancada/";
 // Arquivos em public/assets/models/bancada/ (contrato no blender/bancada3d/README.md). A mão é o mao-luva.glb.
@@ -28,7 +28,8 @@ export type Bus = { drag: { ativo: boolean; id: EstacaoId | null; x: number; y: 
 export type Ponto = { x: number; y: number; r: number };
 export type Projecao = { estacoes: Record<EstacaoId, Ponto>; lanche: { x0: number; y0: number; x1: number; y1: number }; arranjo: Arranjo };
 export type ApiCena = {
-  acao: (id: Passo, modo: Modo) => void;
+  /** `id` = estação (a etapa, ou `<etapa>:<opção>` nas etapas com opções). */
+  acao: (id: EstacaoId, modo: Modo) => void;
   soltar: (id: EstacaoId) => void;
   reiniciar: () => void;
   interromper: () => void;
@@ -37,12 +38,18 @@ type Props = {
   def: LancheDef | null;
   ativo: Passo | null; reduzido: boolean;
   bus: MutableRefObject<Bus>; api: MutableRefObject<ApiCena | null>;
-  aoFim: (id: Passo) => void; aoProjetar: (p: Projecao) => void; aoPronto: () => void;
+  /** Fim da ação da estação `id`. */
+  aoFim: (id: EstacaoId) => void; aoProjetar: (p: Projecao) => void; aoPronto: () => void;
   congelar: { id: Passo; t: number } | null;
   /** Contexto WebGL perdido com a cena montada. */
   aoFalhar?: () => void;
-  /** Depois do lanche pronto: fase do pedido (turbinar, bebida, acompanhamento, sacola). */
-  pedido?: { montado: boolean; fase: FasePedido; atual: Pedido | null; aoProjetar: (p: ProjPedido) => void; aoSacola: () => void };
+  /** Escolhas do pedido que mudam o lanche na tábua (pão parmesão ou roseta). */
+  opcoes?: Opcoes | null;
+  /** Pedido: potinhos do Turbinar (durante a montagem), bebida, acompanhamento e sacola (depois do lanche pronto). */
+  pedido?: {
+    fase: FasePedido; atual: Pedido | null; rodada: number;
+    aoProjetar: (p: ProjPedido) => void; aoSacola: () => void; aoOcupado: (ocupado: boolean) => void;
+  };
 };
 
 const cubica = (out: Vector3, a: Vector3, b: Vector3, c: Vector3, d: Vector3, k: number) => {
@@ -80,7 +87,7 @@ type Ativo = {
 type Mola = { p: Vector3; v: Vector3; alvo: Vector3; k: number; c: number; solta: boolean };
 type Pop = Volta & { t: number };
 
-function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, congelar, arranjo, M, pedido }: Props & { def: LancheDef; arranjo: Arranjo; M: Medidas }) {
+function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, congelar, arranjo, M, pedido, opcoes }: Props & { def: LancheDef; arranjo: Arranjo; M: Medidas }) {
   const assets = useGLTF(def.arquivos.map(glb));
   const { gl, camera, size, scene } = useThree();
   const A = useMemo(() => Object.fromEntries(def.arquivos.map((n, i) => [n, assets[i].scene])) as Record<string, Object3D>, [assets, def]);
@@ -268,6 +275,7 @@ function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, co
   }, [K, H]);
 
   useEffect(() => { aoPronto(); }, [aoPronto]);
+  useEffect(() => { K.vestir?.(opcoes ?? null); }, [K, opcoes]);
   useEffect(() => {
     if (!new URLSearchParams(window.location.search).has("debug")) return;
     (window as unknown as { __cena: unknown }).__cena = { K, H, M };
@@ -286,11 +294,11 @@ function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, co
     const red = opts.current.reduzido;
     const lista = K.estacoes;
 
-    // estações: brilho da ativa, as outras apagadas
+    // estações: brilho da ativa (todas as opções da etapa), as outras apagadas
     const atv = ativoRef.current;
     Object.keys(lista).forEach((id) => {
       const st = lista[id];
-      const alvo = atv === id ? 1 : 0;
+      const alvo = atv === passoDe(id) ? 1 : 0;
       st.brilho += (alvo - st.brilho) * Math.min(1, dt * 6);
       const pul = red ? 0.8 : 0.72 + 0.28 * Math.sin(T * 3.4);
       (st.anel.material as MeshBasicMaterial).opacity = st.brilho * pul * 0.95;
@@ -308,7 +316,7 @@ function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, co
     {
       K.quadro?.(dt);
       const bp = anelPao;
-      const vezTampa = !!atv && !lista[atv] && !!K.acoes[atv] && K.acoes[atv].ini === null;
+      const vezTampa = !!atv && !lista[atv] && K.acoes[atv]?.ini === null;
       bp.v += ((vezTampa && !at.current ? 1 : 0) - bp.v) * Math.min(1, dt * 6);
       (bp.m.material as MeshBasicMaterial).opacity = bp.v * (red ? 0.8 : 0.72 + 0.28 * Math.sin(T * 3.4));
     }
@@ -361,7 +369,8 @@ function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, co
     const a = at.current;
     if (a) {
       const cg = opts.current.congelar;
-      if (cg && cg.id === a.id) a.t = cg.t; else a.t += dt * a.vel;
+      const congelada = !!cg && cg.id === passoDe(a.id);
+      if (congelada) a.t = cg.t; else a.t += dt * a.vel;
       const t = a.t;
       const ac = K.acoes[a.id];
       const amp = a.amp;
@@ -374,7 +383,7 @@ function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, co
       const vel = tmp.a.copy(pos).sub(ln.p).multiplyScalar(1 / Math.max(dt, 1e-3));
       ln.v.lerp(vel, Math.min(1, dt * 10)); ln.p.copy(pos);
       const wl = pesoLean(a, t);
-      if (!red && !(cg && cg.id === a.id) && wl > 0) {
+      if (!red && !congelada && wl > 0) {
         tmp.qq.setFromEuler(tmp.e.set(wl * MathUtils.clamp(ln.v.z * 0.35, -0.25, 0.25), 0, wl * MathUtils.clamp(-ln.v.x * 0.3, -0.25, 0.25)));
         // gira em torno do ponto útil: mantém o bico/concha no lugar e inclina o punho
         const pu = new Vector3(...POSES[ac.pose].ponto).applyQuaternion(q).add(pos);
@@ -445,8 +454,9 @@ function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, co
     <primitive object={anelPao.m} />
     <primitive object={H.raiz} />
     {K.extras.map((o, i) => <primitive key={`x-${i}`} object={o} />)}
-    {pedido?.montado && <Suspense fallback={null}>
-      <Pedido3D K={K} H={H} M={M} arranjo={arranjo} fase={pedido.fase} pedido={pedido.atual} reduzido={reduzido} aoProjetar={pedido.aoProjetar} aoSacola={pedido.aoSacola} />
+    {pedido?.atual && <Suspense fallback={null}>
+      <Pedido3D K={K} H={H} M={M} arranjo={arranjo} fase={pedido.fase} pedido={pedido.atual} rodada={pedido.rodada} reduzido={reduzido}
+        aoProjetar={pedido.aoProjetar} aoSacola={pedido.aoSacola} aoOcupado={pedido.aoOcupado} />
     </Suspense>}
   </>;
 }
