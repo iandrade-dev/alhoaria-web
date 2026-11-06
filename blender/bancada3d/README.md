@@ -418,3 +418,70 @@ uma ≤ 180 KB. As câmeras são as mesmas de `src/components/bancada-proto/layo
 tampo do fundo coincide com a mesa do 3D; o site corrige o fov quando a tela recorta a imagem pela largura
 (`fovPara`). Se mudar uma câmera, mude a outra. A prateleira é erguida em cada vista até ficar logo abaixo do topo do
 quadro, para a fita de luz e as réstias aparecerem nas duas.
+
+## Cozinha 3D da bancada gamificada: `cozinha.glb` (LAR-449, parte 6a)
+
+Script: `build_cozinha.py`. Troca a imagem fixa de `build_cozinha_fundo.py` (que continua no repo, com os `.webp`) por
+um modelo de verdade, para a câmera poder girar e afastar. Fiel ao concept k1: tampo de madeira escura em réguas, frente
+do balcão com portas, parede de azulejo metrô preto com rejunte, prateleira de madeira com mão-francesa de aço e fita de
+LED quente, potes de vidro, pratos, tabuinha, **uma** réstia de alho à direita, luminária pendente e props decorativos
+fora das zonas de jogo. Não importa nem altera nenhum outro GLB.
+
+```
+blender.exe -b --factory-startup -P blender/bancada3d/build_cozinha.py -- [--renders DIR] [--quick] [--no-build] [--no-render] [--views 01,02,03,04,05,06,07]
+```
+
+- Saída: `public/assets/models/bancada/cozinha.glb`. Renders de revisão (fora do repo, padrão
+  `\wsl.localhost\Ubuntu\home\igor\orq\runs\lar-449-cozinha3d\renders`): `{retrato,paisagem}-01-frontal`,
+  `-02-giro-menos35`, `-03-giro-mais35`, `-04-afastado` (1,4×), `-05-lanche` (tábua, pão, costela, mussarela, gratinado),
+  `06-topo-zonas` (vista de cima com as zonas: vermelho = retrato, ciano = paisagem) e `07-lado-a-lado-k1`.
+- Os renders saem do GLB exportado, reimportado, com luz que imita `Cena.tsx` (hemisfério/ambiente + direcional quente
+  2,6 + preenchimento 0,7) e tone mapping ACES.
+- `--quick`: bake e renders com poucas amostras e meia resolução.
+
+### Contrato
+
+- Draco, Y para cima, metros, sem luzes nem câmeras, nó raiz `cozinha`. Coordenadas do three.js do protótipo: origem no
+  centro do topo da tábua, tampo em y = -0,028 (`MESA`), parede em z = -0,62, frente do tampo em z = +0,62; tampo e parede
+  vão de x = -3,2 a +3,2 (cobrem o giro de ±35° e o afastamento 1,4×).
+- **Luz assada em `COLOR_0`** (Cycles: irradiância difusa da pendente, da fita de LED, de recortes e de preenchimento,
+  × AO). Nos props sem textura `COLOR_0` já traz albedo × luz; parede, tampo, frente, prateleira e tabuinha usam textura
+  em ladrilho (`baseColorTexture`, UV repetido) × `COLOR_0` (luz e tinta). O GLTFLoader liga `vertexColors` sozinho.
+- Texturas (JPEG embutido): azulejo 512² (cor + normal, ladrilho de 0,6 m), madeira 1024×512 (ladrilho de 1,2 × 0,6 m).
+- Emissivos: `fita_led` (#ffa24a, força 2,6), `lampada` (#ffd08a, 10), `geladeira_luz` (fria, 3). Vidro: `alphaMode`
+  BLEND, alfa 0,22.
+- A prateleira é baixa (fundo a 0,12 m, topo a 0,145 m) de propósito: as câmeras do jogo olham de cima e, na paisagem, só
+  enxergam a parede até ~0,17 m. A fita fica chanfrada na quina da frente para a linha acesa aparecer de cima. A réstia
+  pende de um braço na parede (y ≈ 0,53) até perto do tampo, na frente da prateleira.
+
+### Nós (filhos de `cozinha`)
+
+`tampo`, `balcao_frente`, `puxadores`, `parede`, `prateleira`, `mao_francesa`, `fita_led`, `potes_vidro`,
+`potes_conteudo`, `pratos`, `tabuinha`, `jarra_colheres`, `restia_alho`, `luminaria`, `lampada`, `cesta_paes`,
+`quadro_negro` ("Alhoaria / pão de alho / recheado"), `fruteira`, `pano_prato`, `moedor_pimenta`, `azeite`,
+`louca_direita` (saleiro, potinho com dentes de alho, tigelas), `vaso_ervas`, `jarra_utensilios`, `frente_props`
+(tábua redonda com limão e alho, colher de pau, frigideira, cascas), `tabua_pao`, `pote_conserva_vidro`, `pote_conserva`,
+`temperos` (saleiro/pimenteiro, tábua com alho, pilão, ramequins), `geladeira_bebidas`, `geladeira_vidro`, `geladeira_luz`.
+
+### Zonas livres
+
+Caixas (x0, x1, z0, z1) = cada ponto de `ESTACOES` de todos os lanches (`layout.ts`) e de `LUG` (`Pedido3D.tsx`: potes,
+prateleiras, bebidas, porções, copos) ± (0,065 de raio + 0,06 de folga); sacola e sacolaFim ± (0,09 × 0,055 + 0,06);
+tábua x -0,21..0,33, z -0,15..0,15 + 0,06; bandeja das prateleiras x -0,25..0,25, z -0,345..-0,215 + 0,06.
+Envelope: retrato x -0,35..0,39, z -0,435..0,425; paisagem x -0,545..0,555, z -0,41..0,295. O script falha se
+qualquer peça do tampo (por ilha da malha) ou qualquer vértice do fundo cair numa caixa. Exceção consciente: a luminária
+fica sobre a tábua, mas no alto (borda da cúpula em y = 0,80).
+
+### Tamanho e triângulos
+
+`cozinha.glb`: 431.760 B (421,6 KB), 52.915 triângulos (maiores: tampo 8.320, parede 7.296, réstia 7.260,
+geladeira 3.032).
+
+### No three.js
+
+- Carregue na origem, junto da tábua. Ligue `receiveShadow` no `tampo` (sombra do lanche); não ligue `castShadow` na
+  `luminaria`/`lampada` (a cúpula faria um disco escuro na tábua com a direcional de cima).
+- Luzes sugeridas: as atuais de `Cena.tsx` servem (hemisfério ~0,55 + ambiente ~0,25 + direcional quente ~2,6 de cima e
+  da frente + preenchimento ~0,7). Como a luz já está assada, evite mais luzes pontuais na cozinha. `scene.environment`
+  fraco (~0,3) dá o brilho do azulejo.
+- `toneMapping`: o padrão do R3F (ACESFilmic, exposição 1) é o que os renders usam; sem tone mapping o LED estoura.
