@@ -1,6 +1,6 @@
 # Cozinha 3D da bancada gamificada (LAR-449, parte 6a): cozinha.glb.
 # Substitui a imagem fixa de build_cozinha_fundo.py por um modelo de verdade, para a câmera poder girar e afastar.
-# Fiel ao concept k1 (renders/cena.py): tampo de madeira escura, frente do balcão, parede de azulejo metrô preto,
+# Fiel ao concept k1 (renders/cena.py), em escala real: tampo de aço escovado escuro, frente do balcão, parede de azulejo metrô preto,
 # prateleira de madeira com mão-francesa de aço e fita de LED quente, potes de vidro, pratos, tabuinha, uma réstia
 # de alho, luminária pendente e props decorativos fora das zonas de jogo.
 #
@@ -43,11 +43,12 @@ R = random.Random(449)
 # ---------------------------------------------------------------- medidas (three.js: x direita, y cima, z câmera)
 MESA = -0.028          # topo do tampo
 WALL = -0.62           # parede (como no k1)
-FRONT = 0.62           # frente do tampo
+FRONT = 0.95           # frente do tampo (a câmera retrato sugerida vê até z ~ 0,85)
 XMAX = 3.2             # o tampo e a parede vão bem além do que a câmera vê girando ±35° e afastando
-SH_Y0, SH_Y1 = 0.12, 0.145         # prateleira (baixa: as câmeras do jogo olham de cima, ver README)
-SH_Z1 = -0.47                      # frente da prateleira
-SH_X0, SH_X1 = -0.95, 0.85
+WALL_TILE = 1.0        # azulejo até 1 m; acima, parede pintada escura
+SH_Y0, SH_Y1 = 0.45, 0.48          # prateleira de parede em escala real (~45 cm acima do tampo)
+SH_Z1 = -0.452                     # frente da prateleira (~17 cm de fundo)
+SH_X0, SH_X1 = -1.0, 0.9
 LAMP = (0.0, -0.02)                # luminária sobre a tábua (x, z)
 
 # ---------------------------------------------------------------- zonas de jogo (layout.ts + Pedido3D.tsx)
@@ -329,11 +330,11 @@ def make_tile_textures(n=512):
     tid = (row * 4 + col).astype(int)
     var = rs.uniform(-1, 1, 64)[tid]
     nz = fft_noise(rs, n, n, 24, 24)
-    base = 0.15 + 0.025 * var + 0.006 * nz
+    base = 0.22 + 0.03 * var + 0.008 * nz
     # brilho sutil por azulejo: faixa clara no terço de cima (o vidrado pega a luz) e borda arredondada
     top = np.clip(1 - (th - fy) / (th * 0.35), 0, 1) ** 2
     bev = np.clip((d - g) / 6.0, 0, 1)
-    lum = base * (0.7 + 0.3 * bev) + 0.06 * top * bev
+    lum = base * (0.65 + 0.35 * bev) + 0.10 * top * bev
     tile_rgb = np.stack([lum * 1.0, lum * 0.97, lum * 0.95], axis=2)
     grout = np.array([0.42, 0.37, 0.32]) * (1 + 0.08 * nz[..., None])
     rgb = tile_rgb * tile[..., None] + grout * (1 - tile[..., None])
@@ -376,6 +377,18 @@ def make_wood_texture(w=1024, h=512):
     base = np.array([0.42, 0.31, 0.22])
     rgb = base[None, None, :] * lum[..., None]
     return save_img('madeira_cor', rgb)
+
+
+def make_steel_texture(w=1024, h=512):
+    """Aço escovado escuro, contínuo (sem emendas): riscos finos ao longo de x e manchas largas suaves."""
+    rs = np.random.RandomState(13)
+    streak = fft_noise(rs, h, w, 3, 240)
+    streak2 = fft_noise(rs, h, w, 12, 90)
+    blot = fft_noise(rs, h, w, 3, 3)
+    lum = 1.0 + 0.07 * streak + 0.04 * streak2 + 0.05 * blot
+    base = np.array([0.58, 0.51, 0.45])
+    rgb = base[None, None, :] * lum[..., None]
+    return save_img('aco_escovado_cor', rgb)
 
 
 # ---------------------------------------------------------------- materiais
@@ -480,9 +493,10 @@ def build_scene():
 
     tile_c, tile_n = make_tile_textures()
     wood = make_wood_texture()
+    steel = make_steel_texture()
     spec('azulejo', rough=0.16, image=tile_c, normal=tile_n)
     spec('madeira', rough=0.55, image=wood)
-    spec('tampo', rough=0.42, image=wood)
+    spec('tampo', rough=0.36, metal=0.2, image=steel)
     spec('fosco', rough=0.75)
     spec('acetinado', rough=0.45)
     spec('ceramica', rough=0.22)
@@ -492,10 +506,10 @@ def build_scene():
     spec('lampada', emit='#ffd08a', emit_s=10.0, bake_emit=0.0)
     spec('luz_fria', emit='#e6f2ff', emit_s=3.0, bake_emit=0.0)
 
-    # ------------------------------------------------ tampo (madeira escura em tábuas) + frente do balcão
+    # ------------------------------------------------ tampo (aço escovado escuro, contínuo) + frente do balcão
     xs_fine = bps((-XMAX, -1.6, 0.4), (-1.6, -1.2, 0.1), (-1.2, 1.2, 0.03), (1.2, 1.6, 0.1), (1.6, XMAX, 0.4))
-    zs_top = bps((WALL, FRONT, 0.03))
-    TAMPO_T = (0.88, 0.86, 0.84)
+    zs_top = bps((WALL, 0.5, 0.03), (0.5, FRONT, 0.09))
+    TAMPO_T = (1.0, 1.0, 1.0)
     mb = MB(uv=True)
     grid(mb, xs_fine, zs_top, lambda u, v: (u, MESA, v), (0, 1, 0), lambda p: TAMPO_T,
          lambda p: (p.x / WOOD_U, -p.z / WOOD_V))
@@ -529,13 +543,19 @@ def build_scene():
         x += 0.5
     finish(mb, 'puxadores', ['aco'], 'vc')
 
-    # ------------------------------------------------ parede de azulejo metrô preto
+    # ------------------------------------------------ parede: azulejo metrô preto até 1 m, pintura escura acima
     mb = MB(uv=True)
     xs_w = bps((-XMAX, -1.6, 0.4), (-1.6, -1.2, 0.1), (-1.2, 1.2, 0.03), (1.2, 1.6, 0.1), (1.6, XMAX, 0.4))
-    ys_w = bps((MESA, 0.45, 0.02), (0.45, 0.9, 0.05), (0.9, 2.2, 0.26))
+    ys_w = bps((MESA, 0.7, 0.025), (0.7, WALL_TILE, 0.05))
     grid(mb, xs_w, ys_w, lambda u, v: (u, v, WALL), (0, 0, 1), None,
          lambda p: (p.x / TILE_M, (p.y - MESA) / TILE_M))
     finish(mb, 'parede', ['azulejo'], 'tex')
+    mb = MB()
+    grid(mb, bps((-XMAX, XMAX, 0.2)), bps((WALL_TILE, 2.4, 0.2)), lambda u, v: (u, v, WALL), (0, 0, 1),
+         lambda p: hexc('#2e2722'))
+    box(mb, -XMAX, XMAX, WALL_TILE - 0.004, WALL_TILE + 0.012, WALL, WALL + 0.012, hexc('#3a2a1e'), step=0.2,
+        skip=('-z',))
+    finish(mb, 'parede_alta', ['fosco'], 'vc')
 
     # ------------------------------------------------ prateleira + mão-francesa + fita de LED
     mb = MB(uv=True)
@@ -543,73 +563,73 @@ def build_scene():
     finish(mb, 'prateleira', ['madeira'], 'tex')
     mb = MB()
     STEEL = hexc('#8d8882')
-    for bx in (-0.78, -0.06, 0.66):
-        box(mb, bx - 0.007, bx + 0.007, SH_Y0 - 0.012, SH_Y0, WALL, SH_Z1 - 0.02, STEEL, step=0.03)
-        box(mb, bx - 0.007, bx + 0.007, SH_Y0 - 0.1, SH_Y0, WALL, WALL + 0.01, STEEL, step=0.03)
-        beam(mb, (bx, SH_Y0 - 0.088, WALL + 0.008), (bx, SH_Y0 - 0.008, SH_Z1 - 0.04), 0.012, 0.007, STEEL)
-        for sy in (SH_Y0 - 0.085, SH_Y0 - 0.02):
-            ellipsoid(mb, (bx, sy, WALL + 0.011), 0.004, 0.004, 0.002, segs=8, rings=4, alb=lambda *a: hexc('#5a5550'))
-    # perfil de alumínio da fita, na quina de baixo da frente da prateleira
+    for bx in (-0.86, -0.06, 0.78):
+        box(mb, bx - 0.008, bx + 0.008, SH_Y0 - 0.014, SH_Y0, WALL, SH_Z1 - 0.02, STEEL, step=0.04)
+        box(mb, bx - 0.008, bx + 0.008, SH_Y0 - 0.17, SH_Y0, WALL, WALL + 0.01, STEEL, step=0.04)
+        beam(mb, (bx, SH_Y0 - 0.155, WALL + 0.008), (bx, SH_Y0 - 0.01, SH_Z1 - 0.035), 0.014, 0.008, STEEL)
+        for sy in (SH_Y0 - 0.15, SH_Y0 - 0.03):
+            ellipsoid(mb, (bx, sy, WALL + 0.011), 0.005, 0.005, 0.002, segs=8, rings=4, alb=lambda *a: hexc('#5a5550'))
     box(mb, SH_X0 + 0.01, SH_X1 - 0.01, SH_Y0 - 0.012, SH_Y0, SH_Z1 - 0.012, SH_Z1 + 0.004, hexc('#9a958f'), step=0.2,
         skip=('+y',))
     finish(mb, 'mao_francesa', ['aco'], 'vc')
     mb = MB()
-    # a face de luz olha para a frente e para baixo: as câmeras do jogo (acima da prateleira) veem a linha acesa
+    # fita de LED na quina de baixo da frente da prateleira, olhando para baixo e um pouco para a frente
     grid(mb, steps(SH_X0 + 0.015, SH_X1 - 0.015, 0.2), [0.0, 1.0],
          lambda u, v: (u, SH_Y0 - 0.016 + 0.008 * v, SH_Z1 + 0.012 - 0.008 * v), (0, -0.7, 0.7))
     finish(mb, 'fita_led', ['led'], 'emit')
 
-    # ------------------------------------------------ potes de vidro com conteúdo, pratos, tabuinha, jarra de colheres
+    # ------------------------------------------------ potes de vidro grandes, pratos, tabuinha, jarra de colheres
     glass = MB(); cont = MB()
-    potes = [(-0.87, 0.15, 0.044, '#e9dcc0', 'alho'), (-0.755, 0.115, 0.04, '#a3261a', 'pimenta'),
-             (-0.31, 0.14, 0.042, '#4a5a22', 'oregano'), (-0.205, 0.10, 0.038, '#c8742a', 'paprica'),
-             (0.255, 0.165, 0.046, '#ece2c8', 'alho'), (0.37, 0.12, 0.04, '#6a1c12', 'pimenta'),
-             (0.75, 0.15, 0.044, '#d9a83a', 'mostarda')]
+    potes = [(-0.92, 0.24, 0.062, '#e9dcc0', 'alho'), (-0.785, 0.19, 0.055, '#a3261a', 'pimenta'),
+             (-0.32, 0.22, 0.06, '#4a5a22', 'oregano'), (-0.19, 0.16, 0.052, '#c8742a', 'paprica'),
+             (0.22, 0.26, 0.066, '#ece2c8', 'alho'), (0.365, 0.18, 0.055, '#6a1c12', 'pimenta'),
+             (0.80, 0.21, 0.058, '#d9a83a', 'mostarda')]
     for (px, h, r, fill, kind) in potes:
-        pz = -0.545
+        pz = -0.54
         c = (px, SH_Y1, pz)
-        revolve(glass, [(r * 0.94, 0.0), (r, 0.008), (r, h - 0.022), (r * 0.86, h - 0.006), (r * 0.84, h)], c,
-                segs=20, cap_bottom=False)
+        revolve(glass, [(r * 0.94, 0.0), (r, 0.008), (r, h - 0.03), (r * 0.86, h - 0.008), (r * 0.84, h)], c,
+                segs=22, cap_bottom=False)
         fc = hexc(fill)
         if kind == 'alho':
             al = lambda a, hh, rr, fc=fc: mix(fc, hexc('#fff6e0'), 0.5 + 0.5 * math.sin(a * 9 + hh * 140))
         else:
             al = lambda a, hh, rr, fc=fc: vary(fc, 0.08)
-        revolve(cont, [(r * 0.9, 0.003), (r * 0.9, h * 0.72)], c, segs=16, alb=al, cap_top=True)
+        revolve(cont, [(r * 0.9, 0.003), (r * 0.9, h * 0.74)], c, segs=18, alb=al, cap_top=True)
         lid = hexc('#9a6b3c') if kind in ('alho', 'oregano') else hexc('#2a2622')
-        revolve(cont, [(r * 0.86, h - 0.012), (r * 0.88, h + 0.012), (r * 0.6, h + 0.016)], c, segs=16,
+        revolve(cont, [(r * 0.86, h - 0.016), (r * 0.88, h + 0.016), (r * 0.6, h + 0.021)], c, segs=18,
                 alb=lambda *a, lid=lid: lid, cap_bottom=False, cap_top=True)
     finish(glass, 'potes_vidro', ['vidro'], 'vc')
     finish(cont, 'potes_conteudo', ['acetinado'], 'vc')
 
     mb = MB()
     PL = hexc('#efe6d4')
-    for k in range(6):
-        revolve(mb, [(0.0, 0.0), (0.075, 0.0), (0.095, 0.004), (0.112, 0.014), (0.118, 0.016), (0.11, 0.017),
-                     (0.07, 0.006), (0.0, 0.006)], (-0.53, SH_Y1 + k * 0.0125, -0.535), segs=28,
-                alb=lambda a, h, r: mix(PL, hexc('#7a2a1a'), 1.0 if 0.105 < r < 0.112 else 0.0), cap_bottom=False)
-    # tigela emborcada em cima
-    revolve(mb, [(0.0, 0.07), (0.03, 0.068), (0.06, 0.055), (0.072, 0.03), (0.075, 0.0)], (-0.53, SH_Y1 + 0.075, -0.535),
-            segs=24, alb=lambda *a: hexc('#d9cbb3'), cap_bottom=False)
+    PS = 1.15
+    for k in range(8):
+        revolve(mb, [(0.0, 0.0), (0.075 * PS, 0.0), (0.095 * PS, 0.004), (0.112 * PS, 0.014), (0.118 * PS, 0.016),
+                     (0.11 * PS, 0.017), (0.07 * PS, 0.006), (0.0, 0.006)], (-0.56, SH_Y1 + k * 0.013, -0.525), segs=30,
+                alb=lambda a, h, r: mix(PL, hexc('#7a2a1a'), 1.0 if 0.105 * PS < r < 0.112 * PS else 0.0),
+                cap_bottom=False)
+    revolve(mb, [(0.0, 0.08), (0.035, 0.078), (0.07, 0.063), (0.083, 0.035), (0.086, 0.0)],
+            (-0.56, SH_Y1 + 0.105, -0.525), segs=26, alb=lambda *a: hexc('#d9cbb3'), cap_bottom=False)
     finish(mb, 'pratos', ['ceramica'], 'vc')
 
     mb = MB(uv=True)
     i0 = len(mb.t)
-    box(mb, -0.10, 0.10, 0.0, 0.30, -0.009, 0.009, (0.95, 0.85, 0.72), step=0.05, tex=(WOOD_V, WOOD_U))
-    box(mb, -0.025, 0.025, 0.30, 0.37, -0.009, 0.009, (0.95, 0.85, 0.72), step=0.05, tex=(WOOD_V, WOOD_U))
-    mb.xform(i0, rot_x(-0.11), (0.04, SH_Y1 + 0.001, -0.585))
+    box(mb, -0.14, 0.14, 0.0, 0.40, -0.011, 0.011, (0.95, 0.85, 0.72), step=0.05, tex=(WOOD_V, WOOD_U))
+    box(mb, -0.035, 0.035, 0.40, 0.49, -0.011, 0.011, (0.95, 0.85, 0.72), step=0.05, tex=(WOOD_V, WOOD_U))
+    mb.xform(i0, rot_x(-0.12), (0.0, SH_Y1 + 0.001, -0.59))
     finish(mb, 'tabuinha', ['madeira'], 'tex')
 
     mb = MB()
-    revolve(mb, [(0.0, 0.0), (0.045, 0.0), (0.05, 0.01), (0.05, 0.11), (0.054, 0.12), (0.047, 0.12), (0.044, 0.03)],
-            (0.56, SH_Y1, -0.54), segs=22, alb=lambda a, h, r: hexc('#2e4a5c') if h > 0.012 else hexc('#c9bfae'))
+    JX = 0.56
+    revolve(mb, [(0.0, 0.0), (0.055, 0.0), (0.06, 0.012), (0.06, 0.14), (0.064, 0.15), (0.056, 0.15), (0.053, 0.03)],
+            (JX, SH_Y1, -0.54), segs=24, alb=lambda a, h, r: hexc('#2e4a5c') if h > 0.014 else hexc('#c9bfae'))
     for k, ang in enumerate((-0.25, 0.05, 0.3)):
-        p0 = Vector((0.56 + 0.01 * k - 0.01, SH_Y1 + 0.03, -0.54 + 0.01 * (k - 1)))
-        tip = p0 + Vector((math.sin(ang) * 0.2, 0.2, -0.02))
-        beam(mb, p0, tip, 0.008, 0.005, hexc('#b08050'))
-        ellipsoid(mb, tip, 0.018, 0.028, 0.006, M=Matrix.Rotation(-ang, 3, 'Z'), segs=10, rings=5,
+        p0 = Vector((JX + 0.012 * k - 0.012, SH_Y1 + 0.03, -0.54 + 0.012 * (k - 1)))
+        tip = p0 + Vector((math.sin(ang) * 0.24, 0.24, -0.02))
+        beam(mb, p0, tip, 0.009, 0.006, hexc('#b08050'))
+        ellipsoid(mb, tip, 0.02, 0.032, 0.007, M=Matrix.Rotation(-ang, 3, 'Z'), segs=10, rings=5,
                   alb=lambda *a: hexc('#a87545'))
-    # duas cabeças de alho soltas na prateleira
     finish(mb, 'jarra_colheres', ['ceramica'], 'vc')
 
     # ------------------------------------------------ alho (réstia + cabeças soltas)
@@ -636,29 +656,27 @@ def build_scene():
                 rfun=lambda a, h: 1.0 + 0.07 * abs(math.cos(a * 3.5 + ph)))
 
     mb = MB()
-    GX, GZ = 0.385, -0.437
-    GTOP = 0.50
-    # braço de aço na parede com gancho; a trança de palha desce na frente da prateleira até perto do tampo
+    GX, GZ = 0.64, -0.485
+    GTOP = SH_Y0 - 0.01
+    # gancho sob a prateleira; a trança de palha desce até ~0,2 m do tampo
     straw = hexc('#9b7a48')
     st_ = hexc('#55504a')
-    beam(mb, (GX, GTOP + 0.03, WALL), (GX, GTOP + 0.03, GZ - 0.006), 0.01, 0.01, st_)
-    beam(mb, (GX, GTOP + 0.03, GZ - 0.006), (GX, GTOP, GZ - 0.006), 0.005, 0.005, st_)
-    NB = 15
-    pts = [(GX + 0.005 * math.sin(k * 1.9), GTOP - k * 0.027, GZ + 0.003 * math.cos(k * 1.3)) for k in range(NB + 1)]
+    beam(mb, (GX, SH_Y0, GZ), (GX, GTOP - 0.01, GZ), 0.005, 0.005, st_)
+    NB = 9
+    pts = [(GX + 0.005 * math.sin(k * 1.9), GTOP - 0.01 - k * 0.026, GZ + 0.003 * math.cos(k * 1.3)) for k in range(NB + 1)]
     for k in range(len(pts) - 1):
-        beam(mb, pts[k], pts[k + 1], 0.013, 0.009, vary(straw, 0.1))
+        beam(mb, pts[k], pts[k + 1], 0.014, 0.01, vary(straw, 0.1))
     for k in range(NB):
         side = 1 if k % 2 else -1
-        y = GTOP - 0.03 - k * 0.026
-        cx = GX + side * (0.016 + 0.004 * math.sin(k))
+        y = GTOP - 0.035 - k * 0.026
+        cx = GX + side * (0.018 + 0.004 * math.sin(k))
         c = (cx, y, GZ + 0.006 * math.cos(k * 2.1))
         M = rot_z(side * -0.4 + 0.1 * math.sin(k)) @ rot_x(0.15 * math.cos(k))
-        garlic(mb, c, 0.02 + 0.003 * math.sin(k * 1.7), M=M, seed=k)
-    # cabeça no pé da réstia
-    garlic(mb, (GX, GTOP - 0.03 - NB * 0.026, GZ), 0.023, seed=31)
-    # duas cabeças soltas na prateleira
-    garlic(mb, (0.47, SH_Y1 + 0.019, -0.53), 0.022, M=rot_z(0.25), seed=41)
-    garlic(mb, (0.515, SH_Y1 + 0.018, -0.565), 0.021, M=rot_z(-0.4) @ rot_x(0.3), seed=42)
+        garlic(mb, c, 0.024 + 0.003 * math.sin(k * 1.7), M=M, seed=k)
+    garlic(mb, (GX, GTOP - 0.04 - NB * 0.026, GZ), 0.026, seed=31)
+    # cabeças soltas na prateleira
+    garlic(mb, (0.46, SH_Y1 + 0.022, -0.53), 0.026, M=rot_z(0.25), seed=41)
+    garlic(mb, (0.505, SH_Y1 + 0.021, -0.57), 0.024, M=rot_z(-0.4) @ rot_x(0.3), seed=42)
     finish(mb, 'restia_alho', ['fosco'], 'vc')
 
     # ------------------------------------------------ luminária pendente sobre a tábua
@@ -667,8 +685,8 @@ def build_scene():
     YB = 0.80
     shade = hexc('#1c1a18')
     inner = hexc('#d8b47a')
-    prof = [(0.012, YB + 0.20), (0.03, YB + 0.19), (0.05, YB + 0.15), (0.085, YB + 0.09), (0.14, YB + 0.025),
-            (0.165, YB + 0.0), (0.16, YB - 0.002), (0.135, YB + 0.022), (0.08, YB + 0.085), (0.045, YB + 0.145),
+    prof = [(0.012, YB + 0.20), (0.03, YB + 0.19), (0.05, YB + 0.15), (0.085, YB + 0.09), (0.115, YB + 0.025),
+            (0.135, YB + 0.0), (0.13, YB - 0.002), (0.11, YB + 0.022), (0.08, YB + 0.085), (0.045, YB + 0.145),
             (0.026, YB + 0.18)]
     revolve(mb, prof, (LX, 0, LZ), segs=40, alb=lambda a, h, r: shade if h > YB + 0.0 and r > 0 else shade,
             cap_bottom=False)
@@ -688,14 +706,14 @@ def build_scene():
     Y0 = MESA
     # cesta de pães (fundo à esquerda)
     mb = MB()
-    BX, BZ = -0.78, -0.43
+    BX, BZ = -0.66, -0.525
     wick = (hexc('#a77b45'), hexc('#6f4f2a'))
 
     def wicker(a, h, r):
         k = (int((a / (2 * math.pi)) * 46) + int(h / 0.011)) % 2
         return vary(wick[k], 0.05)
     revolve(mb, [(0.0, 0.0), (0.11, 0.0), (0.135, 0.012), (0.152, 0.045), (0.16, 0.068), (0.152, 0.072),
-                 (0.142, 0.05), (0.125, 0.016), (0.0, 0.012)], (BX, Y0, BZ), segs=40, sz=0.62, alb=wicker,
+                 (0.142, 0.05), (0.125, 0.016), (0.0, 0.012)], (BX, Y0, BZ), segs=40, sz=0.58, alb=wicker,
             cap_bottom=False)
     # pano xadrez forrando
     def chk(p):
@@ -804,13 +822,13 @@ def build_scene():
     # moedor de pimenta
     mb = MB()
     revolve(mb, [(0.0, 0.0), (0.024, 0.0), (0.026, 0.01), (0.022, 0.05), (0.018, 0.08), (0.024, 0.11), (0.026, 0.14),
-                 (0.02, 0.16), (0.008, 0.172), (0.006, 0.182), (0.0, 0.185)], (-0.64, Y0, -0.18), segs=18,
+                 (0.02, 0.16), (0.008, 0.172), (0.006, 0.182), (0.0, 0.185)], (-0.235, Y0, -0.565), segs=18,
             alb=lambda a, h, r: hexc('#3a2416') if 0.075 < h < 0.09 else vary(hexc('#5a3820'), 0.03), cap_top=False)
     finish(mb, 'moedor_pimenta', ['acetinado'], 'vc', check=True)
 
     # lado direito: azeite, saleiro, vaso de ervas, potinho com dentes de alho, tigelas
     mb = MB()
-    AX, AZ = 0.67, -0.415
+    AX, AZ = -0.41, -0.53
 
     def oil(a, h, r):
         if 0.06 < h < 0.15:
@@ -821,12 +839,17 @@ def build_scene():
     revolve(mb, [(0.0, 0.0), (0.03, 0.0), (0.032, 0.008), (0.032, 0.18), (0.026, 0.205), (0.014, 0.225),
                  (0.012, 0.245), (0.013, 0.252), (0.008, 0.27), (0.005, 0.28), (0.0, 0.28)], (AX, Y0, AZ), segs=20,
             alb=oil, cap_bottom=False)
+    # garrafa de vinagre de vinho, ao lado
+    revolve(mb, [(0.0, 0.0), (0.033, 0.0), (0.035, 0.01), (0.035, 0.2), (0.028, 0.23), (0.013, 0.25), (0.012, 0.29),
+                 (0.014, 0.3), (0.0, 0.3)], (AX + 0.075, Y0, AZ - 0.03), segs=20,
+            alb=lambda a, h, r: hexc('#efe3c8') if 0.08 < h < 0.15 else (hexc('#b8302a') if h > 0.285 else
+                                                                         vary(hexc('#4a1414'), 0.03)), cap_bottom=False)
     finish(mb, 'azeite', ['ceramica'], 'vc', check=True)
 
     mb = MB()
     revolve(mb, [(0.0, 0.0), (0.026, 0.0), (0.034, 0.012), (0.037, 0.035), (0.033, 0.036), (0.03, 0.014),
-                 (0.0, 0.01)], (0.775, Y0, -0.40), segs=22, alb=lambda *a: hexc('#ece6da'), cap_bottom=False)
-    revolve(mb, [(0.0, 0.026), (0.03, 0.026), (0.0, 0.03)], (0.775, Y0, -0.40), segs=22,
+                 (0.0, 0.01)], (-0.15, Y0, -0.53), segs=22, alb=lambda *a: hexc('#ece6da'), cap_bottom=False)
+    revolve(mb, [(0.0, 0.026), (0.03, 0.026), (0.0, 0.03)], (-0.15, Y0, -0.53), segs=22,
             alb=lambda *a: vary(hexc('#f6f3ee'), 0.04), cap_bottom=False)
     # potinho com dentes de alho
     PX_, PZ_ = 0.665, -0.03
@@ -846,7 +869,7 @@ def build_scene():
     finish(mb, 'louca_direita', ['ceramica'], 'vc', check=True)
 
     mb = MB()
-    VX, VZ = 0.755, -0.215
+    VX, VZ = 0.43, -0.53
     revolve(mb, [(0.0, 0.0), (0.042, 0.0), (0.05, 0.06), (0.058, 0.064), (0.06, 0.09), (0.054, 0.09), (0.052, 0.075),
                  (0.0, 0.075)], (VX, Y0, VZ), segs=24,
             alb=lambda a, h, r: hexc('#2b1d14') if (h > 0.07 and r < 0.053) else vary(hexc('#b0582e'), 0.04),
@@ -867,7 +890,7 @@ def build_scene():
 
     # jarra de utensílios (direita, perto da geladeira)
     mb = MB()
-    UX, UZ = 0.86, -0.07
+    UX, UZ = 0.81, -0.53
     revolve(mb, [(0.0, 0.0), (0.046, 0.0), (0.05, 0.01), (0.05, 0.13), (0.054, 0.14), (0.048, 0.14), (0.045, 0.02)],
             (UX, Y0, UZ), segs=22, alb=lambda a, h, r: vary(hexc('#d7cfc0'), 0.02))
     for k, (dx, dz, tilt, kind) in enumerate([(-0.015, 0.0, 0.18, 'colher'), (0.015, 0.01, -0.15, 'espatula'),
@@ -941,23 +964,23 @@ def build_scene():
     # temperos no fundo, sob a prateleira (baixos: a mão passa por cima)
     mb = MB()
     # saleiro e pimenteiro
-    for k, (sx_, colr) in enumerate(((-0.43, '#efe9df'), (-0.385, '#2a2622'))):
+    for k, (sx_, colr) in enumerate(()):
         revolve(mb, [(0.0, 0.0), (0.016, 0.0), (0.018, 0.01), (0.016, 0.05), (0.018, 0.062), (0.012, 0.072),
                      (0.0, 0.074)], (sx_, Y0, -0.56 + 0.012 * k), segs=16,
                 alb=lambda a, h, r, colr=colr: hexc('#b8b3ab') if h > 0.06 else hexc(colr), cap_bottom=False)
     # tábua com cabeças de alho
     i0 = len(mb.t)
     box(mb, -0.09, 0.09, 0.0, 0.014, -0.05, 0.05, hexc('#8a5a32'), step=0.03)
-    mb.xform(i0, rot_y(0.12), (-0.19, Y0, -0.545))
-    garlic(mb, (-0.23, Y0 + 0.035, -0.55), 0.024, seed=61)
-    garlic(mb, (-0.17, Y0 + 0.034, -0.535), 0.023, M=rot_z(0.4), seed=62)
-    garlic(mb, (-0.14, Y0 + 0.031, -0.565), 0.02, M=rot_x(-0.5), seed=63)
+    mb.xform(i0, rot_y(0.12), (0.03, Y0, -0.535))
+    garlic(mb, (-0.01, Y0 + 0.037, -0.54), 0.027, seed=61)
+    garlic(mb, (0.05, Y0 + 0.036, -0.525), 0.026, M=rot_z(0.4), seed=62)
+    garlic(mb, (0.08, Y0 + 0.033, -0.56), 0.023, M=rot_x(-0.5), seed=63)
     # pilão de pedra
     revolve(mb, [(0.0, 0.0), (0.04, 0.0), (0.05, 0.02), (0.052, 0.055), (0.044, 0.056), (0.038, 0.025), (0.0, 0.02)],
-            (0.29, Y0, -0.55), segs=24, alb=lambda *a: vary(hexc('#7e7a74'), 0.05), cap_bottom=False)
-    beam(mb, (0.285, Y0 + 0.03, -0.55), (0.33, Y0 + 0.12, -0.53), 0.018, 0.018, hexc('#8a857e'))
+            (0.25, Y0, -0.55), segs=24, alb=lambda *a: vary(hexc('#7e7a74'), 0.05), cap_bottom=False)
+    beam(mb, (0.245, Y0 + 0.03, -0.55), (0.29, Y0 + 0.13, -0.53), 0.018, 0.018, hexc('#8a857e'))
     # ramequins de páprica e ervas
-    for k, (rx_, colr) in enumerate(((0.1, '#b8401e'), (0.165, '#55702a'))):
+    for k, (rx_, colr) in enumerate(((0.14, '#b8401e'), (0.33, '#55702a'))):
         c = (rx_, Y0, -0.545 + 0.02 * k)
         revolve(mb, [(0.0, 0.0), (0.024, 0.0), (0.032, 0.012), (0.033, 0.03), (0.029, 0.03), (0.027, 0.012),
                      (0.0, 0.008)], c, segs=18, alb=lambda *a: hexc('#e9e2d4'), cap_bottom=False)
@@ -1107,14 +1130,14 @@ def bake_lights():
         if o['kind'] == 'emit' or 'vidro' in o['mats']:
             o.visible_shadow = False
     LX, LZ = LAMP
-    add_light('pendente', 'SPOT', (LX, 0.845, LZ), 40, (1.0, 0.72, 0.45), (LX, 0, LZ),
-              spot_size=math.radians(64), spot_blend=0.9, shadow_soft_size=0.03)
+    add_light('pendente', 'SPOT', (LX, 0.845, LZ), 60, (1.0, 0.72, 0.45), (LX, 0, LZ),
+              spot_size=math.radians(70), spot_blend=0.85, shadow_soft_size=0.03)
     add_light('lampada_luz', 'POINT', (LX, 0.9, LZ), 3, (1.0, 0.75, 0.5), shadow_soft_size=0.03)
-    led = add_light('led', 'AREA', ((SH_X0 + SH_X1) / 2, SH_Y0 - 0.012, -0.492), 85, (1.0, 0.64, 0.34),
+    led = add_light('led', 'AREA', ((SH_X0 + SH_X1) / 2, SH_Y0 - 0.014, SH_Z1 - 0.03), 190, (1.0, 0.64, 0.34),
                     shape='RECTANGLE', size=SH_X1 - SH_X0 - 0.05, size_y=0.016)
     led.rotation_euler = (0, 0, 0)            # área aponta para -Z do Blender = para baixo
     add_light('recorte', 'AREA', (1.1, 0.6, -0.15), 40, (1.0, 0.6, 0.32), (0, 0, -0.2), size=0.8)
-    add_light('preench', 'AREA', (0.0, 1.5, 1.6), 26, (1.0, 0.9, 0.78), (0, 0, -0.1), size=2.5)
+    add_light('preench', 'AREA', (0.0, 1.5, 1.6), 18, (1.0, 0.9, 0.78), (0, 0, -0.1), size=2.5)
     add_light('lado_esq', 'AREA', (-1.7, 0.9, 0.5), 20, (1.0, 0.82, 0.62), (-0.9, 0, -0.2), size=1.2)
     add_light('lado_dir', 'AREA', (1.9, 0.9, 0.5), 15, (1.0, 0.82, 0.62), (1.0, 0, -0.2), size=1.2)
     add_light('geladeira', 'POINT', (1.21, 0.47, -0.43), 3, (0.82, 0.9, 1.0), shadow_soft_size=0.05)
@@ -1174,8 +1197,8 @@ def bake():
         alb = attr_get(me, 'Alb')
         E = smooth_vals(me, irr[o.name] / ref, 2 if o.name in ('tampo', 'parede') else 1)
         A = smooth_vals(me, ao[o.name], 1)
-        L = np.clip(E, 0, None) ** 1.25 * (0.45 + 0.55 * A)
-        L = 0.07 + L / (1.0 + 0.12 * L)                     # ombro suave: o centro não estoura
+        L = np.clip(E, 0, None) ** 1.4 * (0.45 + 0.55 * A)
+        L = 0.05 + L / (1.0 + 0.12 * L)                     # ombro suave: o centro não estoura
         L = np.clip(L * 1.12, 0.0, 1.0)
         if o['kind'] == 'emit':
             out = np.ones_like(alb)
@@ -1231,11 +1254,73 @@ def export():
 
 
 # ---------------------------------------------------------------- renders de revisão (a partir do GLB exportado)
+# Câmeras SUGERIDAS para a próxima tarefa (layout.ts ainda tem as antigas: retrato pos (0, 0.94, 0.98) alvo
+# (0, 0, -0.01) fov 47; paisagem pos (0, 0.6, 0.76) alvo (0, 0.02, 0) fov 40). Os renders usam as sugeridas.
 CAMERAS = {
-    'retrato': dict(pos=(0, 0.94, 0.98), alvo=(0, 0.0, -0.01), fov=47, w=900, h=1600),
-    'paisagem': dict(pos=(0, 0.6, 0.76), alvo=(0, 0.02, 0.0), fov=40, w=1600, h=900),
+    'retrato': dict(pos=(0, 1.05, 1.45), alvo=(0, 0.08, -0.1), fov=58, w=900, h=1600),
+    'paisagem': dict(pos=(0, 0.5, 0.85), alvo=(0, 0.12, -0.15), fov=44, w=1600, h=900),
 }
 LANCHE = ['tabua', 'pao', 'costela', 'mussarela', 'gratinado']
+# estações da Costela (layout.ts, LUGARES_PAO)
+EST_COSTELA = {
+    'retrato': dict(pasta=(-0.15, -0.25), creme=(0.14, -0.26), costela=(-0.165, 0.27), mussarela=(0.025, 0.3),
+                    macarico=(0.205, 0.25)),
+    'paisagem': dict(pasta=(-0.36, -0.11), costela=(-0.38, 0.15), creme=(0.42, -0.15), mussarela=(0.42, 0.17),
+                     macarico=(0.21, -0.27)),
+}
+
+
+def place_on_table(objs, x, z):
+    """Põe o conjunto importado com o centro da caixa em (x, z) e a base no tampo."""
+    roots = [o for o in objs if o.parent is None]
+    bpy.context.view_layer.update()
+    pts = [o.matrix_world @ Vector(c) for o in objs if o.type == 'MESH' for c in o.bound_box]
+    if not pts:
+        return
+    cx = (min(p.x for p in pts) + max(p.x for p in pts)) / 2
+    cy = (min(p.y for p in pts) + max(p.y for p in pts)) / 2
+    bz = min(p.z for p in pts)
+    d = Vector((x - cx, -z - cy, MESA - bz))
+    for r in roots:
+        r.location += d
+
+
+def tigela(sc, x, z, cor, monte):
+    """Tigela de cerâmica com um monte (estação de recheio), feita na hora só para a revisão."""
+    mb = MB()
+    revolve(mb, [(0.0, 0.0), (0.04, 0.0), (0.07, 0.03), (0.08, 0.055), (0.075, 0.056), (0.064, 0.03), (0.0, 0.012)],
+            (x, MESA, z), segs=32, cap_bottom=False)
+    me = bpy.data.meshes.new('tigela'); me.from_pydata([(p.x, -p.z, p.y) for p in mb.t], [], mb.f)
+    me.shade_smooth()
+    m = bpy.data.materials.new('tig'); m.use_nodes = True
+    m.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (0.75, 0.68, 0.6, 1)
+    m.node_tree.nodes['Principled BSDF'].inputs['Roughness'].default_value = 0.25
+    me.materials.append(m)
+    o1 = bpy.data.objects.new('tigela', me); sc.collection.objects.link(o1)
+    mb = MB()
+    ellipsoid(mb, (x, MESA + 0.03, z), 0.06, 0.035, 0.06, segs=20, rings=8,
+              rfun=lambda a, h: 1.0 + 0.12 * math.sin(a * 7) * math.cos(h * 9))
+    me = bpy.data.meshes.new('monte'); me.from_pydata([(p.x, -p.z, p.y) for p in mb.t], [], mb.f)
+    me.shade_smooth()
+    m = bpy.data.materials.new('monte'); m.use_nodes = True
+    m.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = cor
+    m.node_tree.nodes['Principled BSDF'].inputs['Roughness'].default_value = 0.6
+    me.materials.append(m)
+    o2 = bpy.data.objects.new('monte', me); sc.collection.objects.link(o2)
+    return [o1, o2]
+
+
+def estacoes_review(arr):
+    sc = bpy.context.scene
+    E = EST_COSTELA[arr]
+    out = []
+    for nome, glbn in (('pasta', 'bisnaga'), ('creme', 'pote-creme'), ('macarico', 'macarico-mao')):
+        objs = import_glb(os.path.join(MODELS, glbn + '.glb'))
+        place_on_table(objs, *E[nome])
+        out += objs
+    out += tigela(sc, *E['costela'], (0.18, 0.07, 0.03, 1), True)
+    out += tigela(sc, *E['mussarela'], (0.85, 0.72, 0.42, 1), True)
+    return out
 
 
 def import_glb(path):
@@ -1382,10 +1467,14 @@ def renders():
             import_glb(os.path.join(MODELS, n + '.glb'))
         review_shading(list(bpy.data.objects))
         for arr, c in CAMERAS.items():
+            est = estacoes_review(arr)
+            review_shading(est)
             camera(sc, 'cam', c['pos'], c['alvo'], c['fov'], c['w'], c['h'])
             out[(arr, '05')] = render(sc, '%s-05-lanche.png' % arr)
-    # lado a lado com o k1
-    fr = os.path.join(RENDERS, 'paisagem-01-frontal.png')
+            for o in est:
+                bpy.data.objects.remove(o)
+    # lado a lado com o k1 (com tábua, lanche e estações da Costela, de igual para igual)
+    fr = os.path.join(RENDERS, 'paisagem-05-lanche.png')
     if want('07') and os.path.exists(fr) and os.path.exists(K1):
         side_by_side(K1, fr, os.path.join(RENDERS, '07-lado-a-lado-k1.png'))
     return out

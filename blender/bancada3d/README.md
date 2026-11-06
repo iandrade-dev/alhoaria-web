@@ -422,8 +422,8 @@ quadro, para a fita de luz e as réstias aparecerem nas duas.
 ## Cozinha 3D da bancada gamificada: `cozinha.glb` (LAR-449, parte 6a)
 
 Script: `build_cozinha.py`. Troca a imagem fixa de `build_cozinha_fundo.py` (que continua no repo, com os `.webp`) por
-um modelo de verdade, para a câmera poder girar e afastar. Fiel ao concept k1: tampo de madeira escura em réguas, frente
-do balcão com portas, parede de azulejo metrô preto com rejunte, prateleira de madeira com mão-francesa de aço e fita de
+um modelo de verdade, para a câmera poder girar e afastar. Fiel ao concept k1, em escala real: tampo de aço escovado
+escuro contínuo (sem emendas), frente do balcão com portas, parede de azulejo metrô preto com rejunte até 1 m, prateleira de madeira com mão-francesa de aço e fita de
 LED quente, potes de vidro, pratos, tabuinha, **uma** réstia de alho à direita, luminária pendente e props decorativos
 fora das zonas de jogo. Não importa nem altera nenhum outro GLB.
 
@@ -433,8 +433,10 @@ blender.exe -b --factory-startup -P blender/bancada3d/build_cozinha.py -- [--ren
 
 - Saída: `public/assets/models/bancada/cozinha.glb`. Renders de revisão (fora do repo, padrão
   `\wsl.localhost\Ubuntu\home\igor\orq\runs\lar-449-cozinha3d\renders`): `{retrato,paisagem}-01-frontal`,
-  `-02-giro-menos35`, `-03-giro-mais35`, `-04-afastado` (1,4×), `-05-lanche` (tábua, pão, costela, mussarela, gratinado),
-  `06-topo-zonas` (vista de cima com as zonas: vermelho = retrato, ciano = paisagem) e `07-lado-a-lado-k1`.
+  `-02-giro-menos35`, `-03-giro-mais35`, `-04-afastado` (1,4×), `-05-lanche` (tábua, pão, costela, mussarela, gratinado
+  e as estações da Costela: bisnaga, pote-creme, maçarico e duas tigelas de revisão), `06-topo-zonas` (vista de cima com as
+  zonas: vermelho = retrato, ciano = paisagem) e `07-lado-a-lado-k1` (k1 × `paisagem-05-lanche`). Os renders usam as
+  **câmeras sugeridas** (abaixo), não as de `layout.ts`.
 - Os renders saem do GLB exportado, reimportado, com luz que imita `Cena.tsx` (hemisfério/ambiente + direcional quente
   2,6 + preenchimento 0,7) e tone mapping ACES.
 - `--quick`: bake e renders com poucas amostras e meia resolução.
@@ -442,7 +444,7 @@ blender.exe -b --factory-startup -P blender/bancada3d/build_cozinha.py -- [--ren
 ### Contrato
 
 - Draco, Y para cima, metros, sem luzes nem câmeras, nó raiz `cozinha`. Coordenadas do three.js do protótipo: origem no
-  centro do topo da tábua, tampo em y = -0,028 (`MESA`), parede em z = -0,62, frente do tampo em z = +0,62; tampo e parede
+  centro do topo da tábua, tampo em y = -0,028 (`MESA`), parede em z = -0,62, frente do tampo em z = +0,95; tampo e parede
   vão de x = -3,2 a +3,2 (cobrem o giro de ±35° e o afastamento 1,4×).
 - **Luz assada em `COLOR_0`** (Cycles: irradiância difusa da pendente, da fita de LED, de recortes e de preenchimento,
   × AO). Nos props sem textura `COLOR_0` já traz albedo × luz; parede, tampo, frente, prateleira e tabuinha usam textura
@@ -450,32 +452,50 @@ blender.exe -b --factory-startup -P blender/bancada3d/build_cozinha.py -- [--ren
 - Texturas (JPEG embutido): azulejo 512² (cor + normal, ladrilho de 0,6 m), madeira 1024×512 (ladrilho de 1,2 × 0,6 m).
 - Emissivos: `fita_led` (#ffa24a, força 2,6), `lampada` (#ffd08a, 10), `geladeira_luz` (fria, 3). Vidro: `alphaMode`
   BLEND, alfa 0,22.
-- A prateleira é baixa (fundo a 0,12 m, topo a 0,145 m) de propósito: as câmeras do jogo olham de cima e, na paisagem, só
-  enxergam a parede até ~0,17 m. A fita fica chanfrada na quina da frente para a linha acesa aparecer de cima. A réstia
-  pende de um braço na parede (y ≈ 0,53) até perto do tampo, na frente da prateleira.
+- Escala real: prateleira de parede de 0,45 a 0,48 m acima do tampo (z de -0,62 a -0,452), azulejo até 1,0 m e parede
+  pintada escura acima, réstia pendurada sob a prateleira (x = 0,64) descendo até ~0,2 m, luminária com a borda da
+  cúpula a 0,80 m. A fita de LED fica na quina de baixo da frente da prateleira.
+- Tampo: textura de aço escovado (riscos finos em x, sem emendas), `metallic` 0,2, `roughness` 0,36: reflete a luz
+  quente sem escurecer sem mapa de ambiente. A poça de luz da luminária e o brilho da fita estão assados em `COLOR_0`.
 
 ### Nós (filhos de `cozinha`)
 
 `tampo`, `balcao_frente`, `puxadores`, `parede`, `prateleira`, `mao_francesa`, `fita_led`, `potes_vidro`,
-`potes_conteudo`, `pratos`, `tabuinha`, `jarra_colheres`, `restia_alho`, `luminaria`, `lampada`, `cesta_paes`,
-`quadro_negro` ("Alhoaria / pão de alho / recheado"), `fruteira`, `pano_prato`, `moedor_pimenta`, `azeite`,
-`louca_direita` (saleiro, potinho com dentes de alho, tigelas), `vaso_ervas`, `jarra_utensilios`, `frente_props`
+`potes_conteudo`, `pratos`, `tabuinha`, `jarra_colheres`, `parede_alta`, `restia_alho`, `luminaria`, `lampada`, `cesta_paes`,
+`quadro_negro` ("Alhoaria / pão de alho / recheado"), `fruteira`, `pano_prato`, `moedor_pimenta`, `azeite` (azeite e vinagre),
+`louca_direita` (saleiro no fundo, potinho com dentes de alho, tigelas), `vaso_ervas`, `jarra_utensilios`, `frente_props`
 (tábua redonda com limão e alho, colher de pau, frigideira, cascas), `tabua_pao`, `pote_conserva_vidro`, `pote_conserva`,
-`temperos` (saleiro/pimenteiro, tábua com alho, pilão, ramequins), `geladeira_bebidas`, `geladeira_vidro`, `geladeira_luz`.
+`temperos` (tábua com alho, pilão, ramequins), `geladeira_bebidas`, `geladeira_vidro`, `geladeira_luz`.
 
 ### Zonas livres
 
 Caixas (x0, x1, z0, z1) = cada ponto de `ESTACOES` de todos os lanches (`layout.ts`) e de `LUG` (`Pedido3D.tsx`: potes,
 prateleiras, bebidas, porções, copos) ± (0,065 de raio + 0,06 de folga); sacola e sacolaFim ± (0,09 × 0,055 + 0,06);
 tábua x -0,21..0,33, z -0,15..0,15 + 0,06; bandeja das prateleiras x -0,25..0,25, z -0,345..-0,215 + 0,06.
-Envelope: retrato x -0,35..0,39, z -0,435..0,425; paisagem x -0,545..0,555, z -0,41..0,295. O script falha se
+Envelope: retrato x -0,35..0,39, z -0,435..0,425; paisagem x -0,545..0,555, z -0,41..0,295. Por isso os props do
+fundo ficam encostados na parede (z < -0,435): cesta de pães, azeite e vinagre, moedor, saleiro, tábua com alho, pilão,
+vaso de ervas e jarra de utensílios. O script falha se
 qualquer peça do tampo (por ilha da malha) ou qualquer vértice do fundo cair numa caixa. Exceção consciente: a luminária
 fica sobre a tábua, mas no alto (borda da cúpula em y = 0,80).
 
 ### Tamanho e triângulos
 
-`cozinha.glb`: 431.760 B (421,6 KB), 52.915 triângulos (maiores: tampo 8.320, parede 7.296, réstia 7.260,
-geladeira 3.032).
+`cozinha.glb`: 488.180 B (476,7 KB), 52.411 triângulos (maiores: tampo 8.512, parede 6.912, réstia 4.824,
+geladeira 3.032). Texturas: azulejo 512² (cor + normal), madeira 1024×512, aço escovado 1024×512.
+
+### Câmeras sugeridas
+
+Para a parede, a prateleira e a réstia aparecerem como no k1, a próxima tarefa deve trocar `CAMERAS` em `layout.ts`
+por estas (mesma convenção: fov vertical em graus, three.js). Os renders de revisão já usam estes valores.
+
+| arranjo | pos | alvo | fov | efeito |
+|---|---|---|---:|---|
+| retrato | (0, 1.05, 1.45) | (0, 0.08, -0.1) | 58 | tábua com ~45–50 % da largura; vê a prateleira e a luminária no alto e o tampo até z ≈ 0,85 |
+| paisagem | (0, 0.5, 0.85) | (0, 0.12, -0.15) | 44 | mais baixa e olhando para a frente, como o k1; a borda de cima pega a parede até ~0,5 m e a de baixo o tampo em z ≈ 0,28 |
+
+As câmeras atuais (retrato (0, 0.94, 0.98) → (0, 0, -0.01), fov 47; paisagem (0, 0.6, 0.76) → (0, 0.02, 0), fov 40)
+continuam funcionando, mas olham muito de cima: na paisagem só se vê o pé da parede e a prateleira fica fora do quadro.
+`fovPara` continua valendo. No retrato sugerido a luminária cobre o meio da prateleira (é a vista de cima da cúpula).
 
 ### No three.js
 
