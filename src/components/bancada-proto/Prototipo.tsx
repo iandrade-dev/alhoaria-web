@@ -403,7 +403,7 @@ export default function Prototipo() {
         <p className="mt-1 text-sm text-[#5c3d2e]">{def.fim}</p>
         {pedido?.opcoes && <p data-testid="pronto-opcoes" className="mt-1 text-[12.5px] leading-snug text-[#7a5a48]">{textoDasOpcoes(pedido.opcoes)}</p>}
         <button type="button" data-testid="seguir-pedido" onClick={seguirPedido}
-          className="mt-3 w-full rounded-full bg-[#ff6a1a] px-4 py-2.5 text-sm font-bold text-[#120c09] transition-colors hover:bg-[#ff8a3d] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8b84a]">Escolher a bebida</button>
+          className="mt-3 w-full rounded-full bg-[#ff6a1a] px-4 py-2.5 text-sm font-bold text-[#120c09] transition-colors hover:bg-[#ff8a3d] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8b84a]">Seguir pro pedido</button>
         <div className="mt-2 flex gap-2">
           <button type="button" data-testid="montar-de-novo" onClick={deNovo}
             className="flex-1 rounded-full bg-[#120c09] px-4 py-2.5 text-sm font-semibold text-[#fff8e7] transition-colors hover:bg-[#2a1d18] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8b84a]">Montar de novo</button>
