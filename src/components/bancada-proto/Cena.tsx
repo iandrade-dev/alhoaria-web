@@ -13,6 +13,8 @@ import { c01, duracao, eIO3, eIOs, eOut3, mola, pegadaDe, seg, tempoTrabalho, ty
 import { kitPao } from "./kitPao";
 import { kitDog } from "./kitDog";
 import { CAMERAS, MESA, arranjoDe, fovPara, type Arranjo, type EstacaoId, type LancheDef, type Passo } from "./layout";
+import Pedido3D, { type FasePedido, type ProjPedido } from "./Pedido3D";
+import type { Pedido } from "./cardapio";
 
 const ROOT = "/assets/models/bancada/";
 // Arquivos em public/assets/models/bancada/ (contrato no blender/bancada3d/README.md). A mão é o mao-luva.glb.
@@ -37,6 +39,8 @@ type Props = {
   bus: MutableRefObject<Bus>; api: MutableRefObject<ApiCena | null>;
   aoFim: (id: Passo) => void; aoProjetar: (p: Projecao) => void; aoPronto: () => void;
   congelar: { id: Passo; t: number } | null;
+  /** Depois do lanche pronto: fase do pedido (turbinar, bebida, acompanhamento, sacola). */
+  pedido?: { montado: boolean; fase: FasePedido; atual: Pedido | null; aoProjetar: (p: ProjPedido) => void; aoSacola: () => void };
 };
 
 const cubica = (out: Vector3, a: Vector3, b: Vector3, c: Vector3, d: Vector3, k: number) => {
@@ -74,7 +78,7 @@ type Ativo = {
 type Mola = { p: Vector3; v: Vector3; alvo: Vector3; k: number; c: number; solta: boolean };
 type Pop = Volta & { t: number };
 
-function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, congelar, arranjo, M }: Props & { def: LancheDef; arranjo: Arranjo; M: Medidas }) {
+function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, congelar, arranjo, M, pedido }: Props & { def: LancheDef; arranjo: Arranjo; M: Medidas }) {
   const assets = useGLTF(def.arquivos.map(glb));
   const { gl, camera, size, scene } = useThree();
   const A = useMemo(() => Object.fromEntries(def.arquivos.map((n, i) => [n, assets[i].scene])) as Record<string, Object3D>, [assets, def]);
@@ -439,6 +443,9 @@ function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, co
     <primitive object={anelPao.m} />
     <primitive object={H.raiz} />
     {K.extras.map((o, i) => <primitive key={`x-${i}`} object={o} />)}
+    {pedido?.montado && <Suspense fallback={null}>
+      <Pedido3D K={K} H={H} M={M} arranjo={arranjo} fase={pedido.fase} pedido={pedido.atual} reduzido={reduzido} aoProjetar={pedido.aoProjetar} aoSacola={pedido.aoSacola} />
+    </Suspense>}
   </>;
 }
 

@@ -4,6 +4,9 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as RPointerEvent } from "react";
 import type { ApiCena, Bus, Modo, Projecao } from "./Cena";
 import { LANCHES, ORDEM_LANCHES, ehLanche, type LancheDef, type LancheId, type Passo } from "./layout";
+import type { FasePedido, ProjPedido } from "./Pedido3D";
+import PedidoHud, { TrilhaPedido } from "./PedidoHud";
+import { novoPedido, type Pedido } from "./cardapio";
 
 const Cena = dynamic(() => import("./Cena"), { ssr: false });
 
@@ -26,6 +29,11 @@ export default function Prototipo() {
   const [pop, setPop] = useState<number | null>(null);
   const [anuncio, setAnuncio] = useState("");
   const [congelar, setCongelar] = useState<{ id: Passo; t: number } | null>(null);
+  // pedido (depois do lanche pronto)
+  const [fase, setFase] = useState<FasePedido>("montagem");
+  const [pedido, setPedido] = useState<Pedido | null>(null);
+  const [projPed, setProjPed] = useState<ProjPedido | null>(null);
+  const [sacolaPronta, setSacolaPronta] = useState(false);
   const bus = useRef<Bus>({ drag: { ativo: false, id: null, x: 0, y: 0 } });
   const api = useRef<ApiCena | null>(null);
   const toque = useRef<Toque | null>(null);
@@ -40,6 +48,7 @@ export default function Prototipo() {
   const PASSOS = def?.passos ?? [];
   const passosRef = useRef(PASSOS); passosRef.current = PASSOS;
   const aoPronto = useCallback(() => setPronto(true), []);
+  const aoSacola = useCallback(() => setSacolaPronta(true), []);
   const ativoDef = feitos < PASSOS.length ? PASSOS[feitos] : null;
   const ativo: Passo | null = ativoDef?.id ?? null;
   const fim = !!def && feitos >= PASSOS.length;
@@ -99,11 +108,19 @@ export default function Prototipo() {
   };
   const zerarHud = () => {
     parar();
+    setFase("montagem"); setPedido(null); setProjPed(null); setSacolaPronta(false);
     animRef.current = null; feitosRef.current = 0;
     setAnimando(null); setFeitos(0); setPulados([]); setPop(null); setAnuncio(""); setSegurando(null); setSobre(false);
     bus.current.drag.ativo = false; toque.current = null;
   };
   const deNovo = () => { zerarHud(); api.current?.reiniciar(); };
+  const turbinar = () => { if (!lanche) return; setPedido(novoPedido(lanche)); setFase("turbinar"); setAnuncio("Turbinar o lanche"); };
+  const seguir = () => {
+    const ordem: FasePedido[] = ["turbinar", "bebida", "acomp", "sacola"];
+    const prox = ordem[ordem.indexOf(fase) + 1];
+    if (prox) setFase(prox);
+  };
+  const muda = useCallback((f: (p: Pedido) => Pedido) => setPedido((p) => (p ? f(p) : p)), []);
   const escolher = (id: LancheId | null) => {
     zerarHud();
     setCongelar(null); setProj(null); setPronto(false);
@@ -165,7 +182,8 @@ export default function Prototipo() {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/assets/bancada/proto/cozinha-paisagem.webp" alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} />
     </picture>
-    {lanche !== undefined && <Cena def={def} ativo={animando ? null : ativo} reduzido={reduzido} bus={bus} api={api} aoFim={aoFim} aoProjetar={setProj} aoPronto={aoPronto} congelar={congelar} />}
+    {lanche !== undefined && <Cena def={def} ativo={animando ? null : ativo} reduzido={reduzido} bus={bus} api={api} aoFim={aoFim} aoProjetar={setProj} aoPronto={aoPronto} congelar={congelar}
+      pedido={{ montado: fim && !animando, fase, atual: pedido, aoProjetar: setProjPed, aoSacola }} />}
 
     {/* escolha do lanche */}
     {lanche === null && <Escolha aoEscolher={escolher} />}
@@ -177,7 +195,7 @@ export default function Prototipo() {
           background: "radial-gradient(closest-side, rgba(255,190,110,.22), rgba(255,150,60,.08) 70%, transparent)" }} />}
 
       {/* estações: botões acessíveis sobre cada uma (só a ativa responde) */}
-      {proj && PASSOS.map(({ id, dica: d, nome }) => {
+      {proj && fase === "montagem" && PASSOS.map(({ id, dica: d, nome }) => {
         const vez = id === ativo && !animando && !auto && pronto;
         const p = proj.estacoes[id];
         let style: CSSProperties;
@@ -192,8 +210,9 @@ export default function Prototipo() {
           style={style} {...(vez ? gesto(id, !!p) : {})} />;
       })}
 
-      {/* topo: trilha + Monta pra mim */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-[5] flex flex-wrap items-start justify-center gap-2 px-4 pt-[max(12px,env(safe-area-inset-top))] min-[700px]:justify-between min-[700px]:px-6 min-[700px]:pt-5">
+      {/* topo: trilha + Monta pra mim (no pedido: trilha das fases com o total) */}
+      {fase !== "montagem" && pedido && <TrilhaPedido fase={fase} pedido={pedido} />}
+      {fase === "montagem" && <div className="pointer-events-none absolute inset-x-0 top-0 z-[5] flex flex-wrap items-start justify-center gap-2 px-4 pt-[max(12px,env(safe-area-inset-top))] min-[700px]:justify-between min-[700px]:px-6 min-[700px]:pt-5">
         <ol data-testid="trilha" aria-label="Camadas" className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-[#fff8e7]/10 bg-[#120c09]/70 px-2.5 py-1.5 shadow-[0_8px_24px_rgba(0,0,0,.35)] backdrop-blur-md min-[700px]:gap-2 min-[700px]:px-3 min-[700px]:py-2">
           {PASSOS.map(({ id, icone, nome }, i) => {
             const pulou = pulados.includes(id);
@@ -213,7 +232,7 @@ export default function Prototipo() {
           className="pointer-events-auto ml-auto inline-flex h-10 items-center gap-2 rounded-full border border-[#fff8e7]/20 bg-[#120c09]/70 px-4 text-sm font-semibold text-[#fff8e7] shadow-[0_8px_24px_rgba(0,0,0,.35)] backdrop-blur-md transition-colors hover:bg-[#241a16] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e8b84a] disabled:opacity-50 min-[700px]:ml-0 min-[700px]:h-11 min-[700px]:px-5">
           {auto ? "Parar" : "Monta pra mim"}
         </button>}
-      </div>
+      </div>}
 
       {/* toque em qualquer lugar interrompe o "Monta pra mim" */}
       {auto && <button type="button" aria-label="Parar a montagem automática" onPointerDown={parar} className="absolute inset-0 z-[4] cursor-pointer bg-transparent" />}
@@ -230,17 +249,22 @@ export default function Prototipo() {
       </div>}
 
       {/* fim */}
-      {fim && !animando && <div data-testid="pronto" role="status"
+      {fim && !animando && fase === "montagem" && <div data-testid="pronto" role="status"
         className="proto-anim absolute inset-x-4 bottom-[max(18px,env(safe-area-inset-bottom))] z-[6] mx-auto max-w-[420px] rounded-2xl bg-[#fff8e7]/95 px-5 py-4 text-[#120c09] shadow-[0_18px_50px_rgba(0,0,0,.5)] [animation:proto-sobe_.5s_cubic-bezier(.2,1.3,.4,1)] min-[700px]:bottom-8">
         <p className="font-hand text-[27px] leading-none text-[#c2410c] min-[700px]:text-[32px]">Ficou com capricho!</p>
         <p className="mt-1 text-sm text-[#5c3d2e]">{def.fim}</p>
-        <div className="mt-3 flex gap-2">
+        <button type="button" data-testid="seguir-pedido" onClick={turbinar}
+          className="mt-3 w-full rounded-full bg-[#ff6a1a] px-4 py-2.5 text-sm font-bold text-[#120c09] transition-colors hover:bg-[#ff8a3d] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8b84a]">Turbinar o lanche</button>
+        <div className="mt-2 flex gap-2">
           <button type="button" data-testid="montar-de-novo" onClick={deNovo}
             className="flex-1 rounded-full bg-[#120c09] px-4 py-2.5 text-sm font-semibold text-[#fff8e7] transition-colors hover:bg-[#2a1d18] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8b84a]">Montar de novo</button>
           <button type="button" data-testid="outro-lanche" onClick={() => escolher(null)}
             className="flex-1 rounded-full border border-[#120c09]/25 px-4 py-2.5 text-sm font-semibold text-[#120c09] transition-colors hover:bg-[#120c09]/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8b84a]">Outro lanche</button>
         </div>
       </div>}
+
+      {fase !== "montagem" && pedido && <PedidoHud fase={fase} pedido={pedido} muda={muda} proj={projPed} zona={lan ?? null}
+        aoSeguir={seguir} sacolaPronta={sacolaPronta} aoOutro={() => escolher(null)} anunciar={setAnuncio} />}
 
       {!pronto && <div className="absolute inset-0 z-[7] grid place-items-center bg-[#120c09]/70 backdrop-blur-sm">
         <p className="font-hand text-3xl text-[#fff8e7]">Acendendo a chapa…</p>
