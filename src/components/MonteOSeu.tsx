@@ -55,7 +55,7 @@ export default function MonteOSeu() {
         <div>
           <p className="mb-3 font-hand text-3xl text-macarico">Na nossa cozinha</p>
           <h2 className="font-display text-5xl uppercase sm:text-7xl">Monte o seu</h2>
-          <p className="mt-5 max-w-md text-lg leading-7 text-osso-muted">Escolha o pão, a pasta, o recheio e o queijo, turbine e peça pelo WhatsApp.</p>
+          <p className="mt-5 max-w-md text-lg leading-7 text-osso-muted">Escolha o pão, a pasta, o recheio e o queijo, turbine e faça o pedido.</p>
           <Link href="/bancada" prefetch={false} data-testid="home-monte-faixa" className="mt-8 inline-flex min-h-12 items-center rounded bg-macarico px-6 font-bold text-carvao transition-colors duration-160 hover:bg-queijo focus-visible:outline focus-visible:outline-2 focus-visible:outline-osso">Montar meu lanche</Link>
         </div>
       </div>

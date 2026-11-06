@@ -1,14 +1,11 @@
 // Cardápio do pedido do protótipo (turbinar, bebida, acompanhamento e combo). Fonte: a loja da Alhoaria no Anota AI,
-// lida em ATUALIZADO. Valores em centavos. O protótipo não monta o carrinho do Anota AI: o resumo sai
-// pelo WhatsApp, para a pessoa conferir.
+// lida em ATUALIZADO. Valores em centavos. O protótipo não monta o carrinho do Anota AI: o resumo é
+// copiado e a pessoa finaliza o pedido no Anota AI.
 import type { LancheId } from "./layout";
 
 export const ATUALIZADO = "2026-11-06";
 export const AVISO = "Preços do cardápio de 06/11/2026. O valor final é o da loja.";
 
-/** Protótipo: fica vazio para o link abrir o WhatsApp sem contato (a pessoa escolhe quem recebe) e ninguém da loja receber
- *  pedido de teste. Troque pelo número da loja (55DDDNUMERO) quando for para valer. */
-export const WHATSAPP_PEDIDO = "";
 
 export const LANCHES_PRECO: Record<LancheId, { nome: string; preco: number }> = {
   costela: { nome: "A Costela!", preco: 4490 },
@@ -218,7 +215,7 @@ export function brl(c: number) {
   return `R$ ${Math.floor(r / 100)},${String(r % 100).padStart(2, "0")}`;
 }
 
-/** Texto do pedido, o mesmo no "Copiar pedido" e na mensagem do WhatsApp. */
+/** Texto do pedido, copiado no "Copiar pedido" e ao tocar em "Pedir no Anota AI". */
 export function textoDoPedido(p: Pedido) {
   const linhas = linhasDoPedido(p).map((l) => {
     const recuo = l.nivel ? "      " : "   ";
@@ -230,5 +227,3 @@ export function textoDoPedido(p: Pedido) {
   return ["Olá! Quero fazer este pedido, montado no site da Alhoaria:", ...linhas, `Total: ${brl(totalDoPedido(p))}`].join("\n");
 }
 
-/** Link do WhatsApp com o pedido; sem número, a própria pessoa escolhe o contato. */
-export const linkWhatsApp = (p: Pedido) => `https://wa.me/${WHATSAPP_PEDIDO}?text=${encodeURIComponent(textoDoPedido(p))}`;
