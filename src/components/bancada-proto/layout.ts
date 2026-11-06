@@ -27,7 +27,8 @@ export type Tipo =
 /**
  * Id de uma etapa (é também o `data-testid="estacao-<id>"`). A tampa não tem estação: o gesto é sobre o pão; o
  * Turbinar também não (os potinhos são do pedido). Etapas com opções têm uma estação por opção, com o id
- * `<etapa>:<opção>` (ex.: `pasta:ervas`); o botão dela é o `data-testid="opcao-<grupo>-<opção>"`.
+ * `<etapa>:<opção>` (ex.: `pasta:ervas`); o botão dela é o `data-testid="opcao-<grupo>-<opção>"` (ex.:
+ * `opcao-pasta-ervas`, `opcao-creme-4-queijos`; o chip "Sem ..." é `opcao-pasta-sem`; o pão, `opcao-pao-roseta`).
  */
 export type Passo = string;
 export type EstacaoId = string;
