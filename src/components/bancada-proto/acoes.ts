@@ -1,5 +1,5 @@
 import { Vector3 } from "three";
-import type { Passo } from "./layout";
+
 
 // Curvas de tempo. `amp` controla antecipação/overshoot (0 com movimento reduzido).
 export const c01 = (x: number) => Math.max(0, Math.min(1, x));
@@ -28,7 +28,11 @@ export const pulso = (t: number, a: number, b: number) => Math.sin(Math.PI * seg
 export type Pose = "mao_bisnaga" | "mao_colher" | "mao_macarico" | "mao_punhado" | "mao_aberta";
 
 /** Alturas medidas nos GLBs depois de carregar. */
-export type Medidas = { pasta: number; costela: number; creme: number; muss: number; fora: Vector3 };
+export type Medidas = {
+  pasta: number; costela: number; creme: number; muss: number; fora: Vector3;
+  /** Alturas e pontos de cada lanche (Dogalho), por nome. */
+  h: Record<string, number>; p: Record<string, Vector3>;
+};
 
 export type Acao = {
   pose: Pose;
@@ -38,6 +42,8 @@ export type Acao = {
   ini: number | null;
   /** Punhado: a mão desce no pote, fecha e sobe (em vez de assentar na ferramenta). */
   punhado?: boolean;
+  /** Maçarico: o ponto útil é o alvo da chama, a esta distância da ponta do bico. */
+  alcance?: number;
   /** Ponto útil da mão (bico, concha, soltura, palma) em coordenadas do mundo e inclinação extra (rad). Vale de `ini` em diante. */
   mao: (t: number, M: Medidas, amp: number, out: Vector3) => [number, number, number];
 };
@@ -64,12 +70,12 @@ export const tempoTrabalho = (ac: Acao, t: number) => {
 
 const v = (out: Vector3, x: number, y: number, z: number) => out.set(x, y, z);
 /** Entra de fora (direita) até `alvo`, chegando em `t1` com overshoot. */
-function entra(t: number, t1: number, M: Medidas, alvo: Vector3, amp: number, out: Vector3) {
+export function entra(t: number, t1: number, M: Medidas, alvo: Vector3, amp: number, out: Vector3) {
   const k = eBack(t / t1, amp * 0.85);
   return out.copy(alvo).addScaledVector(M.fora, 1 - k);
 }
 /** Recua um tiquinho (antecipação) e sai para a direita com aceleração. */
-function sai(t: number, t0: number, D: number, M: Medidas, de: Vector3, amp: number, out: Vector3) {
+export function sai(t: number, t0: number, D: number, M: Medidas, de: Vector3, amp: number, out: Vector3) {
   const k = seg(t, t0, D);
   const a = eAnt(k, amp * 0.9);
   return out.copy(de).addScaledVector(M.fora, a);
@@ -117,7 +123,7 @@ export const MUSS = { varre: [0.74, 1.42] as const, x0: -0.115, x1: 0.115 };
 // ---- Maçarico: varre de ponta a ponta com a chama acesa
 export const MACA = { varre: [0.84, 1.92] as const, x0: -0.135, x1: 0.14, alcance: 0.072 };
 
-export const ACOES: Record<Passo, Acao> = {
+export const ACOES: Record<"pasta" | "creme" | "recheio" | "tampa" | "mussarela" | "macarico", Acao> = {
   pasta: {
     pose: "mao_bisnaga", D: 2.12, ini: PASTA.varre[0],
     mao(t, M, amp, out) {
@@ -148,7 +154,7 @@ export const ACOES: Record<Passo, Acao> = {
       return [0, 0, -0.12 * seg(t, b, 2.2)];
     },
   },
-  costela: {
+  recheio: {
     pose: "mao_punhado", D: 2.25, ini: COSTELA.solta[0], punhado: true,
     mao(t, M, amp, out) {
       const alto = M.costela + 0.085;
@@ -207,7 +213,7 @@ export const ACOES: Record<Passo, Acao> = {
     },
   },
   macarico: {
-    pose: "mao_macarico", D: 2.3, ini: MACA.varre[0],
+    pose: "mao_macarico", D: 2.3, ini: MACA.varre[0], alcance: MACA.alcance,
     // aqui o ponto útil é o ALVO da chama (sobre a mussarela); Cena converte para a ponta do bico.
     mao(t, M, amp, out) {
       const G = tmp.set(0.07, M.muss + 0.05, 0.0);
