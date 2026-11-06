@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import Bancada from "@/components/bancada/Bancada";
+import Prototipo from "@/components/bancada-proto/Prototipo";
 
 export const metadata: Metadata = {
   title: "Monte o seu — Alhoaria",
-  description: "Monte o seu lanche camada por camada na bancada 3D da Alhoaria: pão de alho, Dogalho, bebida e porção.",
+  description: "Monte o lanche na cozinha da Alhoaria, turbine, escolha bebida e combo e peça pelo WhatsApp.",
 };
 
 export default function PaginaBancada() {
-  return <Bancada />;
+  return <Prototipo />;
 }

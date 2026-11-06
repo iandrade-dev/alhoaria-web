@@ -1,12 +1,11 @@
-import type { Metadata } from "next";
-import Prototipo from "@/components/bancada-proto/Prototipo";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Monte o seu, protótipo",
-  description: "Protótipo da bancada gamificada: arraste a ferramenta até o lanche e a mão de luva faz o resto.",
-  robots: { index: false },
-};
+type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> };
 
-export default function PaginaPrototipo() {
-  return <Prototipo />;
+// A bancada nova agora é o /bancada: esta rota só repassa, com a query string.
+export default async function PaginaPrototipo({ searchParams }: Props) {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(await searchParams)) for (const x of Array.isArray(v) ? v : v === undefined ? [] : [v]) q.append(k, x);
+  const s = q.toString();
+  redirect(s ? `/bancada?${s}` : "/bancada");
 }

@@ -39,6 +39,8 @@ type Props = {
   bus: MutableRefObject<Bus>; api: MutableRefObject<ApiCena | null>;
   aoFim: (id: Passo) => void; aoProjetar: (p: Projecao) => void; aoPronto: () => void;
   congelar: { id: Passo; t: number } | null;
+  /** Contexto WebGL perdido com a cena montada. */
+  aoFalhar?: () => void;
   /** Depois do lanche pronto: fase do pedido (turbinar, bebida, acompanhamento, sacola). */
   pedido?: { montado: boolean; fase: FasePedido; atual: Pedido | null; aoProjetar: (p: ProjPedido) => void; aoSacola: () => void };
 };
@@ -452,8 +454,16 @@ function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, co
 // ---------------------------------------------------------------- canvas
 export default function Cena(props: Props) {
   const camera = useMemo(() => ({ position: [0, 1, 0.7] as [number, number, number], fov: 46, near: 0.05, far: 6 }), []);
+  // Perda de contexto só conta como falha enquanto a cena está montada: ao desmontar, o R3F chama forceContextLoss.
+  const falhar = useRef(props.aoFalhar);
+  falhar.current = props.aoFalhar;
+  const montada = useRef(true);
+  useEffect(() => { montada.current = true; return () => { montada.current = false; }; }, []);
   return <Canvas className="!absolute inset-0" dpr={[1, 1.5]} camera={camera} shadows gl={{ alpha: true, antialias: true, powerPreference: "high-performance" }}
-    style={{ touchAction: "none" }} onCreated={({ gl }) => { gl.setClearColor(0x000000, 0); }}>
+    style={{ touchAction: "none" }} onCreated={({ gl }) => {
+      gl.setClearColor(0x000000, 0);
+      gl.domElement.addEventListener("webglcontextlost", () => { if (montada.current) falhar.current?.(); }, { once: true });
+    }}>
     <Interno {...props} />
   </Canvas>;
 }

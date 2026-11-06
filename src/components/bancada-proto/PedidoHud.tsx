@@ -1,11 +1,11 @@
 "use client";
 
 // HUD das fases depois do lanche pronto: trilha com o total, rótulos tocáveis sobre os potinhos/bebidas/porções da
-// cena, painéis de cada fase e o resumo com o link do Anota AI.
+// cena, painéis de cada fase e o resumo com o botão do WhatsApp.
 import { useRef, useState, type PointerEvent as RPointerEvent, type ReactNode } from "react";
 import {
-  ADICIONAIS, AVISO, BEBIDAS, FONTE, LANCHES_PRECO, ORDEM_ADICIONAIS, ORDEM_BEBIDAS, ORDEM_PORCOES, ORDEM_SABORES_LATA, ORDEM_SABORES_SODA,
-  ORDEM_SEPARADOS, PORCOES, SABORES_LATA, SABORES_SODA, SEPARADOS, brl, economiaDoTrio, linhasDoPedido, saborDaLataDoCombo, textoDoPedido,
+  ADICIONAIS, AVISO, BEBIDAS, LANCHES_PRECO, ORDEM_ADICIONAIS, ORDEM_BEBIDAS, ORDEM_PORCOES, ORDEM_SABORES_LATA, ORDEM_SABORES_SODA,
+  ORDEM_SEPARADOS, PORCOES, SABORES_LATA, SABORES_SODA, SEPARADOS, brl, economiaDoTrio, linkWhatsApp, linhasDoPedido, saborDaLataDoCombo, textoDoPedido,
   totalDoPedido, trioDe, type AdicionalId, type BebidaId, type Pedido, type PorcaoId, type SaborLata, type SaborSoda, type SeparadoId,
 } from "./cardapio";
 import type { FasePedido, ProjPedido } from "./Pedido3D";
@@ -275,10 +275,10 @@ export default function PedidoHud(props: Props) {
         <span>Total</span><span data-testid="resumo-total" className="tabular-nums">{brl(totalDoPedido(pedido))}</span>
       </p>
       <p className="mt-1 text-[10.5px] leading-snug text-[#7a5a48]">{AVISO}</p>
-      <p className="mt-1.5 text-[12px] leading-snug text-[#5c3d2e]">No Anota AI você escolhe os mesmos itens: o protótipo não consegue montar o carrinho de lá.</p>
+      <p className="mt-1.5 text-[12px] leading-snug text-[#5c3d2e]">Protótipo: o pedido abre no WhatsApp para você conferir, ainda não vai para a loja.</p>
     </div>
     <div className="grid grid-cols-2 gap-2 border-t border-[#120c09]/10 px-4 py-3">
-      <a data-testid="pedir" href={FONTE} target="_blank" rel="noopener" className={`col-span-2 grid h-11 place-items-center rounded-full bg-[#ff6a1a] text-sm font-bold text-[#120c09] hover:bg-[#ff8a3d] ${foco}`}>Pedir no Anota AI</a>
+      <a data-testid="pedir" href={linkWhatsApp(pedido)} target="_blank" rel="noopener" className={`col-span-2 grid h-11 place-items-center rounded-full bg-[#ff6a1a] text-sm font-bold text-[#120c09] hover:bg-[#ff8a3d] ${foco}`}>Pedir pelo WhatsApp</a>
       <button type="button" data-testid="copiar-pedido" onClick={copiar} className={`h-10 rounded-full bg-[#120c09] text-sm font-semibold text-[#fff8e7] hover:bg-[#2a1d18] ${foco}`}>
         {copiado === "ok" ? "Copiado!" : copiado === "erro" ? "Não deu pra copiar" : "Copiar pedido"}
       </button>

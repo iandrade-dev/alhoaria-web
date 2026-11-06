@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as RPointerEvent } from "react";
 import type { ApiCena, Bus, Modo, Projecao } from "./Cena";
 import { LANCHES, ORDEM_LANCHES, ehLanche, type LancheDef, type LancheId, type Passo } from "./layout";
@@ -24,6 +25,8 @@ export default function Prototipo() {
   const [pronto, setPronto] = useState(false);
   const [proj, setProj] = useState<Projecao | null>(null);
   const [reduzido, setReduzido] = useState(false);
+  // sem WebGL (ou contexto perdido com a cena montada): aviso leve no lugar da cena
+  const [semGl, setSemGl] = useState(false);
   const [sobre, setSobre] = useState(false);
   const [segurando, setSegurando] = useState<Passo | null>(null);
   const [pop, setPop] = useState<number | null>(null);
@@ -49,6 +52,7 @@ export default function Prototipo() {
   const passosRef = useRef(PASSOS); passosRef.current = PASSOS;
   const aoPronto = useCallback(() => setPronto(true), []);
   const aoSacola = useCallback(() => setSacolaPronta(true), []);
+  const aoFalhar = useCallback(() => setSemGl(true), []);
   const ativoDef = feitos < PASSOS.length ? PASSOS[feitos] : null;
   const ativo: Passo | null = ativoDef?.id ?? null;
   const fim = !!def && feitos >= PASSOS.length;
@@ -57,6 +61,12 @@ export default function Prototipo() {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
     const ver = () => setReduzido(media.matches);
     ver(); media.addEventListener("change", ver);
+    try {
+      const canvas = document.createElement("canvas");
+      const gl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
+      if (!gl) setSemGl(true);
+      gl?.getExtension("WEBGL_lose_context")?.loseContext();
+    } catch { setSemGl(true); }
     const q = new URLSearchParams(window.location.search);
     const l = q.get("lanche");
     const inicial = ehLanche(l) ? l : null;
@@ -182,13 +192,15 @@ export default function Prototipo() {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/assets/bancada/proto/cozinha-paisagem.webp" alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} />
     </picture>
-    {lanche !== undefined && <Cena def={def} ativo={animando ? null : ativo} reduzido={reduzido} bus={bus} api={api} aoFim={aoFim} aoProjetar={setProj} aoPronto={aoPronto} congelar={congelar}
+    {lanche !== undefined && !semGl && <Cena aoFalhar={aoFalhar} def={def} ativo={animando ? null : ativo} reduzido={reduzido} bus={bus} api={api} aoFim={aoFim} aoProjetar={setProj} aoPronto={aoPronto} congelar={congelar}
       pedido={{ montado: fim && !animando, fase, atual: pedido, aoProjetar: setProjPed, aoSacola }} />}
 
     {/* escolha do lanche */}
     {lanche === null && <Escolha aoEscolher={escolher} />}
 
-    {def && <>
+    {def && semGl && <SemWebGL def={def} />}
+
+    {def && !semGl && <>
       {/* zona de soltura: acende quando a ferramenta passa sobre o lanche */}
       {lan && segurando && <div aria-hidden="true" className="pointer-events-none absolute rounded-[50%] transition-opacity duration-200"
         style={{ left: lan.x0 - FOLGA / 2, top: lan.y0 - FOLGA / 2, width: lan.x1 - lan.x0 + FOLGA, height: lan.y1 - lan.y0 + FOLGA, opacity: sobre ? 1 : 0.35,
@@ -291,5 +303,18 @@ function Escolha({ aoEscolher }: { aoEscolher: (id: LancheId) => void }) {
         </li>;
       })}
     </ul>
+  </div>;
+}
+
+/** Aviso leve quando o WebGL não está disponível: a foto do lanche e o caminho para a bancada clássica. */
+function SemWebGL({ def }: { def: LancheDef }) {
+  return <div data-testid="sem-webgl" role="alert" className="absolute inset-0 z-[8] grid place-items-center overflow-y-auto bg-[#120c09]/70 px-4 py-8">
+    <div className="flex w-full max-w-[380px] flex-col items-center gap-3 rounded-2xl border border-[#fff8e7]/12 bg-[#120c09]/85 p-4 text-center shadow-[0_14px_36px_rgba(0,0,0,.45)]">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={def.foto} alt={def.nome} draggable={false} className="aspect-square w-full max-w-[260px] rounded-xl object-cover" />
+      <p className="font-hand text-[28px] leading-none">Seu navegador não abriu a cozinha 3D</p>
+      <p className="text-sm text-[#fff8e7]/80">Sem WebGL não dá para montar o {def.nome} aqui. Use a bancada clássica para montar e pedir.</p>
+      <Link href="/bancada/classica" data-testid="ir-classica" className="grid h-11 w-full place-items-center rounded-full bg-[#ff6a1a] text-sm font-bold text-[#120c09] transition-colors hover:bg-[#ff8a3d] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8b84a]">Ir para a bancada clássica</Link>
+    </div>
   </div>;
 }
