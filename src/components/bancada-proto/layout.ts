@@ -1,5 +1,5 @@
-// Geometria compartilhada do protótipo: câmeras (as mesmas do fundo renderizado no Blender, ver
-// blender/bancada3d/build_cozinha_fundo.py), posição das estações em volta da tábua e os dados de cada lanche.
+// Geometria compartilhada do protótipo: câmeras sobre a cozinha 3D (cozinha.glb, ver blender/bancada3d/README.md),
+// órbita, posição das estações em volta da tábua e os dados de cada lanche.
 // Coordenadas three.js: x para a direita, y para cima, z para a câmera; origem no centro do topo da tábua.
 import { ORDEM_LANCHES, RECEITAS, type LancheId } from "../bancada/passos";
 import { OPCOES, type GrupoOpcao } from "./cardapio";
@@ -10,13 +10,45 @@ export const MESA = -0.028;
 
 export type Arranjo = "retrato" | "paisagem";
 
-export type Camera = { pos: [number, number, number]; alvo: [number, number, number]; fov: number; aspecto: number };
-
-// fov vertical em graus; aspecto = largura/altura da imagem de fundo renderizada com esta câmera.
-export const CAMERAS: Record<Arranjo, Camera> = {
-  retrato: { pos: [0, 0.94, 0.98], alvo: [0, 0.0, -0.01], fov: 47, aspecto: 9 / 16 },
-  paisagem: { pos: [0, 0.6, 0.76], alvo: [0, 0.02, 0.0], fov: 40, aspecto: 16 / 9 },
+/**
+ * Câmera padrão de cada arranjo, sobre a cozinha 3D (`cozinha.glb`). `pos`/`alvo` dão a direção (as "câmeras
+ * sugeridas" do blender/bancada3d/README.md, ajustadas no jogo); a distância e o fov saem de `enquadrar`: a tela mostra
+ * `largura` metros na altura do alvo, com o fov vertical entre `fov[0]` e `fov[1]` (graus) e, quando o fov bate no
+ * limite, a câmera recua ou chega perto. `desce` desloca o quadro para baixo (fração da altura) para o HUD do topo.
+ * No retrato a luminária pendente fica escondida (vista de cima, a cúpula tampa a prateleira).
+ */
+export type Camera = {
+  pos: [number, number, number]; alvo: [number, number, number];
+  largura: number; fov: [number, number]; desce: number;
 };
+
+export const CAMERAS: Record<Arranjo, Camera> = {
+  retrato: { pos: [0, 1.698, 1.09], alvo: [0, 0.02, 0.0], largura: 0.92, fov: [44, 60], desce: 0.06 },
+  paisagem: { pos: [0, 0.55, 0.85], alvo: [0, 0.1, -0.1], largura: 1.62, fov: [40, 56], desce: 0.02 },
+};
+
+/** Órbita em volta do alvo, relativa à câmera padrão: giro (azimute), inclinação e zoom (fator da distância). */
+export const ORBITA = {
+  azimute: 35, // ± graus
+  inclinacao: [-14, 9] as [number, number], // graus somados ao ângulo polar padrão (negativo = mais de cima)
+  zoom: [0.75, 1.35] as [number, number],
+  /** Segundos sem tocar até voltar sozinha para a câmera padrão. */
+  ocioso: 4,
+  /** Duração da volta (s). */
+  volta: 0.9,
+};
+
+/** Distância e fov vertical da câmera padrão para uma tela w × h. */
+export function enquadrar(cam: Camera, w: number, h: number) {
+  const a = w / Math.max(1, h);
+  const d0 = Math.hypot(cam.pos[0] - cam.alvo[0], cam.pos[1] - cam.alvo[1], cam.pos[2] - cam.alvo[2]);
+  const meia = cam.largura / 2;
+  // fov vertical que mostra `largura` na distância sugerida
+  let fov = (2 * Math.atan(meia / d0 / a) * 180) / Math.PI;
+  fov = Math.min(cam.fov[1], Math.max(cam.fov[0], fov));
+  const dist = meia / (Math.tan((fov * Math.PI) / 360) * a);
+  return { fov, dist };
+}
 
 /** Tipos de ação (coreografia da mão). Os lanches de pão de alho repetem os da Costela; o Dogalho tem os seus. */
 export type Tipo =
@@ -173,11 +205,3 @@ export const LANCHES: Record<LancheId, LancheDef> = {
 export const ehLanche = (s: string | null): s is LancheId => !!s && (ORDEM_LANCHES as readonly string[]).includes(s);
 
 export const arranjoDe = (w: number, h: number): Arranjo => (w / Math.max(1, h) < 1 ? "retrato" : "paisagem");
-
-/** fov vertical que reproduz o recorte "cover" da imagem de fundo na tela atual. */
-export function fovPara(cam: Camera, w: number, h: number) {
-  const a = w / Math.max(1, h);
-  if (a <= cam.aspecto) return cam.fov;
-  const t = Math.tan((cam.fov * Math.PI) / 360) * (cam.aspecto / a);
-  return (Math.atan(t) * 360) / Math.PI;
-}

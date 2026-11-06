@@ -8,7 +8,7 @@ import {
   ORDEM_SEPARADOS, PORCOES, SABORES_LATA, SABORES_SODA, SEPARADOS, brl, economiaDoTrio, linkWhatsApp, linhasDoPedido, saborDaLataDoCombo, textoDoPedido,
   totalDoPedido, trioDe, type AdicionalId, type BebidaId, type Pedido, type PorcaoId, type SaborLata, type SaborSoda, type SeparadoId,
 } from "./cardapio";
-import type { FasePedido, ProjPedido } from "./Pedido3D";
+import type { EstadoSacola, FasePedido, ProjPedido } from "./Pedido3D";
 
 export type Zona = { x0: number; y0: number; x1: number; y1: number } | null;
 export type Muda = (f: (p: Pedido) => Pedido) => void;
@@ -178,13 +178,17 @@ export function PainelTurbinar({ pedido, muda, proj, zona, anunciar, aoFechar, f
   </>;
 }
 
+/** Bordas serrilhadas da comanda (papel de cozinha destacado do bloco). */
+const SERRILHA = "radial-gradient(circle at 6px 0, transparent 5px, #000 5.5px) left top / 12px 7px repeat-x, linear-gradient(#000, #000) left 6px / 100% calc(100% - 12px) no-repeat, radial-gradient(circle at 6px 100%, transparent 5px, #000 5.5px) left bottom / 12px 7px repeat-x";
+
 type Props = {
   fase: FasePos; pedido: Pedido; muda: Muda; proj: ProjPedido | null; zona: Zona;
   aoSeguir: () => void; sacolaPronta: boolean; aoOutro: () => void; anunciar: (s: string) => void;
+  sacolaEstado: EstadoSacola; aoEnsacar: () => void;
 };
 
 export default function PedidoHud(props: Props) {
-  const { fase, pedido, muda, proj, zona, aoSeguir, sacolaPronta, aoOutro, anunciar } = props;
+  const { fase, pedido, muda, proj, zona, aoSeguir, sacolaPronta, aoOutro, anunciar, sacolaEstado, aoEnsacar } = props;
   const [recusou, setRecusou] = useState(false);
   const [copiado, setCopiado] = useState<"" | "ok" | "erro">("");
   const trio = trioDe(pedido.lanche);
@@ -270,35 +274,102 @@ export default function PedidoHud(props: Props) {
     </>;
   }
 
-  // ---------------------------------------------------------------- Sacola e resumo
-  if (!sacolaPronta) return <div className="pointer-events-none absolute inset-x-0 bottom-[max(22px,env(safe-area-inset-bottom))] z-[5] text-center min-[700px]:bottom-8">
-    <p className="font-hand text-[30px] leading-none text-[#fff8e7] [text-shadow:0_2px_14px_rgba(0,0,0,.85)] min-[700px]:text-[38px]">Ensacando com capricho…</p>
-  </div>;
+  // ---------------------------------------------------------------- Sacola e comanda
+  if (!sacolaPronta) return <Sacola pedido={pedido} proj={proj} zona={zona} estado={sacolaEstado} aoEnsacar={aoEnsacar} />;
   const linhas = linhasDoPedido(pedido);
-  return <div data-testid="resumo" role="region" aria-label="Resumo do pedido"
-    className="proto-anim absolute inset-x-3 bottom-[max(12px,env(safe-area-inset-bottom))] z-[6] mx-auto flex max-h-[min(62vh,560px)] max-w-[440px] flex-col rounded-2xl bg-[#fff8e7]/95 text-[#120c09] shadow-[0_18px_50px_rgba(0,0,0,.5)] [animation:proto-sobe_.5s_ease-out] min-[700px]:bottom-6 min-[700px]:right-8 min-[700px]:left-auto min-[700px]:mx-0 min-[700px]:max-h-[calc(100vh-120px)] min-[700px]:w-[420px]">
-    <div className="overflow-y-auto px-4 pb-2 pt-3.5">
-      <p className="font-hand text-[28px] leading-none text-[#c2410c]">Seu pedido</p>
-      <ul className="mt-2 space-y-1.5 text-[13px]">
-        {linhas.map((l, i) => <li key={i} className={`flex items-start justify-between gap-3 ${l.nivel ? "pl-3 text-[#5c3d2e]" : "font-semibold"}`}>
-          <span>{l.texto}{l.detalhe && <span className="block text-[11px] font-normal text-[#7a5a48]">{l.detalhe}</span>}
-            {l.obs && <span data-testid={i === 0 ? "resumo-opcoes" : undefined} className="block text-[11.5px] font-normal text-[#5c3d2e]">{l.obs}</span>}</span>
-          <span className="shrink-0 tabular-nums">{brl(l.valor)}</span>
-        </li>)}
-      </ul>
-      <p className="mt-2.5 flex items-baseline justify-between border-t border-[#120c09]/15 pt-2 text-[15px] font-bold">
-        <span>Total</span><span data-testid="resumo-total" className="tabular-nums">{brl(totalDoPedido(pedido))}</span>
-      </p>
-      <p className="mt-1 text-[10.5px] leading-snug text-[#7a5a48]">{AVISO}</p>
-      <p className="mt-1.5 text-[12px] leading-snug text-[#5c3d2e]">Protótipo: o pedido abre no WhatsApp para você conferir, ainda não vai para a loja.</p>
-    </div>
-    <div className="grid grid-cols-2 gap-2 border-t border-[#120c09]/10 px-4 py-3">
-      <a data-testid="pedir" href={linkWhatsApp(pedido)} target="_blank" rel="noopener" className={`col-span-2 grid h-11 place-items-center rounded-full bg-[#ff6a1a] text-sm font-bold text-[#120c09] hover:bg-[#ff8a3d] ${foco}`}>Pedir pelo WhatsApp</a>
-      <button type="button" data-testid="copiar-pedido" onClick={copiar} className={`h-10 rounded-full bg-[#120c09] text-sm font-semibold text-[#fff8e7] hover:bg-[#2a1d18] ${foco}`}>
-        {copiado === "ok" ? "Copiado!" : copiado === "erro" ? "Não deu pra copiar" : "Copiar pedido"}
-      </button>
-      <button type="button" data-testid="montar-outro" onClick={aoOutro} className={`h-10 rounded-full border border-[#120c09]/25 text-sm font-semibold text-[#120c09] hover:bg-[#120c09]/5 ${foco}`}>Montar outro lanche</button>
-      <p aria-live="polite" className="sr-only">{copiado === "ok" ? "Pedido copiado" : ""}</p>
+  const hora = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return <div data-testid="resumo" role="region" aria-label="Comanda do pedido"
+    className="proto-anim absolute inset-x-3 top-[max(10px,env(safe-area-inset-top))] z-[6] mx-auto flex max-h-[min(78vh,640px)] max-w-[400px] origin-top flex-col [animation:proto-comanda_.75s_cubic-bezier(.2,.9,.3,1)] min-[700px]:left-auto min-[700px]:right-8 min-[700px]:top-0 min-[700px]:mx-0 min-[700px]:max-h-[calc(100vh-24px)] min-[700px]:w-[380px]">
+    {/* trilho da comanda (só no desktop, onde ela pende do topo) */}
+    <div aria-hidden="true" className="hidden h-2.5 rounded-b-md bg-gradient-to-b from-[#6b6b6b] to-[#2c2c2c] shadow-[0_4px_10px_rgba(0,0,0,.5)] min-[700px]:block" />
+    <div className="relative flex min-h-0 flex-col bg-[#fbf5e6] text-[#1f1510] shadow-[0_22px_50px_rgba(0,0,0,.55)]"
+      style={{ WebkitMask: SERRILHA, mask: SERRILHA, backgroundImage: "repeating-linear-gradient(#fbf5e6 0 23px, rgba(120,90,60,.10) 23px 24px)" }}>
+      <div className="overflow-y-auto px-5 pb-2 pt-5 font-mono">
+        <div className="flex items-baseline justify-between border-b-2 border-dashed border-[#1f1510]/25 pb-2">
+          <p className="font-hand text-[30px] leading-none text-[#c2410c]">Comanda</p>
+          <p className="text-[11px] uppercase tracking-wide text-[#6b5040]">bancada · {hora}</p>
+        </div>
+        <ul className="mt-2.5 space-y-1.5 text-[12.5px] leading-snug">
+          {linhas.map((l, i) => <li key={i} className={`flex items-start justify-between gap-3 ${l.nivel ? "pl-3 text-[#5c3d2e]" : "font-bold"}`}>
+            <span>{l.texto}{l.detalhe && <span className="block text-[11px] font-normal text-[#7a5a48]">{l.detalhe}</span>}
+              {l.obs && <span data-testid={i === 0 ? "resumo-opcoes" : undefined} className="block text-[11px] font-normal text-[#5c3d2e]">{l.obs}</span>}</span>
+            <span className="shrink-0 tabular-nums">{brl(l.valor)}</span>
+          </li>)}
+        </ul>
+        <p className="relative mt-3 flex items-baseline justify-between border-t-2 border-dashed border-[#1f1510]/25 pt-2 text-[16px] font-black">
+          <span>Total</span><span data-testid="resumo-total" className="tabular-nums">{brl(totalDoPedido(pedido))}</span>
+        </p>
+        <div className="relative mt-1 flex items-end justify-between gap-2">
+          <p className="max-w-[60%] text-[10.5px] leading-snug text-[#7a5a48]">{AVISO}</p>
+          <span data-testid="selo" aria-label="Selo: com capricho" className="proto-anim mr-1 grid h-[74px] w-[74px] shrink-0 place-items-center rounded-full border-[3px] border-double border-[#c2410c] text-center font-hand text-[19px] leading-[.9] text-[#c2410c] opacity-90 [animation:proto-carimbo_1.5s_ease-out_both] [mix-blend-mode:multiply]"
+            style={{ transform: "rotate(-14deg)", boxShadow: "inset 0 0 0 2px rgba(194,65,12,.35)" }}>com<br />capricho</span>
+        </div>
+        <p className="mt-1.5 text-[11.5px] leading-snug text-[#5c3d2e]">Protótipo: o pedido abre no WhatsApp para você conferir, ainda não vai para a loja.</p>
+      </div>
+      <div className="grid grid-cols-2 gap-2 border-t border-dashed border-[#1f1510]/20 px-5 pb-5 pt-3">
+        <a data-testid="pedir" href={linkWhatsApp(pedido)} target="_blank" rel="noopener" className={`col-span-2 grid h-11 place-items-center rounded-full bg-[#ff6a1a] text-sm font-bold text-[#120c09] hover:bg-[#ff8a3d] ${foco}`}>Pedir pelo WhatsApp</a>
+        <button type="button" data-testid="copiar-pedido" onClick={copiar} className={`h-10 rounded-full bg-[#120c09] text-sm font-semibold text-[#fff8e7] hover:bg-[#2a1d18] ${foco}`}>
+          {copiado === "ok" ? "Copiado!" : copiado === "erro" ? "Não deu pra copiar" : "Copiar pedido"}
+        </button>
+        <button type="button" data-testid="montar-outro" onClick={aoOutro} className={`h-10 rounded-full border border-[#120c09]/25 text-sm font-semibold text-[#120c09] hover:bg-[#120c09]/5 ${foco}`}>Montar outro lanche</button>
+        <p aria-live="polite" className="sr-only">{copiado === "ok" ? "Pedido copiado" : ""}</p>
+      </div>
     </div>
   </div>;
+}
+
+/**
+ * Sacola aberta ao lado do lanche: a pessoa arrasta o lanche até ela ou toca nela. Depois, enquanto a cena ensaca, a
+ * dica muda e o "Fechou!" sobe da sacola quando ela dobra.
+ */
+function Sacola({ pedido, proj, zona, estado, aoEnsacar }: { pedido: Pedido; proj: ProjPedido | null; zona: Zona; estado: EstadoSacola; aoEnsacar: () => void }) {
+  const t = useRef<{ id: number; x: number; y: number; moveu: boolean } | null>(null);
+  const supr = useRef(false);
+  const [fant, setFant] = useState<{ x: number; y: number; sobre: boolean } | null>(null);
+  const sac = proj?.sacola;
+  const esperando = estado === "aberta" && !!sac;
+  const sobre = (x: number, y: number) => !!sac && Math.abs(x - sac.x) <= sac.r + 34 && y >= sac.t - 40 && y <= sac.y + sac.r + 30;
+  const icone = pedido.lanche === "dogalho" ? "dog-brioche" : "pao";
+  const ev = {
+    onPointerDown: (e: RPointerEvent<HTMLButtonElement>) => {
+      if (e.button !== 0) return;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      t.current = { id: e.pointerId, x: e.clientX, y: e.clientY, moveu: false };
+    },
+    onPointerMove: (e: RPointerEvent<HTMLButtonElement>) => {
+      const c = t.current; if (!c || c.id !== e.pointerId) return;
+      if (!c.moveu && Math.hypot(e.clientX - c.x, e.clientY - c.y) > 8) c.moveu = true;
+      if (c.moveu) setFant({ x: e.clientX, y: e.clientY, sobre: sobre(e.clientX, e.clientY) });
+    },
+    onPointerUp: (e: RPointerEvent<HTMLButtonElement>) => {
+      const c = t.current; if (!c || c.id !== e.pointerId) return;
+      t.current = null; setFant(null);
+      supr.current = true; setTimeout(() => { supr.current = false; }, 0);
+      if (c.moveu && sobre(e.clientX, e.clientY)) aoEnsacar();
+    },
+    onPointerCancel: () => { t.current = null; setFant(null); },
+  };
+  return <>
+    {esperando && <>
+      {/* a sacola: tocar põe o lanche nela; também é o alvo do arraste */}
+      <button type="button" data-testid="sacola" aria-label="Pôr o lanche na sacola" onClick={aoEnsacar}
+        className={`proto-anim absolute z-[3] rounded-[28%] bg-transparent outline-none [animation:proto-chama_1.6s_ease-in-out_infinite] ${foco} focus-visible:outline-[3px]`}
+        style={{ left: sac!.x - sac!.r, top: sac!.t - 10, width: sac!.r * 2, height: sac!.y + sac!.r * 0.9 - sac!.t + 10, ...(fant?.sobre ? { background: "rgba(255,170,80,.16)" } : {}) }} />
+      {/* o lanche: arrastar até a sacola */}
+      {zona && <button type="button" data-testid="lanche-pra-sacola" aria-label="Arraste o lanche até a sacola" {...ev} onClick={() => { if (!supr.current) aoEnsacar(); }}
+        className={`absolute z-[3] cursor-grab touch-none rounded-[40%] bg-transparent outline-none active:cursor-grabbing ${foco}`}
+        style={{ left: zona.x0, top: zona.y0, width: zona.x1 - zona.x0, height: zona.y1 - zona.y0 }} />}
+      {fant && <span aria-hidden="true" className="pointer-events-none fixed z-[9] grid h-16 w-16 place-items-center rounded-full border-2 border-[#ff9a4a] bg-[#120c09]/55 shadow-[0_10px_24px_rgba(0,0,0,.45)] backdrop-blur-sm transition-transform"
+        style={{ left: fant.x, top: fant.y, transform: `translate(-50%,-50%) scale(${fant.sobre ? 1.18 : 1})` }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={`/assets/bancada/icones/${icone}.webp`} alt="" draggable={false} className="h-12 w-12 object-contain" />
+      </span>}
+    </>}
+    {estado === "fechou" && sac && <p aria-hidden="true" className="proto-anim pointer-events-none absolute z-[5] whitespace-nowrap font-hand text-[34px] leading-none text-[#ffcf8a] [animation:proto-fechou_1.4s_ease-out_both] [text-shadow:0_2px_12px_rgba(0,0,0,.85)]"
+      style={{ left: Math.min(Math.max(sac.x, 70), (typeof window === "undefined" ? 1e4 : window.innerWidth) - 70), top: Math.max(sac.t - 46, 70) }}>Fechou!</p>}
+    <div className="pointer-events-none absolute inset-x-0 bottom-[max(22px,env(safe-area-inset-bottom))] z-[5] flex flex-col items-center gap-1 px-6 text-center min-[700px]:bottom-8">
+      <p className="font-hand text-[30px] leading-none text-[#fff8e7] [text-shadow:0_2px_14px_rgba(0,0,0,.85)] min-[700px]:text-[38px]">{esperando ? "Arraste o lanche pra sacola" : "Ensacando com capricho…"}</p>
+      {esperando && <p className="text-[13px] text-[#fff8e7]/80 [text-shadow:0_1px_8px_rgba(0,0,0,.9)]">ou só toque nela: a bebida e a porção pulam pra dentro</p>}
+    </div>
+  </>;
 }

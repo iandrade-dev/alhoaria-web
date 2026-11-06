@@ -5,15 +5,16 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { ContactShadows, useGLTF } from "@react-three/drei";
 import {
   AdditiveBlending, CylinderGeometry, Euler, Group, MathUtils, Matrix4, Mesh, MeshBasicMaterial, Object3D,
-  PerspectiveCamera, Plane, PlaneGeometry, PMREMGenerator, Quaternion, Raycaster, Vector2, Vector3,
+  Plane, PlaneGeometry, PMREMGenerator, Quaternion, Raycaster, SpotLight, Vector2, Vector3,
 } from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { CHAMA_DIR, POSES, anelTextura, qBase, type Kit, type Volta } from "./kit";
 import { c01, duracao, eIO3, eIOs, eOut3, mola, pegadaDe, seg, tempoTrabalho, type Medidas, type Pegada } from "./acoes";
 import { kitPao } from "./kitPao";
 import { kitDog } from "./kitDog";
-import { CAMERAS, MESA, arranjoDe, fovPara, passoDe, type Arranjo, type EstacaoId, type LancheDef, type Passo } from "./layout";
-import Pedido3D, { type FasePedido, type ProjPedido } from "./Pedido3D";
+import { MESA, arranjoDe, passoDe, type Arranjo, type EstacaoId, type LancheDef, type Passo } from "./layout";
+import Camara, { type ApiCamara } from "./Camara";
+import Pedido3D, { type EstadoSacola, type FasePedido, type ProjPedido } from "./Pedido3D";
 import type { Opcoes, Pedido } from "./cardapio";
 
 const ROOT = "/assets/models/bancada/";
@@ -22,6 +23,8 @@ const ROOT = "/assets/models/bancada/";
 const glb = (n: string) => `${ROOT}${n}.glb`;
 useGLTF.setDecoderPath("/draco/");
 export const preCarregar = (def: LancheDef) => def.arquivos.forEach((n) => useGLTF.preload(glb(n)));
+// A cozinha (cenário com luz assada em COLOR_0) vem junto desde a tela de escolha.
+useGLTF.preload(glb("cozinha"));
 
 export type Modo = "arraste" | "toque" | "auto";
 export type Bus = { drag: { ativo: boolean; id: EstacaoId | null; x: number; y: number } };
@@ -43,12 +46,17 @@ type Props = {
   congelar: { id: Passo; t: number } | null;
   /** Contexto WebGL perdido com a cena montada. */
   aoFalhar?: () => void;
+  /** Câmera: centralizar e o aviso de "fora da posição padrão" (botão Centralizar). */
+  camApi: MutableRefObject<ApiCamara | null>;
+  aoCamFora: (fora: boolean) => void;
   /** Escolhas do pedido que mudam o lanche na tábua (pão parmesão ou roseta). */
   opcoes?: Opcoes | null;
   /** Pedido: potinhos do Turbinar (durante a montagem), bebida, acompanhamento e sacola (depois do lanche pronto). */
   pedido?: {
     fase: FasePedido; atual: Pedido | null; rodada: number;
     aoProjetar: (p: ProjPedido) => void; aoSacola: () => void; aoOcupado: (ocupado: boolean) => void;
+    /** A pessoa pôs o lanche na sacola (arrastou ou tocou nela): começa a ensacar. */
+    ensacar: boolean; aoSacolaEstado: (e: EstadoSacola) => void;
   };
 };
 
@@ -57,22 +65,23 @@ const cubica = (out: Vector3, a: Vector3, b: Vector3, c: Vector3, d: Vector3, k:
   return out.set(0, 0, 0).addScaledVector(a, u * u * u).addScaledVector(b, 3 * u * u * k).addScaledVector(c, 3 * u * k * k).addScaledVector(d, k * k * k);
 };
 
-// ---------------------------------------------------------------- câmera
-function Camara({ arranjo, M }: { arranjo: Arranjo; M: Medidas }) {
-  const { camera, size } = useThree();
+// ---------------------------------------------------------------- cozinha
+/** O cenário: parado na origem, na camada 1 (a câmera vê; as sombras de contato não renderizam a cozinha). */
+function Cozinha({ arranjo }: { arranjo: Arranjo }) {
+  const { scene } = useGLTF(glb("cozinha"));
+  // no retrato a câmera alta vê a cúpula de cima, bem no meio da prateleira: some
   useLayoutEffect(() => {
-    const c = CAMERAS[arranjo];
-    const cam = camera as PerspectiveCamera;
-    cam.position.set(...c.pos);
-    cam.fov = fovPara(c, size.width, size.height);
-    cam.near = 0.05; cam.far = 6;
-    cam.lookAt(...c.alvo);
-    cam.updateProjectionMatrix();
-    const dist = cam.position.distanceTo(new Vector3(...c.alvo));
-    const meia = dist * Math.tan(MathUtils.degToRad(cam.fov / 2)) * (size.width / size.height);
-    M.fora.set(meia + 0.38, 0.16, 0.1);
-  }, [camera, size, arranjo, M]);
-  return null;
+    ["luminaria", "lampada"].forEach((n) => { const o = scene.getObjectByName(n); if (o) o.visible = arranjo !== "retrato"; });
+  }, [scene, arranjo]);
+  useLayoutEffect(() => {
+    scene.traverse((n) => {
+      n.layers.set(1);
+      if (n instanceof Mesh) { n.castShadow = false; n.receiveShadow = false; }
+      n.updateMatrix(); n.matrixAutoUpdate = false;
+    });
+    scene.updateMatrixWorld(true);
+  }, [scene]);
+  return <primitive object={scene} />;
 }
 
 // ---------------------------------------------------------------- tudo que é 3D
@@ -87,20 +96,11 @@ type Ativo = {
 type Mola = { p: Vector3; v: Vector3; alvo: Vector3; k: number; c: number; solta: boolean };
 type Pop = Volta & { t: number };
 
-function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, congelar, arranjo, M, pedido, opcoes }: Props & { def: LancheDef; arranjo: Arranjo; M: Medidas }) {
+function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, congelar, arranjo, M, pedido, opcoes, camApi }: Props & { def: LancheDef; arranjo: Arranjo; M: Medidas }) {
   const assets = useGLTF(def.arquivos.map(glb));
-  const { gl, camera, size, scene } = useThree();
+  const { gl, camera, size } = useThree();
   const A = useMemo(() => Object.fromEntries(def.arquivos.map((n, i) => [n, assets[i].scene])) as Record<string, Object3D>, [assets, def]);
 
-  // Ambiente para reflexos (luva acetinada, bisnaga, inox): sala neutra em PMREM.
-  useEffect(() => {
-    const pm = new PMREMGenerator(gl);
-    const env = pm.fromScene(new RoomEnvironment(), 0.04).texture;
-    scene.environment = env;
-    scene.environmentIntensity = 0.32;
-    gl.localClippingEnabled = true;
-    return () => { scene.environment = null; env.dispose(); pm.dispose(); };
-  }, [gl, scene]);
 
   // ------------------------------------------------ lanche, estações, ferramentas e efeitos do lanche escolhido
   const K: Kit = useMemo(() => (def.forma === "dog" ? kitDog(def, A, M) : kitPao(def, A, M)), [def, A, M]);
@@ -249,6 +249,12 @@ function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, co
           delete molas.current[id];
         }
         K.inicio(id);
+        // a câmera girada não pode esconder a ação: lanche, estação e o caminho da mão
+        {
+          const cx = K.caixa, pts = [new Vector3(cx.x[0], cx.y[1], 0), new Vector3(cx.x[1], cx.y[1], 0), new Vector3(0, cx.y[0], cx.z[1])];
+          if (st) pts.push(st.raiz.position.clone().setY(MESA + st.alto));
+          camApi.current?.garantir(pts);
+        }
         lean.current.ok = false;
         at.current = a;
         Object.values(H.poses).forEach((o) => { o.visible = false; });
@@ -456,22 +462,24 @@ function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, co
     {K.extras.map((o, i) => <primitive key={`x-${i}`} object={o} />)}
     {pedido?.atual && <Suspense fallback={null}>
       <Pedido3D K={K} H={H} M={M} arranjo={arranjo} fase={pedido.fase} pedido={pedido.atual} rodada={pedido.rodada} reduzido={reduzido}
-        aoProjetar={pedido.aoProjetar} aoSacola={pedido.aoSacola} aoOcupado={pedido.aoOcupado} />
+        aoProjetar={pedido.aoProjetar} aoSacola={pedido.aoSacola} aoOcupado={pedido.aoOcupado}
+        ensacar={pedido.ensacar} aoSacolaEstado={pedido.aoSacolaEstado} camApi={camApi} />
     </Suspense>}
   </>;
 }
 
 // ---------------------------------------------------------------- canvas
 export default function Cena(props: Props) {
-  const camera = useMemo(() => ({ position: [0, 1, 0.7] as [number, number, number], fov: 46, near: 0.05, far: 6 }), []);
+  const camera = useMemo(() => ({ position: [0, 1, 1.4] as [number, number, number], fov: 50, near: 0.05, far: 12 }), []);
   // Perda de contexto só conta como falha enquanto a cena está montada: ao desmontar, o R3F chama forceContextLoss.
   const falhar = useRef(props.aoFalhar);
   falhar.current = props.aoFalhar;
   const montada = useRef(true);
   useEffect(() => { montada.current = true; return () => { montada.current = false; }; }, []);
-  return <Canvas className="!absolute inset-0" dpr={[1, 1.5]} camera={camera} shadows gl={{ alpha: true, antialias: true, powerPreference: "high-performance" }}
+  // Sem sombras em tempo real: só as sombras de contato (a luz da cozinha já vem assada no GLB).
+  return <Canvas className="!absolute inset-0" dpr={[1, 1.5]} camera={camera} gl={{ alpha: true, antialias: true, powerPreference: "high-performance" }}
     style={{ touchAction: "none" }} onCreated={({ gl }) => {
-      gl.setClearColor(0x000000, 0);
+      gl.setClearColor(0x120c09, 1);
       gl.domElement.addEventListener("webglcontextlost", () => { if (montada.current) falhar.current?.(); }, { once: true });
     }}>
     <Interno {...props} />
@@ -484,17 +492,44 @@ function Interno(props: Props) {
   const M = useMemo<Medidas>(() => ({ pasta: 0.05, costela: 0.08, creme: 0.085, muss: 0.1, fora: new Vector3(0.7, 0.24, 0.1), h: {}, p: {} }), []);
   const { def } = props;
   return <>
-    <Camara arranjo={arranjo} M={M} />
+    <Camara arranjo={arranjo} M={M} travada={!!props.congelar} reduzido={props.reduzido} api={props.camApi} aoFora={props.aoCamFora} segurando={() => props.bus.current.drag.ativo} />
+    {/* luzes do README (as mesmas dos renders da cozinha) e uma poça quente da luminária sobre a tábua */}
     <hemisphereLight args={["#ffe6c8", "#1a0f0a", 0.55]} />
     <ambientLight intensity={0.25} color="#ffe2c0" />
-    <directionalLight position={[0.15, 1.1, 0.35]} intensity={2.6} color="#ffd9a8" castShadow shadow-mapSize={[1024, 1024]} shadow-bias={-0.0004} shadow-normalBias={0.01}
-      shadow-camera-left={-0.6} shadow-camera-right={0.6} shadow-camera-top={0.6} shadow-camera-bottom={-0.6} shadow-camera-near={0.2} shadow-camera-far={2.2} />
+    <directionalLight position={[0.15, 1.1, 0.35]} intensity={2.6} color="#ffd9a8" />
     <directionalLight position={[-0.6, 0.5, 0.8]} intensity={0.7} color="#fff1dc" />
-    <pointLight position={[0.55, 0.3, -0.45]} intensity={1.6} distance={2} decay={1.5} color="#ff9a4a" />
+    <Poca />
+    <Ambiente />
+    <Suspense fallback={null}><Cozinha arranjo={arranjo} /></Suspense>
     {def && <Suspense fallback={null}>
       {/* um Mundo por lanche: trocar de lanche remonta só a cena, no mesmo contexto WebGL */}
       <Mundo key={def.id} {...props} def={def} arranjo={arranjo} M={M} />
     </Suspense>}
-    {def && <ContactShadows position={[0, MESA + 0.0008, 0]} scale={2.4} far={0.35} blur={2.2} opacity={0.75} resolution={512} color="#000000" frames={Infinity} />}
+    {def && <ContactShadows position={[0, MESA + 0.0008, 0]} scale={1.6} far={0.35} blur={2.2} opacity={0.75} resolution={512} color="#000000" frames={Infinity} />}
   </>;
+}
+
+/** Ambiente para reflexos (luva acetinada, bisnaga, inox, brilho do azulejo): sala neutra em PMREM, fraca. */
+function Ambiente() {
+  const { gl, scene } = useThree();
+  useEffect(() => {
+    const pm = new PMREMGenerator(gl);
+    const env = pm.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.environment = env;
+    scene.environmentIntensity = 0.32;
+    gl.localClippingEnabled = true;
+    return () => { scene.environment = null; env.dispose(); pm.dispose(); };
+  }, [gl, scene]);
+  return null;
+}
+
+/** Luz da luminária pendente: cone quente e macio sobre a tábua (sem sombra). */
+function Poca() {
+  const luz = useMemo(() => {
+    const l = new SpotLight("#ffc27a", 1.6, 0, 0.62, 0.85, 2);
+    l.position.set(0.02, 0.78, -0.02);
+    l.target.position.set(0, MESA, 0.02);
+    return l;
+  }, []);
+  return <><primitive object={luz} /><primitive object={luz.target} /></>;
 }

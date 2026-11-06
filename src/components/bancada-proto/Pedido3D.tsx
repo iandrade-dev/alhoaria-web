@@ -3,13 +3,14 @@
 // O pedido na mesa. Durante a montagem: Turbinar (antes da tampa: potinhos em volta da tábua e a mão soltando punhados
 // sobre o recheio, que ficam dentro do lanche), os separados na frente do lanche e o queijo em dobro (punhado da
 // tigela do queijo). Depois do lanche pronto: Bebida e Acompanhamento (prateleira atrás da tábua; a mão põe o
-// escolhido ao lado do lanche) e Sacola (a mão põe os itens um a um na sacola aberta, que fecha). Tudo é declarativo:
-// a cena compara o pedido com o que está na mesa e anima uma diferença por vez.
-import { useEffect, useMemo, useRef } from "react";
+// escolhido ao lado do lanche) e Sacola (aberta no tampo, à direita da tábua: a pessoa arrasta o lanche até ela ou
+// toca nela; a mão põe o lanche na boca, a bebida e a porção pulam para dentro uma a uma e a sacola dobra e fecha).
+// Tudo é declarativo: a cena compara o pedido com o que está na mesa e anima uma diferença por vez.
+import { useEffect, useMemo, useRef, type MutableRefObject } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import {
-  BoxGeometry, CanvasTexture, Group, Mesh, MeshStandardMaterial, Object3D, Quaternion, Raycaster, SRGBColorSpace, Vector3,
+  BoxGeometry, CanvasTexture, DoubleSide, Group, Mesh, MeshStandardMaterial, Object3D, Quaternion, Raycaster, SRGBColorSpace, Vector3,
 } from "three";
 import { POSES, caixa, clonar, qBase, type Kit } from "./kit";
 import { c01, eIn2, eIO3, eIOs, eOut3, mola, seg, type Medidas, type Pose } from "./acoes";
@@ -18,9 +19,12 @@ import {
   ORDEM_ADICIONAIS, ORDEM_BEBIDAS, ORDEM_PORCOES, ORDEM_SEPARADOS, POTINHOS, SABORES_LATA, SABORES_SODA, type AdicionalId, type Pedido,
 } from "./cardapio";
 import { dose, potinho, potinhoSeparado, punhadoNaMao, type Altura } from "./adicionais3d";
+import type { ApiCamara } from "./Camara";
 
 /** "turbinar" = a etapa Turbinar da montagem (antes da tampa); as outras três vêm depois do lanche pronto. */
 export type FasePedido = "montagem" | "turbinar" | "bebida" | "acomp" | "sacola";
+/** Sacola: esperando o lanche ("aberta"), recebendo os itens, "fechou" (dobra e etiqueta) e "pronta" (comanda). */
+export type EstadoSacola = "nada" | "aberta" | "rodando" | "fechou" | "pronta";
 /** Centro e raio na tela; `t` = y do topo do objeto (para a etiqueta ir por cima). */
 export type ProjPedido = Record<string, { x: number; y: number; r: number; t: number }>;
 type Maos = { raiz: Group; poses: Record<Pose, Object3D>; fer: Record<string, Object3D | null> };
@@ -31,6 +35,10 @@ type Props = {
   aoProjetar: (p: ProjPedido) => void; aoSacola: () => void;
   /** A mão do pedido está trabalhando (a montagem espera). */
   aoOcupado: (ocupado: boolean) => void;
+  /** A pessoa pôs o lanche na sacola: começa a ensacar. */
+  ensacar: boolean;
+  aoSacolaEstado: (e: EstadoSacola) => void;
+  camApi: MutableRefObject<ApiCamara | null>;
 };
 
 const ARQ = ["beb-lata", "beb-chopp", "beb-soda", "porcao-batata", "porcao-dadinho", "sacola"] as const;
@@ -39,18 +47,19 @@ export const preCarregarPedido = () => ARQ.forEach((n) => useGLTF.preload(glb(n)
 
 type XZ = [number, number];
 /** Lugares (x, z) de cada coisa da mesa, por arranjo. */
-const LUG: Record<Arranjo, { potes: XZ[]; prat: XZ[]; b1: XZ; b2: XZ; p1: XZ; p2: XZ; sacola: XZ; sacolaFim: XZ; copos: XZ }> = {
+// Sacola: aberta no tampo à direita da tábua (zonas livres da cozinha), girada para a câmera, maior que o GLB.
+const LUG: Record<Arranjo, { potes: XZ[]; prat: XZ[]; b1: XZ; b2: XZ; p1: XZ; p2: XZ; sacola: XZ; copos: XZ }> = {
   retrato: {
     potes: [[-0.175, -0.245], [0, -0.285], [0.175, -0.245], [-0.18, 0.2], [0, 0.215], [0.18, 0.2]],
     prat: [[-0.165, -0.27], [0, -0.285], [0.165, -0.27]],
     b1: [0.17, 0.2], b2: [0.225, 0.07], p1: [-0.15, 0.215], p2: [-0.225, 0.07],
-    sacola: [0, -0.255], sacolaFim: [0, -0.07], copos: [-0.135, 0.105],
+    sacola: [0.3, -0.21], copos: [-0.135, 0.105],
   },
   paisagem: {
     potes: [[-0.31, -0.21], [-0.39, -0.03], [-0.35, 0.15], [0.31, -0.21], [0.39, -0.03], [0.35, 0.15]],
     prat: [[-0.2, -0.27], [0, -0.285], [0.2, -0.27]],
-    b1: [0.33, -0.1], b2: [0.42, -0.22], p1: [-0.33, -0.06], p2: [-0.42, -0.21],
-    sacola: [0, -0.25], sacolaFim: [0, -0.04], copos: [-0.135, 0.105],
+    b1: [0.33, -0.1], b2: [0.44, -0.04], p1: [-0.33, -0.06], p2: [-0.42, -0.21],
+    sacola: [0.28, -0.25], copos: [-0.135, 0.105],
   },
 };
 
@@ -71,6 +80,9 @@ type Anim = {
   aoPegar?: () => void; aoSoltar?: () => void; aoFim?: () => void;
   pegou?: boolean; soltou?: boolean;
 };
+
+/** Escala da sacola na mesa (o GLB tem 0,262 m de altura). A frente (+z) gira para a câmera padrão. */
+const SACOLA = { escala: 1.3, alto: 0.262 };
 
 const TL = { chega: 0.42, assenta: 0.54, fecha: 0.6, leva: 1.12, desce: 1.3, solta: 1.36, D: 1.7 };
 const TL_FORA = { chega: 0, assenta: 0, fecha: 0, leva: 0.78, desce: 0.95, solta: 1.0, D: 1.34 };
@@ -159,11 +171,12 @@ function tingir(item: Item, cor: string) {
 /** Lugar de cada potinho (índices em LUG.potes; o do meio da frente fica livre para os separados). */
 const LUGAR_POTE = [0, 1, 2, 3, 5];
 
-export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rodada, aoProjetar, aoSacola, aoOcupado }: Props) {
+export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rodada, aoProjetar, aoSacola, aoOcupado, ensacar, aoSacolaEstado, camApi }: Props) {
   const cenas = useGLTF(ARQ.map(glb));
   const { camera, size } = useThree();
   const A = useMemo(() => Object.fromEntries(ARQ.map((n, i) => [n, cenas[i].scene])) as unknown as Record<(typeof ARQ)[number], Object3D>, [cenas]);
-  const opts = useRef({ fase, pedido, reduzido, arranjo }); opts.current = { fase, pedido, reduzido, arranjo };
+  const opts = useRef({ fase, pedido, reduzido, arranjo, ensacar }); opts.current = { fase, pedido, reduzido, arranjo, ensacar };
+  const estadoSacola = useRef(aoSacolaEstado); estadoSacola.current = aoSacolaEstado;
   const fimSacola = useRef(aoSacola); fimSacola.current = aoSacola;
   const projetar = useRef(aoProjetar); projetar.current = aoProjetar;
   const ocupar = useRef(aoOcupado); ocupar.current = aoOcupado;
@@ -202,12 +215,26 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rod
     aberta.visible = true; fechada.visible = false; sacola.visible = false;
     estampar(sacola);
     raiz.add(sacola);
+    // aba da dobra: a boca dobra para a frente (articulada na borda de trás) antes de virar a sacola fechada
+    let kraft: MeshStandardMaterial | null = null;
+    aberta.traverse((n) => { if (!kraft && n instanceof Mesh && n.name.endsWith("_corpo")) kraft = (n.material as MeshStandardMaterial).clone(); });
+    // a cor do kraft vem das cores de vértice do GLB: a aba (caixa sem COLOR_0) leva a cor no material
+    const kraftMat = kraft ?? new MeshStandardMaterial({ roughness: 0.85 });
+    kraftMat.vertexColors = false; kraftMat.color.set("#b98a55"); kraftMat.side = DoubleSide;
+    const aba = new Group();
+    aba.position.set(0, SACOLA.alto, -0.052);
+    const abaM = new Mesh(new BoxGeometry(0.178, 0.1, 0.003), kraftMat);
+    abaM.position.set(0, 0.05, 0);
+    aba.add(abaM); aba.visible = false; sacola.add(aba);
+    const etiquetas: Object3D[] = [];
+    fechada.traverse((n) => { if (n.name.includes("etiqueta")) etiquetas.push(n); });
+    etiquetas.forEach((e) => { e.userData.y0 = e.position.y; });
 
     // cobertura (doses) mora no lanche, para ir junto para a sacola
     const cobertura = new Group();
     K.lanche.add(cobertura);
     const copos = new Group(); raiz.add(copos);
-    return { raiz, tabua, bt, yEm, potes, pratBeb, pratPor, novoItem, sacola, aberta, fechada, cobertura, copos };
+    return { raiz, tabua, bt, yEm, potes, pratBeb, pratPor, novoItem, sacola, aberta, fechada, aba, etiquetas, cobertura, copos };
   }, [K, A]);
 
   useEffect(() => () => { P.cobertura.removeFromParent(); }, [P]);
@@ -225,6 +252,7 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rod
     copos: new Map<string, { obj: Group; t: number; x: number; z: number }>(),
     fade: { est: 1, potes: 0, beb: 0, por: 0, sacola: 0 },
     sacola: "nada" as "nada" | "rodando" | "pronta",
+    estado: "nada" as EstadoSacola,
     fila: [] as (() => Anim | null)[],
     proj: "",
     ocupado: false,
@@ -389,38 +417,89 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rod
     });
   };
 
-  /** Ensacar: a mão leva os objetos (com o mesmo deslocamento) até a boca da sacola, desce e solta lá dentro. */
-  const animEnsacar = (nome: string, objs: Object3D[], pega: Vector3, escala: number, rapido = false): Anim => {
-    const boca = P.sacola.position.clone(); boca.y += 0.12 + 0.04 * escala;
-    const a = novaAnim(`ensacar-${nome}`, pega, boca, 0.17, {
+  /** Boca da sacola (centro, no mundo), `fundo` metros abaixo da borda. */
+  const boca = (fundo = 0) => { const v = P.sacola.position.clone(); v.y += SACOLA.alto * SACOLA.escala - fundo; return v; };
+  type AnimQ = Anim & { quadro?: (t: number) => void };
+
+  /** Ensacar o lanche: a mão pega o lanche e põe na boca da sacola, desce um pouco e solta lá dentro. */
+  const animEnsacar = (objs: Object3D[], pega: Vector3, escala: number): Anim => {
+    // o lanche pende ~topo × escala abaixo da mão: a base dele entra ~1/3 da altura da sacola
+    const solta = boca(SACOLA.alto * SACOLA.escala * 0.32); solta.y += (pega.y) * escala;
+    const a = novaAnim("ensacar-lanche", pega, solta, 0.09, {
       leva: objs.map((o) => ({ obj: o, off: o.position.clone().sub(pega), s0: o.scale.x, s1: escala })),
-      aoSoltar: () => objs.forEach((o) => { o.visible = false; }),
+      aoSoltar: () => { objs.forEach((o) => { o.visible = false; }); },
     });
-    if (rapido) { a.tl = { chega: 0.32, assenta: 0.4, fecha: 0.45, leva: 0.84, desce: 1.0, solta: 1.04 }; a.D = 1.3; }
     return a;
   };
 
-  const animFechar = (): Anim => {
-    const de = P.sacola.position.clone();
-    const [x, z] = LUG[opts.current.arranjo].sacolaFim;
-    const para = new Vector3(x, P.bt.max.y, z);
-    const a = novaAnim("fechar", null, de, 0, {});
-    a.D = 1.55;
-    (a as Anim & { quadro?: (t: number) => void }).quadro = (t: number) => {
-      const red = opts.current.reduzido;
-      if (t < 0.28) {
-        const k = eIOs(t / 0.28);
-        P.aberta.visible = true; P.fechada.visible = false;
-        P.aberta.scale.set(1 + 0.04 * k, 1 - 0.1 * k, 1 + 0.04 * k);
+  /** Bebida, porção ou separado pula para dentro da sacola: arco, encolhe um pouco e amassa ao entrar. */
+  const animPulo = (nome: string, obj: Object3D, escala: number, lado: number): Anim => {
+    const de = obj.position.clone(); const s0 = obj.scale.x || 1;
+    const b = boca();
+    const a: AnimQ = novaAnim(`pulo-${nome}`, null, b, 0, {});
+    const red = opts.current.reduzido;
+    const voo = red ? 0.32 : 0.5, D = red ? 0.42 : 0.72;
+    a.D = D;
+    const alto = 0.05 + Math.max(0, b.y - de.y) * 0.2;
+    const q0 = obj.quaternion.clone(); const giro = new Quaternion();
+    a.quadro = (t) => {
+      obj.visible = true;
+      if (t < voo) {
+        const k = t / voo, e = eIOs(k);
+        obj.position.lerpVectors(de, b, e);
+        obj.position.y = de.y + (b.y + 0.01 - de.y) * e + (red ? 0 : alto * 4 * k * (1 - k));
+        const sc = s0 + (escala - s0) * e;
+        // estica no voo
+        const st = red ? 0 : 0.1 * Math.sin(Math.PI * k);
+        obj.scale.set(sc * (1 - st * 0.5), sc * (1 + st), sc * (1 - st * 0.5));
+        obj.quaternion.copy(q0).premultiply(giro.setFromAxisAngle(tmp.d.set(0, 0, 1), (red ? 0 : 0.5) * lado * Math.sin(Math.PI * k)));
       } else {
-        P.aberta.visible = false; P.fechada.visible = true; P.aberta.scale.setScalar(1);
-        const k = seg(t, 0.28, 0.68);
-        const y = red ? 0.9 + 0.1 * eOut3(k) : 0.9 + 0.1 * mola(k, 0.7);
-        P.fechada.scale.set(1 + 0.04 * (1 - y) / 0.1, y, 1 + 0.04 * (1 - y) / 0.1);
+        // entra: amassa (squash) e afunda na sacola, que balança
+        const k = seg(t, voo, D);
+        const sq = red ? 0 : 0.28 * Math.sin(Math.PI * Math.min(1, k * 1.6));
+        obj.position.copy(b); obj.position.y -= (SACOLA.alto * SACOLA.escala * 0.75) * eIn2(k) + 0.01;
+        obj.scale.set(escala * (1 + sq), escala * (1 - sq * 1.3), escala * (1 + sq));
+        obj.quaternion.copy(q0);
+        const m = red ? 0 : Math.sin(Math.PI * k);
+        P.aberta.scale.set(1 + 0.035 * m, 1 - 0.05 * m, 1 + 0.035 * m);
       }
-      const km = seg(t, 0.72, 1.5);
-      P.sacola.position.lerpVectors(de, para, eIO3(km));
-      if (!red) P.sacola.position.y += 0.035 * Math.sin(Math.PI * km);
+      if (t >= D - 0.001) { obj.visible = false; P.aberta.scale.setScalar(1); }
+    };
+    return a;
+  };
+
+  /** Fecha: a boca aperta, a aba dobra para a frente, vira a sacola fechada (com mola), a etiqueta carimba. */
+  const animFechar = (): Anim => {
+    const a: AnimQ = novaAnim("fechar", null, P.sacola.position.clone(), 0, {});
+    const red = opts.current.reduzido;
+    a.D = red ? 0.7 : 1.45;
+    const y0 = P.sacola.position.y, giro = P.sacola.rotation.y;
+    let avisou = false;
+    a.quadro = (t) => {
+      const T = red ? t * (1.45 / 0.7) : t;
+      if (T < 0.5) {
+        // aperta a boca (frente e trás se encontram) e a aba dobra por cima
+        const k = eIOs(c01(T / 0.22));
+        P.aberta.visible = true; P.fechada.visible = false;
+        P.aberta.scale.set(1 - 0.03 * k, 1 - 0.06 * eIOs(seg(T, 0.2, 0.5)), 1 - 0.32 * k);
+        const ka = seg(T, 0.14, 0.5);
+        P.aba.visible = ka > 0;
+        P.aba.position.z = -0.052 * (1 - 0.32 * k);
+        P.aba.rotation.x = Math.PI * 0.6 * eIO3(ka);
+      } else {
+        P.aberta.visible = false; P.aba.visible = false; P.fechada.visible = true; P.aberta.scale.setScalar(1);
+        const k = seg(T, 0.5, 0.95);
+        const y = red ? 1 : 0.92 + 0.08 * mola(k, 0.65);
+        P.fechada.scale.set(1 + (1 - y) * 0.5, y, 1 + (1 - y) * 0.5);
+        // etiqueta: desce e carimba sobre a dobra
+        const ke = seg(T, 0.62, 0.92);
+        P.etiquetas.forEach((e) => { e.visible = ke > 0; e.position.y = (e.userData.y0 as number) + 0.05 * (1 - (red ? ke : mola(ke, 0.5))); });
+        if (!avisou && T > 0.7) { avisou = true; estadoSacola.current("fechou"); }
+      }
+      // pulinho de "fechou!"
+      const kp = seg(T, 0.92, 1.4);
+      P.sacola.position.y = y0 + (red ? 0 : 0.03 * Math.sin(Math.PI * kp));
+      P.sacola.rotation.y = giro + (red ? 0 : 0.07 * Math.sin(Math.PI * 2 * kp) * (1 - kp));
     };
     return a;
   };
@@ -487,19 +566,21 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rod
     return ok;
   };
 
-  /** Monta a fila da sacola: lanche, separados, bebidas e porções; depois fecha. */
+  /** Monta a fila da sacola: a mão põe o lanche; separados, bebidas e porções pulam um a um; depois fecha. */
   const encherFila = () => {
     const s = S.current;
     const lanche = K.raiz.children.filter((c) => c !== P.tabua);
     const topo = Math.max(K.caixa.y[1] - 0.01, 0.05);
-    s.fila.push(() => animEnsacar("lanche", lanche, new Vector3(0, topo, 0), 0.42));
-    [...s.copos.values()].forEach((c, i) => s.fila.push(() => animEnsacar(`separado-${i}`, [c.obj], c.obj.position.clone().add(new Vector3(0, 0.024, 0)), 0.9, true)));
+    camApi.current?.garantir([boca(), new Vector3(0, topo, 0), new Vector3(K.caixa.x[0], 0, 0)]);
+    s.fila.push(() => animEnsacar(lanche, new Vector3(0, topo, 0), 0.55));
+    let lado = 1;
+    [...s.copos.values()].forEach((c, i) => s.fila.push(() => animPulo(`separado-${i}`, c.obj, 0.85, (lado = -lado))));
     (["b1", "b2", "p1", "p2"] as SlotId[]).forEach((k) => {
       const it = s.slots[k];
-      if (it) s.fila.push(() => animEnsacar(it.chave, [it.obj], it.obj.position.clone().add(new Vector3(0, it.alto - 0.006, 0)), it.chave === "batata" || it.chave === "dadinho" ? 0.62 : 0.8));
+      if (it) s.fila.push(() => animPulo(it.chave, it.obj, it.chave === "batata" || it.chave === "dadinho" ? 0.7 : 0.82, (lado = -lado)));
     });
     s.fila.push(() => animFechar());
-    s.fila.push(() => { s.sacola = "pronta"; fimSacola.current(); return null; });
+    s.fila.push(() => { s.sacola = "pronta"; estadoSacola.current("pronta"); fimSacola.current(); return null; });
   };
 
   useEffect(() => {
@@ -566,8 +647,11 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rod
     if (s.sacola === "nada") {
       const [x, z] = lu.sacola;
       P.sacola.position.set(x, MESA, z);
+      P.sacola.rotation.set(0, Math.atan2(-x, 1.5), 0);
       P.sacola.visible = s.fade.sacola > 0.01;
-      P.sacola.scale.setScalar(esc(s.fade.sacola, true));
+      P.sacola.scale.setScalar(SACOLA.escala * esc(s.fade.sacola, true));
+      const est = s.fade.sacola >= 1 ? "aberta" : "nada";
+      if (est !== s.estado) { s.estado = est; estadoSacola.current(est); }
     }
 
     // ---- quedas, saídas, voltas
@@ -609,7 +693,9 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rod
     let ok = true;
     if (!s.anim) {
       ok = conciliar();
-      if (!s.anim && fase === "sacola" && ok && s.sacola === "nada" && s.fade.sacola >= 1) { s.sacola = "rodando"; encherFila(); }
+      if (!s.anim && fase === "sacola" && opts.current.ensacar && ok && s.sacola === "nada" && s.fade.sacola >= 1) {
+        s.sacola = "rodando"; s.estado = "rodando"; estadoSacola.current("rodando"); encherFila();
+      }
       while (!s.anim && s.fila.length) s.anim = s.fila.shift()!();
     }
     const quieto = ok && !s.anim && !s.fila.length && s.quedas.length === 0 && s.saindo.length === 0;
@@ -667,6 +753,7 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rod
     P.potes.forEach((p) => pp(`adicional-${p.id}`, p.g, p.alto, p.raio));
     P.pratBeb.itens.forEach((it) => pp(`bebida-${it.chave}`, it.obj, it.alto, 0.04));
     P.pratPor.itens.forEach((it) => pp(`porcao-${it.chave}`, it.obj, it.alto, 0.06));
+    if (P.sacola.visible) pp("sacola", P.sacola, SACOLA.alto * P.sacola.scale.y, 0.09 * P.sacola.scale.x);
     const chave = JSON.stringify(out);
     if (chave !== ultimo.current) { ultimo.current = chave; projetar.current(out); }
   });

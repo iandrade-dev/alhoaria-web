@@ -7,7 +7,8 @@ import type { ApiCena, Bus, Modo, Projecao } from "./Cena";
 import {
   LANCHES, ORDEM_LANCHES, ehLanche, opcaoDaEstacao, passoDe, type EstacaoId, type LancheDef, type LancheId, type PassoDef,
 } from "./layout";
-import type { FasePedido, ProjPedido } from "./Pedido3D";
+import type { EstadoSacola, FasePedido, ProjPedido } from "./Pedido3D";
+import type { ApiCamara } from "./Camara";
 import PedidoHud, { PainelTurbinar, TrilhaPedido, somarAdicional, type FasePos } from "./PedidoHud";
 import {
   ADICIONAIS, OPCOES, OPCOES_PADRAO, SEM_OPCAO, brl, novoPedido, opcaoDe, textoDasOpcoes, type GrupoOpcao, type Pedido,
@@ -61,6 +62,12 @@ export default function Prototipo() {
   // "Fechar o lanche" com a mão ainda soltando um adicional: fecha quando ela terminar
   const [fechando, setFechando] = useState(false);
   const [rodada, setRodada] = useState(0);
+  // câmera girada/afastada (mostra "Centralizar")
+  const [camFora, setCamFora] = useState(false);
+  // sacola: a pessoa pôs o lanche nela (arrastou ou tocou) e o andamento da cena
+  const [ensacar, setEnsacar] = useState(false);
+  const [sacolaEstado, setSacolaEstado] = useState<EstadoSacola>("nada");
+  const camApi = useRef<ApiCamara | null>(null);
   const bus = useRef<Bus>({ drag: { ativo: false, id: null, x: 0, y: 0 } });
   const api = useRef<ApiCena | null>(null);
   const toque = useRef<Toque | null>(null);
@@ -190,6 +197,7 @@ export default function Prototipo() {
   const zerarHud = (l: LancheId | null) => {
     parar();
     setFase("montagem"); setPedido(l ? novoPedido(l) : null); setProjPed(null); setSacolaPronta(false); setFechando(false); setRodada((r) => r + 1);
+    setEnsacar(false); setSacolaEstado("nada");
     animRef.current = null; feitosRef.current = 0;
     setAnimando(null); setFeitos(0); setPulados([]); setPop(null); setAnuncio(""); setSegurando(null); setSobre(false);
     bus.current.drag.ativo = false; toque.current = null;
@@ -262,16 +270,22 @@ export default function Prototipo() {
       @keyframes proto-pop { 0% { transform: scale(1) } 35% { transform: scale(1.42) } 65% { transform: scale(.92) } 100% { transform: scale(1) } }
       @keyframes proto-pulso { 0%,100% { box-shadow: 0 0 0 0 rgba(255,150,60,.55) } 50% { box-shadow: 0 0 0 7px rgba(255,150,60,0) } }
       @keyframes proto-sobe { from { opacity: 0; transform: translateY(14px) } to { opacity: 1; transform: none } }
+      @keyframes proto-comanda { 0% { transform: translateY(-115%) rotate(-1.5deg) } 70% { transform: translateY(2%) rotate(.4deg) } 100% { transform: none } }
+      @keyframes proto-carimbo { 0%,60% { opacity: 0; transform: rotate(-14deg) scale(2.3) } 78% { opacity: 1; transform: rotate(-14deg) scale(.92) } 100% { opacity: 1; transform: rotate(-14deg) scale(1) } }
+      @keyframes proto-fechou { 0% { opacity: 0; transform: translate(-50%, 6px) scale(.7) } 25% { opacity: 1; transform: translate(-50%, -6px) scale(1.06) } 75% { opacity: 1; transform: translate(-50%, -14px) scale(1) } 100% { opacity: 0; transform: translate(-50%, -26px) scale(1) } }
+      @keyframes proto-chama { 0%,100% { box-shadow: 0 0 0 0 rgba(255,170,80,.55), inset 0 0 18px rgba(255,170,80,.25) } 50% { box-shadow: 0 0 0 10px rgba(255,170,80,0), inset 0 0 26px rgba(255,170,80,.4) } }
       @media (prefers-reduced-motion: reduce) { .proto-anim { animation: none !important } }
     `}</style>
-    <picture>
-      <source media="(max-aspect-ratio: 1/1)" srcSet="/assets/bancada/proto/cozinha-retrato.webp" />
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/assets/bancada/proto/cozinha-paisagem.webp" alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} />
-    </picture>
     {lanche !== undefined && !semGl && <Cena aoFalhar={aoFalhar} def={def} ativo={animando || escolhendoPao ? null : ativo} reduzido={reduzido} bus={bus} api={api} aoFim={aoFim} aoProjetar={setProj} aoPronto={aoPronto} congelar={congelar}
-      opcoes={pedido?.opcoes ?? null}
-      pedido={{ fase: fase3d, atual: pedido, rodada, aoProjetar: setProjPed, aoSacola, aoOcupado }} />}
+      opcoes={pedido?.opcoes ?? null} camApi={camApi} aoCamFora={setCamFora}
+      pedido={{ fase: fase3d, atual: pedido, rodada, aoProjetar: setProjPed, aoSacola, aoOcupado, ensacar, aoSacolaEstado: setSacolaEstado }} />}
+
+    {/* câmera fora da posição padrão: volta para a frente */}
+    {camFora && def && !semGl && pronto && <button type="button" data-testid="centralizar" onClick={() => camApi.current?.centralizar()} aria-label="Centralizar a câmera"
+      className={`proto-anim absolute right-3 top-[112px] z-[5] inline-flex h-9 items-center gap-1.5 rounded-full border border-[#fff8e7]/20 bg-[#120c09]/65 px-3 text-[12.5px] font-semibold text-[#fff8e7]/90 shadow-[0_6px_18px_rgba(0,0,0,.35)] backdrop-blur-md [animation:proto-sobe_.3s_ease-out] hover:bg-[#241a16] min-[700px]:right-6 min-[700px]:top-[84px] ${foco}`}>
+      <svg viewBox="0 0 20 20" aria-hidden="true" className="h-4 w-4"><path d="M10 3.5a6.5 6.5 0 1 1-6.1 4.3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /><path d="M3 4.2v3.9h3.9" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /><circle cx="10" cy="10" r="1.7" fill="currentColor" /></svg>
+      Centralizar
+    </button>}
 
     {/* escolha do lanche */}
     {lanche === null && <Escolha aoEscolher={escolher} />}
@@ -399,7 +413,8 @@ export default function Prototipo() {
       </div>}
 
       {fase !== "montagem" && pedido && <PedidoHud fase={fase} pedido={pedido} muda={muda} proj={projPed} zona={lan ?? null}
-        aoSeguir={seguir} sacolaPronta={sacolaPronta} aoOutro={() => escolher(null)} anunciar={setAnuncio} />}
+        aoSeguir={seguir} sacolaPronta={sacolaPronta} aoOutro={() => escolher(null)} anunciar={setAnuncio}
+        sacolaEstado={sacolaEstado} aoEnsacar={() => { setEnsacar(true); setAnuncio("Lanche na sacola"); }} />}
 
       {!pronto && <div className="absolute inset-0 z-[7] grid place-items-center bg-[#120c09]/70 backdrop-blur-sm">
         <p className="font-hand text-3xl text-[#fff8e7]">Acendendo a chapa…</p>
