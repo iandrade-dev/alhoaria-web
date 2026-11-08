@@ -13,6 +13,7 @@ import PedidoHud, { PainelTurbinar, TrilhaPedido, somarAdicional, type FasePos }
 import {
   ADICIONAIS, OPCOES, OPCOES_PADRAO, SEM_OPCAO, brl, novoPedido, opcaoDe, textoDasOpcoes, type GrupoOpcao, type Pedido,
 } from "./cardapio";
+import { PEDIDO_URL } from "@/lib/links";
 
 const Cena = dynamic(() => import("./Cena"), { ssr: false });
 
@@ -113,6 +114,16 @@ export default function Prototipo() {
     if (c && inicial) { const [id, t] = c.split(":"); if (LANCHES[inicial].passos.some((p) => p.id === id)) setCongelar({ id, t: Number(t) || 1 }); }
     return () => media.removeEventListener("change", ver);
   }, []);
+
+  useEffect(() => {
+    if (semGl) {
+      const q = typeof window !== "undefined" ? window.location.search : "";
+      const timer = setTimeout(() => {
+        window.location.replace(`/bancada/classica${q}`);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [semGl]);
 
   const muda = useCallback((f: (p: Pedido) => Pedido) => setPedido((p) => (p ? f(p) : p)), []);
   const escolherOpcao = useCallback((g: GrupoOpcao, v: string) => setPedido((p) => (p?.opcoes ? { ...p, opcoes: { ...p.opcoes, [g]: v } } : p)), []);
@@ -456,12 +467,15 @@ function Escolha({ aoEscolher }: { aoEscolher: (id: LancheId) => void }) {
 /** Aviso leve quando o WebGL não está disponível: a foto do lanche e o caminho para a bancada clássica. */
 function SemWebGL({ def }: { def: LancheDef }) {
   return <div data-testid="sem-webgl" role="alert" className="absolute inset-0 z-[8] grid place-items-center overflow-y-auto bg-[#120c09]/70 px-4 py-8">
-    <div className="flex w-full max-w-[380px] flex-col items-center gap-3 rounded-2xl border border-[#fff8e7]/12 bg-[#120c09]/85 p-4 text-center shadow-[0_14px_36px_rgba(0,0,0,.45)]">
+    <div className="flex w-full max-w-[380px] flex-col items-center gap-3 rounded-2xl border border-[#fff8e7]/12 bg-[#120c09]/85 p-5 text-center shadow-[0_14px_36px_rgba(0,0,0,.45)]">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={def.foto} alt={def.nome} draggable={false} className="aspect-square w-full max-w-[260px] rounded-xl object-cover" />
-      <p className="font-hand text-[28px] leading-none">Seu navegador não abriu a cozinha 3D</p>
-      <p className="text-sm text-[#fff8e7]/80">Sem WebGL não dá para montar o {def.nome} aqui. Use a bancada clássica para montar e pedir.</p>
-      <Link href="/bancada/classica" data-testid="ir-classica" className="grid h-11 w-full place-items-center rounded-full bg-[#ff6a1a] text-sm font-bold text-[#120c09] transition-colors hover:bg-[#ff8a3d] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8b84a]">Ir para a bancada clássica</Link>
+      <img src={def.foto} alt={def.nome} draggable={false} className="aspect-square w-full max-w-[240px] rounded-xl object-cover" />
+      <p className="font-hand text-[28px] leading-none text-[#fff8e7]">Redirecionando para a bancada clássica…</p>
+      <p className="text-sm text-[#fff8e7]/80">Seu aparelho não abriu o 3D. Abrindo a montagem 2D automática ou peça direto no cardápio.</p>
+      <div className="mt-2 flex w-full flex-col gap-2">
+        <Link href="/bancada/classica" data-testid="ir-classica" className="grid h-11 w-full place-items-center rounded-full bg-[#ff6a1a] text-sm font-bold text-[#120c09] transition-colors hover:bg-[#ff8a3d] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8b84a]">Ir para a bancada clássica agora</Link>
+        <a href={PEDIDO_URL} target="_blank" rel="noopener noreferrer" className="grid h-11 w-full place-items-center rounded-full border border-[#fff8e7]/30 bg-transparent text-sm font-semibold text-[#fff8e7] transition-colors hover:bg-[#fff8e7]/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8b84a]">Cardápio e pedido online (Anota AI)</a>
+      </div>
     </div>
   </div>;
 }
