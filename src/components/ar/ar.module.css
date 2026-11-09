@@ -4,6 +4,7 @@
 .pagina[data-ar="true"], .pagina[data-ar="true"] .fundo { background:transparent; }
 .pagina[data-ar="true"] .fundo { display:none; }
 .overlay { position:absolute; inset:0; z-index:2; pointer-events:none; background:transparent !important; }
+.areaGestos { position:absolute; inset:0; touch-action:none; }
 .overlay button, .overlay a, .painel { pointer-events:auto; }
 .overlay button, .overlay a { -webkit-tap-highlight-color:transparent; }
 .overlay button { font:inherit; cursor:pointer; touch-action:manipulation; }
@@ -22,7 +23,8 @@
 .sobrancelha { font-size:9px; font-weight:700; letter-spacing:2.4px; color:#ffd6a1; margin:0 0 10px; }
 .apresentacao h1 { font-family:"Caveat Brush",cursive; font-size:clamp(40px,4vw,66px); line-height:1; margin:0; }
 .apresentacao>p:last-child { color:#fff0dbc2; font-size:13px; margin-top:11px; }
-.ferramentas { position:absolute; right:28px; top:46%; display:flex; flex-direction:column; gap:8px; }
+.ferramentas { position:absolute; right:28px; top:32%; display:flex; flex-direction:column; gap:8px; }
+.percentualZoom { font-size:10px !important; font-weight:700 !important; font-variant-numeric:tabular-nums; }
 .rodape { position:absolute; left:28px; bottom:max(28px,env(safe-area-inset-bottom)); width:310px; display:flex; flex-direction:column; gap:10px; }
 .modos { display:flex; padding:5px; gap:3px; border-radius:18px; background:#21160ff0; border:1px solid #fff8e723; }
 .modos button { flex:1; min-height:42px; display:flex; align-items:center; justify-content:center; gap:7px; font-size:12px; color:#ead9c1; border:0; border-radius:12px; background:transparent; font-weight:600; }
@@ -89,7 +91,7 @@
   .apresentacao h1 { font-size:43px; }
   .sobrancelha { font-size:8px; letter-spacing:1.6px; }
   .apresentacao>p:last-child { font-size:11px; margin-top:8px; }
-  .ferramentas { top:37%; right:14px; }
+  .ferramentas { top:25%; right:14px; }
   .rodape { left:16px; bottom:max(101px,calc(env(safe-area-inset-bottom) + 85px)); width:calc(100% - 32px); gap:8px; }
   .modos { border-radius:16px; }
   .modos button { min-height:40px; }
@@ -124,6 +126,6 @@
   .seletor button { width:44px; }
   .seletor img { width:34px; height:26px; }
   .seletor .seta { width:20px; }
-  .ferramentas { top:30%; right:16px; }
+  .ferramentas { top:74px; right:16px; flex-direction:row; }
 }
 @media (prefers-reduced-motion:reduce) { .carregando>span { animation:none; } .progresso span { transition:none; } }

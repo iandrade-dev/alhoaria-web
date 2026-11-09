@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, Check, ChevronDown, ChevronLeft, ChevronRight, Hand, MapPin, Maximize, Pause, Play, RotateCcw, RotateCw, ScanLine, Share2, SlidersHorizontal, UtensilsCrossed, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, ChevronLeft, ChevronRight, Hand, MapPin, Maximize, Minus, Pause, Play, Plus, RotateCcw, RotateCw, ScanLine, Share2, SlidersHorizontal, UtensilsCrossed, X } from "lucide-react";
 import { LANCHES, ORDEM_LANCHES, ehLanche, type LancheId } from "../bancada-proto/layout";
 import { BEBIDAS, LANCHES_PRECO, OPCOES, OPCOES_PADRAO, PORCOES, SABORES_LATA, SABORES_SODA, SEM_OPCAO, brl, novoPedido, totalDoPedido, type Bebida, type GrupoOpcao, type Pedido, type PorcaoId, type SaborLata, type SaborSoda } from "../bancada-proto/cardapio";
 import type { ApiCena } from "../bancada-proto/Cena";
@@ -37,11 +37,14 @@ export default function ExperienciaAR() {
   const [suporte, setSuporte] = useState<boolean | null>(null);
   const [ar, setAR] = useState<EstadoAR>(ESTADO_3D);
   const [giro, setGiro] = useState(0);
+  const [zoom, setZoom] = useState(1);
+  const mudarZoom = useCallback((valor: number) => setZoom(Math.max(0.5, Math.min(2.5, valor))), []);
   const [reduzido, setReduzido] = useState(false);
   const [oculto, setOculto] = useState(false);
   const [falhou, setFalhou] = useState(false);
   const [aviso, setAviso] = useState("");
   const overlay = useRef<HTMLDivElement>(null);
+  const gestosAR = useRef<HTMLDivElement>(null);
   const api = useRef<ApiCena | null>(null);
   const sessao = useRef<SessaoMesa | null>(null);
   const def = LANCHES[pedido.lanche];
@@ -122,6 +125,7 @@ export default function ExperienciaAR() {
   };
   const abrirAR = () => {
     if (!sessao.current || !carregado) return;
+    setZoom(1);
     if (modo !== "pronto") reiniciar(modo);
     setPainel(false); setAviso(""); void sessao.current.iniciar();
   };
@@ -138,9 +142,10 @@ export default function ExperienciaAR() {
     <Limite3D falhar={aoFalhar}>
       {!lendoURL && !falhou && <CenaAR def={def} rodada={rodada} pronto={mostrarPronto} pausado={bloquearAnimacao} reduzido={reduzido}
         ativo={modo !== "pronto" && !terminou ? passos[etapa].id : null} opcoes={pedido.opcoes} bebida={pedido.bebida} porcao={pedido.porcao}
-        ar={ar} giro={giro} painelAberto={painel} overlay={overlay} api={api} sessao={sessao} aoPronto={aoPronto} aoFim={aoFim} aoEstadoAR={setAR} aoFalhar={aoFalhar} />}
+        ar={ar} giro={giro} zoom={zoom} aoZoom={mudarZoom} painelAberto={painel} overlay={overlay} gestosAR={gestosAR} api={api} sessao={sessao} aoPronto={aoPronto} aoFim={aoFim} aoEstadoAR={setAR} aoFalhar={aoFalhar} />}
     </Limite3D>
     <div ref={overlay} className={styles.overlay} data-testid="ar-overlay">
+      <div ref={gestosAR} className={styles.areaGestos} style={{ pointerEvents: emAR ? "auto" : "none" }} aria-hidden="true" />
       <header className={styles.topo}>
         <Link href={urlDoPedido(pedido)} className={styles.marca} aria-label="Voltar para a bancada" onClick={() => { void sessao.current?.sair(); }}>
           <ArrowLeft size={17} /><span>ALHOARIA<small>na sua mesa</small></span>
@@ -165,7 +170,10 @@ export default function ExperienciaAR() {
         <button className={styles.secundario} onClick={() => window.location.reload()}>Tentar o 3D novamente</button>
       </section> : <>
         {!carregado && <div className={styles.carregando} role="status"><span /><p>Caprichando no seu lanche…</p></div>}
-        <div className={styles.ferramentas}>
+        <div className={styles.ferramentas} role="group" aria-label="Zoom e rotação">
+          <button className={styles.icone} aria-label="Aumentar zoom" onClick={() => mudarZoom(zoom * 1.2)} disabled={!carregado || zoom >= 2.5}><Plus size={20} /></button>
+          <button className={`${styles.icone} ${styles.percentualZoom}`} onClick={() => setZoom(1)} disabled={!carregado} aria-label={`Restaurar zoom para 100%. Zoom atual: ${Math.round(zoom * 100)}%`} title="Restaurar zoom">{Math.round(zoom * 100)}%</button>
+          <button className={styles.icone} aria-label="Diminuir zoom" onClick={() => mudarZoom(zoom / 1.2)} disabled={!carregado || zoom <= 0.5}><Minus size={20} /></button>
           <button className={styles.icone} aria-label="Girar lanche para a esquerda" onClick={() => setGiro((g) => g - Math.PI / 6)} disabled={!carregado}><RotateCcw size={19} /></button>
           <button className={styles.icone} aria-label="Girar lanche para a direita" onClick={() => setGiro((g) => g + Math.PI / 6)} disabled={!carregado}><RotateCw size={19} /></button>
           {emAR && <button className={styles.icone} onClick={() => { sessao.current?.reposicionar(); setPainel(false); }} aria-label="Escolher outro lugar"><MapPin size={19} /></button>}
