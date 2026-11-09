@@ -4,7 +4,7 @@ import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, type MutableRefO
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { ContactShadows, useGLTF } from "@react-three/drei";
 import {
-  AdditiveBlending, CylinderGeometry, Euler, Group, MathUtils, Matrix4, Mesh, MeshBasicMaterial, Object3D,
+  AdditiveBlending, CylinderGeometry, Euler, Group, Material, MathUtils, Matrix4, Mesh, MeshBasicMaterial, Object3D,
   Plane, PlaneGeometry, PMREMGenerator, Quaternion, Raycaster, SpotLight, Vector2, Vector3,
 } from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
@@ -16,6 +16,7 @@ import { MESA, arranjoDe, passoDe, type Arranjo, type EstacaoId, type LancheDef,
 import Camara, { type ApiCamara } from "./Camara";
 import Pedido3D, { type EstadoSacola, type FasePedido, type ProjPedido } from "./Pedido3D";
 import type { Opcoes, Pedido } from "./cardapio";
+import { liberarMontagem } from "../ar/recursos";
 
 const ROOT = "/assets/models/bancada/";
 // Arquivos em public/assets/models/bancada/ (contrato no blender/bancada3d/README.md). A mão é o mao-luva.glb.
@@ -23,8 +24,6 @@ const ROOT = "/assets/models/bancada/";
 const glb = (n: string) => `${ROOT}${n}.glb`;
 useGLTF.setDecoderPath("/draco/");
 export const preCarregar = (def: LancheDef) => def.arquivos.forEach((n) => useGLTF.preload(glb(n)));
-// A cozinha (cenário com luz assada em COLOR_0) vem junto desde a tela de escolha.
-useGLTF.preload(glb("cozinha"));
 
 export type Modo = "arraste" | "toque" | "auto";
 export type Bus = { drag: { ativo: boolean; id: EstacaoId | null; x: number; y: number } };
@@ -36,8 +35,9 @@ export type ApiCena = {
   soltar: (id: EstacaoId) => void;
   reiniciar: () => void;
   interromper: () => void;
+  mostrarPronto: (opcoes: Opcoes | null) => void;
 };
-type Props = {
+export type Props = {
   def: LancheDef | null;
   ativo: Passo | null; reduzido: boolean;
   bus: MutableRefObject<Bus>; api: MutableRefObject<ApiCena | null>;
@@ -49,6 +49,8 @@ type Props = {
   /** Câmera: centralizar e o aviso de "fora da posição padrão" (botão Centralizar). */
   camApi: MutableRefObject<ApiCamara | null>;
   aoCamFora: (fora: boolean) => void;
+  /** /ar reutiliza a montagem sem projeções de HUD nem câmera da cozinha. */
+  apresentacao?: { pronto: boolean; pausado: boolean };
   /** Escolhas do pedido que mudam o lanche na tábua (pão parmesão ou roseta). */
   opcoes?: Opcoes | null;
   /** Pedido: potinhos do Turbinar (durante a montagem), bebida, acompanhamento e sacola (depois do lanche pronto). */
@@ -96,7 +98,7 @@ type Ativo = {
 type Mola = { p: Vector3; v: Vector3; alvo: Vector3; k: number; c: number; solta: boolean };
 type Pop = Volta & { t: number };
 
-function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, congelar, arranjo, M, pedido, opcoes, camApi }: Props & { def: LancheDef; arranjo: Arranjo; M: Medidas }) {
+export function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, congelar, arranjo, M, pedido, opcoes, camApi, apresentacao }: Props & { def: LancheDef; arranjo: Arranjo; M: Medidas }) {
   const assets = useGLTF(def.arquivos.map(glb));
   const { gl, camera, size } = useThree();
   const A = useMemo(() => Object.fromEntries(def.arquivos.map((n, i) => [n, assets[i].scene])) as Record<string, Object3D>, [assets, def]);
@@ -112,7 +114,48 @@ function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, co
 
   // Posiciona as estações conforme o arranjo e guarda a "casa" de cada ferramenta (pose no mundo).
   const mundoEst = useRef<Group>(null);
-  useLayoutEffect(() => K.layout(arranjo, mundoEst.current), [K, arranjo]);
+  const raizLocal = useRef<Group>(null);
+  useLayoutEffect(() => {
+    // O kit calcula as pegadas no espaço da bancada. Isolá-lo durante o layout
+    // preserva essas medidas mesmo quando ele nasce numa âncora AR já posicionada.
+    const local = raizLocal.current!;
+    const emCoordenadasLocais = (f: () => void) => {
+      const pai = local.parent;
+      pai?.remove(local);
+      local.updateMatrixWorld(true);
+      try { f(); } finally { pai?.add(local); local.updateWorldMatrix(true, true); }
+    };
+    let limpar: (() => void) | undefined;
+    emCoordenadasLocais(() => { limpar = K.layout(arranjo, mundoEst.current); });
+    return () => emCoordenadasLocais(() => limpar?.());
+  }, [K, arranjo]);
+
+  useLayoutEffect(() => {
+    if (!apresentacao) return;
+    // Os planos animados pertencem ao kit; o renderer precisa deles no mundo AR.
+    // Converte só na renderização, sem alterar os planos usados pela animação.
+    const restaurar: (() => void)[] = [];
+    raizLocal.current?.traverse((o) => {
+      if (!(o instanceof Mesh)) return;
+      const antes = o.onBeforeRender, depois = o.onAfterRender;
+      const materiais: Material[] = Array.isArray(o.material) ? o.material : [o.material];
+      const planos = materiais.filter((m) => m.clippingPlanes?.length).map((m) => ({ m, locais: m.clippingPlanes!, mundo: m.clippingPlanes!.map((p) => p.clone()) }));
+      if (!planos.length) return;
+      o.onBeforeRender = function (...args) {
+        antes.apply(this, args);
+        planos.forEach(({ m, locais, mundo }) => {
+          mundo.forEach((p, i) => p.copy(locais[i]).applyMatrix4(raizLocal.current!.matrixWorld));
+          m.clippingPlanes = mundo;
+        });
+      };
+      o.onAfterRender = function (...args) {
+        planos.forEach(({ m, locais }) => { m.clippingPlanes = locais; });
+        depois.apply(this, args);
+      };
+      restaurar.push(() => { o.onBeforeRender = antes; o.onAfterRender = depois; });
+    });
+    return () => restaurar.forEach((f) => f());
+  }, [K, !!apresentacao]);
 
   // ------------------------------------------------ mão
   const H = useMemo(() => {
@@ -152,6 +195,12 @@ function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, co
     return { raiz, poses, fer: K.fer };
   }, [A, K]);
 
+  useEffect(() => {
+    if (!apresentacao) return;
+    const raiz = raizLocal.current!;
+    return () => liberarMontagem([raiz, K.raiz, H.raiz, anelPao.m, ...Object.values(K.estacoes).flatMap((s) => [s.raiz, s.anel]), ...K.extras], Object.values(A));
+  }, [K, H, A, anelPao, !!apresentacao]);
+
   // ------------------------------------------------ estado da animação (tudo em refs: nada re-renderiza por quadro)
   const at = useRef<Ativo | null>(null);
   const molas = useRef<Partial<Record<EstacaoId, Mola>>>({});
@@ -159,6 +208,7 @@ function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, co
   const voltas = useRef<Pop[]>([]);
   const ativoRef = useRef(ativo); ativoRef.current = ativo;
   const opts = useRef({ reduzido, congelar }); opts.current = { reduzido, congelar };
+  const apresentacaoRef = useRef(apresentacao); apresentacaoRef.current = apresentacao;
   const fim = useRef(aoFim); fim.current = aoFim;
   const lean = useRef({ p: new Vector3(), v: new Vector3(), ok: false });
 
@@ -275,6 +325,19 @@ function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, co
         pops.current = {};
       },
       interromper() { /* a ação atual termina sozinha; quem encadeia é o HUD */ },
+      mostrarPronto(escolhas) {
+        at.current = null;
+        zerar(); K.reiniciar(); molas.current = {}; pops.current = {};
+        for (const passo of def.passos) {
+          if (passo.tipo === "turbinar") continue;
+          const opcao = passo.grupo ? escolhas?.[passo.grupo] : null;
+          if (opcao === "sem" || (passo.tipo === "macarico" && escolhas?.queijo === "sem")) continue;
+          const id = passo.grupo && opcao ? `${passo.id}:${opcao}` : passo.id;
+          K.inicio(id); K.final(id);
+        }
+        K.vestir?.(escolhas);
+        H.raiz.visible = false;
+      },
     };
     return () => { api.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -294,6 +357,7 @@ function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, co
   const tmp = useMemo(() => ({ a: new Vector3(), b: new Vector3(), q: new Quaternion(), e: new Euler(), m: new Matrix4(), s: new Vector3(1, 1, 1), qq: new Quaternion() }), []);
 
   useFrame((_, delta) => {
+    if (apresentacaoRef.current?.pausado || apresentacaoRef.current?.pronto) return;
     const dt = Math.min(delta, 0.1);
     relogio.current += dt;
     const T = relogio.current;
@@ -431,6 +495,7 @@ function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, co
       }
     }
 
+    if (apresentacaoRef.current) return;
     // tempo da ação atual, para o QA tirar prints no meio de cada ação
     (window as unknown as { __protoT: number }).__protoT = at.current ? at.current.t : -1;
     (window as unknown as { __protoId: string | null }).__protoId = at.current ? at.current.id : null;
@@ -451,9 +516,9 @@ function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, co
     if (chave !== ultimaProj.current) { ultimaProj.current = chave; aoProjetar({ estacoes: est, lanche: lan, arranjo }); }
   });
 
-  return <>
+  return <group ref={raizLocal} dispose={null}>
     <primitive object={K.raiz} />
-    <group ref={mundoEst}>
+    <group ref={mundoEst} visible={!apresentacao?.pronto}>
       {Object.keys(K.estacoes).map((id) => <primitive key={id} object={K.estacoes[id].raiz} />)}
       {Object.keys(K.estacoes).map((id) => <primitive key={`a-${id}`} object={K.estacoes[id].anel} />)}
     </group>
@@ -465,7 +530,7 @@ function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, co
         aoProjetar={pedido.aoProjetar} aoSacola={pedido.aoSacola} aoOcupado={pedido.aoOcupado}
         ensacar={pedido.ensacar} aoSacolaEstado={pedido.aoSacolaEstado} camApi={camApi} />
     </Suspense>}
-  </>;
+  </group>;
 }
 
 // ---------------------------------------------------------------- canvas
@@ -510,7 +575,7 @@ function Interno(props: Props) {
 }
 
 /** Ambiente para reflexos (luva acetinada, bisnaga, inox, brilho do azulejo): sala neutra em PMREM, fraca. */
-function Ambiente() {
+export function Ambiente() {
   const { gl, scene } = useThree();
   useEffect(() => {
     const pm = new PMREMGenerator(gl);
