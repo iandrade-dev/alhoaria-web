@@ -23,12 +23,13 @@ function ambiente(pedido) {
   const camera = new Group(); camera.position.set(0, 1, 1); camera.updateMatrixWorld();
   const renderer = { xr: { setReferenceSpaceType() {}, setFoveation() {}, setSession: async () => {}, getReferenceSpace: () => referencia, getCamera: () => camera } };
   const origem = new Group(), reticulo = new Mesh(), estados = [];
-  const controle = new SessaoMesa(renderer, {}, origem, reticulo, (e) => estados.push(e));
+  let tempo = 0;
+  const controle = new SessaoMesa(renderer, {}, origem, reticulo, (e) => estados.push(e), () => tempo);
   const quadro = (matriz, rastreando = true) => ({
-    getViewerPose: () => rastreando ? {} : null,
-    getHitTestResults: () => matriz ? [{ getPose: () => ({ transform: { matrix: matriz.elements } }) }] : [],
+    getViewerPose: () => rastreando ? { transform: { matrix: camera.matrixWorld.elements } } : null,
+    getHitTestResults: () => (Array.isArray(matriz) ? matriz : matriz ? [matriz] : []).map((m) => ({ getPose: () => m ? { transform: { matrix: m.elements } } : null })),
   });
-  return { controle, sessao, origem, reticulo, estados, referencia, quadro, cancelamentos: () => cancelamentos };
+  return { controle, sessao, origem, reticulo, estados, referencia, quadro, camera, avancarTempo: (ms) => { tempo += ms; }, cancelamentos: () => cancelamentos };
 }
 
 test('só coloca em superfície horizontal e permanece no lugar depois de colocado', async () => {
@@ -66,6 +67,61 @@ test('reposicionar e reset descartam o resultado anterior antes de permitir um n
   a.sessao.visibilityState = 'hidden'; a.sessao.dispatchEvent(new Event('visibilitychange'));
   assert.equal(a.reticulo.visible, false);
   assert.equal(a.estados.at(-1).rastreando, false);
+  await a.controle.sair();
+});
+
+test('encontra a mesa mesmo quando o primeiro resultado é uma parede ou não tem pose', async () => {
+  const a = ambiente(); await a.controle.iniciar();
+  const parede = new Matrix4().makeRotationX(Math.PI / 2);
+  const mesa = new Matrix4().makeTranslation(0.2, 0.7, -0.5);
+  a.controle.atualizar(a.quadro([null, parede, mesa]));
+  assert.equal(a.estados.at(-1).fase, 'superficie');
+  assert.equal(a.controle.colocar(), true);
+  assert.deepEqual(a.origem.position.toArray(), [0.2, 0.7, -0.5]);
+  await a.controle.sair();
+});
+
+test('aceita inclinação moderada sem aceitar parede ou teto', async () => {
+  const a = ambiente(); await a.controle.iniciar();
+  const parede = new Matrix4().makeRotationX(Math.PI / 2);
+  const teto = new Matrix4().makeRotationX(Math.PI);
+  a.controle.atualizar(a.quadro([parede, teto]));
+  assert.equal(a.controle.colocar(), false);
+  a.controle.atualizar(a.quadro(new Matrix4().makeRotationX(Math.PI / 10)));
+  assert.equal(a.controle.colocar(), true);
+  await a.controle.sair();
+});
+
+test('pequena falha de hit-test não faz o botão sumir; resultado antigo expira', async () => {
+  const a = ambiente(); await a.controle.iniciar();
+  a.controle.atualizar(a.quadro(new Matrix4()));
+  a.avancarTempo(150); a.controle.atualizar(a.quadro(null));
+  assert.equal(a.reticulo.visible, true);
+  assert.equal(a.estados.at(-1).fase, 'superficie');
+  a.avancarTempo(300); a.controle.atualizar(a.quadro(null));
+  assert.equal(a.reticulo.visible, false);
+  assert.equal(a.controle.colocar(), false);
+  await a.controle.sair();
+});
+
+test('movimento grande ou perda de rastreamento invalida o ponto anterior imediatamente', async () => {
+  const a = ambiente(); await a.controle.iniciar();
+  a.controle.atualizar(a.quadro(new Matrix4()));
+  a.camera.position.x += 0.2; a.camera.updateMatrixWorld();
+  a.controle.atualizar(a.quadro(null));
+  assert.equal(a.controle.colocar(), false);
+  a.controle.atualizar(a.quadro(new Matrix4()));
+  a.controle.atualizar(a.quadro(null, false));
+  a.controle.atualizar(a.quadro(null));
+  assert.equal(a.controle.colocar(), false);
+  await a.controle.sair();
+});
+
+test('não confirma um ponto vencido quando nenhum quadro novo chegou', async () => {
+  const a = ambiente(); await a.controle.iniciar();
+  a.controle.atualizar(a.quadro(new Matrix4()));
+  a.avancarTempo(400);
+  assert.equal(a.controle.colocar(), false);
   await a.controle.sair();
 });
 

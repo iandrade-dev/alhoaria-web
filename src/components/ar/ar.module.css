@@ -5,6 +5,8 @@
 .pagina[data-ar="true"] .fundo { display:none; }
 .overlay { position:absolute; inset:0; z-index:2; pointer-events:none; background:transparent !important; }
 .areaGestos { position:absolute; inset:0; touch-action:none; }
+.mira { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; gap:12px; color:#fff8e7; font-size:11px; text-shadow:0 2px 8px #000; }
+.mira span { width:70px; height:70px; border:2px dashed #ffca83; border-radius:50%; box-shadow:0 0 0 5px #1b120d44; }
 .overlay button, .overlay a, .painel { pointer-events:auto; }
 .overlay button, .overlay a { -webkit-tap-highlight-color:transparent; }
 .overlay button { font:inherit; cursor:pointer; touch-action:manipulation; }

@@ -43,6 +43,7 @@ export default function ExperienciaAR() {
   const [oculto, setOculto] = useState(false);
   const [falhou, setFalhou] = useState(false);
   const [aviso, setAviso] = useState("");
+  const [buscaDemorada, setBuscaDemorada] = useState(false);
   const overlay = useRef<HTMLDivElement>(null);
   const gestosAR = useRef<HTMLDivElement>(null);
   const api = useRef<ApiCena | null>(null);
@@ -90,6 +91,12 @@ export default function ExperienciaAR() {
       if (cabecalho) cabecalho.inert = inerteAntes ?? false;
     };
   }, []);
+  useEffect(() => {
+    setBuscaDemorada(false);
+    if (ar.fase !== "buscando" || !ar.rastreando) return;
+    const timer = setTimeout(() => setBuscaDemorada(true), 5000);
+    return () => clearTimeout(timer);
+  }, [ar.fase, ar.rastreando]);
   useEffect(() => {
     if (lendoURL) return;
     history.replaceState(null, "", `${urlDoPedido(pedido, "/ar")}&modo=${modo}`);
@@ -146,6 +153,7 @@ export default function ExperienciaAR() {
     </Limite3D>
     <div ref={overlay} className={styles.overlay} data-testid="ar-overlay">
       <div ref={gestosAR} className={styles.areaGestos} style={{ pointerEvents: emAR ? "auto" : "none" }} aria-hidden="true" />
+      {ar.fase === "buscando" && ar.rastreando && !painel && <div className={styles.mira} aria-hidden="true"><span />Mire aqui na mesa</div>}
       <header className={styles.topo}>
         <Link href={urlDoPedido(pedido)} className={styles.marca} aria-label="Voltar para a bancada" onClick={() => { void sessao.current?.sair(); }}>
           <ArrowLeft size={17} /><span>ALHOARIA<small>na sua mesa</small></span>
@@ -202,6 +210,7 @@ export default function ExperienciaAR() {
           {emAR && buscando && <button className={styles.primario} onClick={() => sessao.current?.colocar()} disabled={ar.fase !== "superficie" || !ar.rastreando}><MapPin size={20} />Colocar aqui</button>}
           {emAR && !buscando && <button className={styles.secundario} onClick={() => { sessao.current?.reposicionar(); setPainel(false); }}><Maximize size={17} />Escolher outro lugar</button>}
           {((!emAR && ar.mensagem !== ESTADO_3D.mensagem) || emAR) && <p className={styles.nota} role="status">{ar.mensagem}</p>}
+          {buscaDemorada && ar.rastreando && <p className={styles.nota} role="status">Tente outra parte da mesa, com boa iluminação e detalhes visíveis.</p>}
           {aviso && <p className={styles.nota} role="status">{aviso}</p>}
         </section>
 
