@@ -14,6 +14,7 @@ import {
   ADICIONAIS, OPCOES, OPCOES_PADRAO, SEM_OPCAO, brl, novoPedido, opcaoDe, textoDasOpcoes, type GrupoOpcao, type Pedido,
 } from "./cardapio";
 import { PEDIDO_URL } from "@/lib/links";
+import { pedidoDaURL, urlDoPedido } from "@/lib/pedido-url";
 
 const Cena = dynamic(() => import("./Cena"), { ssr: false });
 
@@ -22,7 +23,7 @@ const FOLGA = 56; // px de folga em volta do lanche para soltar a ferramenta
 type Toque = { id: EstacaoId; pointer: number; x: number; y: number; moveu: boolean };
 
 /** Estação que o "Monta pra mim" usa na etapa: a primeira opção do grupo, ou a própria etapa. */
-const estacaoAuto = (p: PassoDef) => (p.grupo ? `${p.id}:${OPCOES[p.grupo][0].id}` : p.id);
+const estacaoAuto = (p: PassoDef, pedido: Pedido | null) => (p.grupo ? `${p.id}:${pedido?.opcoes?.[p.grupo] || OPCOES[p.grupo][0].id}` : p.id);
 const foco = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8b84a]";
 /** Amostra de cor de cada opção (bolinha nos rótulos e nos botões do pão). */
 const AMOSTRA: Record<string, string> = {
@@ -56,6 +57,7 @@ export default function Prototipo() {
   // pedido: nasce com o lanche (opções e adicionais entram na montagem; bebida e acompanhamento depois do lanche pronto)
   const [fase, setFase] = useState<"montagem" | FasePos>("montagem");
   const [pedido, setPedido] = useState<Pedido | null>(null);
+  const pedidoRef = useRef(pedido); pedidoRef.current = pedido;
   const [projPed, setProjPed] = useState<ProjPedido | null>(null);
   const [sacolaPronta, setSacolaPronta] = useState(false);
   // a mão do pedido (potinhos, queijo em dobro) está trabalhando: a montagem espera
@@ -109,7 +111,7 @@ export default function Prototipo() {
     const l = q.get("lanche");
     const inicial = ehLanche(l) ? l : null;
     setLanche(inicial);
-    setPedido(inicial ? novoPedido(inicial) : null);
+    setPedido(inicial ? pedidoDaURL(q, inicial) : null);
     const c = q.get("congelar");
     if (c && inicial) { const [id, t] = c.split(":"); if (LANCHES[inicial].passos.some((p) => p.id === id)) setCongelar({ id, t: Number(t) || 1 }); }
     return () => media.removeEventListener("change", ver);
@@ -147,7 +149,13 @@ export default function Prototipo() {
     const p = passosRef.current[feitosRef.current];
     if (!p) return;
     if (p.tipo === "turbinar") { avancarRef.current(feitosRef.current); return; }
-    disparar(estacaoAuto(p), "auto");
+    // Escolhas vindas do /ar também valem no "Monta pra mim".
+    if (p.grupo && pedidoRef.current?.opcoes?.[p.grupo] === "sem") {
+      const n = p.grupo === "queijo" && passosRef.current[feitosRef.current + 1]?.tipo === "macarico" ? 2 : 1;
+      setPulados((ids) => [...ids, ...passosRef.current.slice(feitosRef.current, feitosRef.current + n).map((p) => p.id)]);
+      avancarRef.current(feitosRef.current, n); return;
+    }
+    disparar(estacaoAuto(p, pedidoRef.current), "auto");
   }, [disparar]);
 
   /** Vai para a etapa seguinte (depois de fazer ou pular a etapa `i`; `n` etapas de uma vez). */
@@ -277,6 +285,9 @@ export default function Prototipo() {
   const dobro = (d: number) => { if (pedido && !animando) somarAdicional(pedido, muda, setAnuncio, "queijo-dobro", d); };
   const resumoAuto = ehPao ? `${textoDasOpcoes(OPCOES_PADRAO)} · sem adicionais` : "Sem adicionais";
   return <div className="fixed inset-0 z-[60] select-none overflow-clip bg-[#120c09] text-[#fff8e7]" style={{ WebkitTouchCallout: "none" }}>
+    <Link href={pedido ? urlDoPedido(pedido, "/ar") : "/ar"} className={`absolute left-3 top-[112px] z-[9] rounded-full border border-[#fff8e7]/25 bg-[#120c09]/85 px-4 py-3 text-xs font-semibold text-[#ffcf8a] min-[700px]:left-6 min-[700px]:top-[84px] ${foco}`}>
+      Ver na minha mesa ↗
+    </Link>
     <style>{`
       @keyframes proto-pop { 0% { transform: scale(1) } 35% { transform: scale(1.42) } 65% { transform: scale(.92) } 100% { transform: scale(1) } }
       @keyframes proto-pulso { 0%,100% { box-shadow: 0 0 0 0 rgba(255,150,60,.55) } 50% { box-shadow: 0 0 0 7px rgba(255,150,60,0) } }
