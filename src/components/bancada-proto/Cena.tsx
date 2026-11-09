@@ -49,8 +49,8 @@ export type Props = {
   /** Câmera: centralizar e o aviso de "fora da posição padrão" (botão Centralizar). */
   camApi: MutableRefObject<ApiCamara | null>;
   aoCamFora: (fora: boolean) => void;
-  /** /ar reutiliza a montagem sem projeções de HUD nem câmera da cozinha. */
-  apresentacao?: { pronto: boolean; pausado: boolean };
+  /** /ar reutiliza a montagem sem a câmera da cozinha; projeta só o ingrediente interativo. */
+  apresentacao?: { pronto: boolean; pausado: boolean; interativo?: boolean; estacao?: string };
   /** Escolhas do pedido que mudam o lanche na tábua (pão parmesão ou roseta). */
   opcoes?: Opcoes | null;
   /** Pedido: potinhos do Turbinar (durante a montagem), bebida, acompanhamento e sacola (depois do lanche pronto). */
@@ -353,6 +353,7 @@ export function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPro
   // ------------------------------------------------ quadro a quadro
   const ray = useMemo(() => ({ r: new Raycaster(), ndc: new Vector2(), plano: new Plane(new Vector3(0, 1, 0), -0.14), hit: new Vector3() }), []);
   const ultimaProj = useRef("");
+  const tempoProj = useRef(0);
   const relogio = useRef(0);
   const tmp = useMemo(() => ({ a: new Vector3(), b: new Vector3(), q: new Quaternion(), e: new Euler(), m: new Matrix4(), s: new Vector3(1, 1, 1), qq: new Quaternion() }), []);
 
@@ -368,7 +369,7 @@ export function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPro
     const atv = ativoRef.current;
     Object.keys(lista).forEach((id) => {
       const st = lista[id];
-      const alvo = atv === passoDe(id) ? 1 : 0;
+      const alvo = atv === passoDe(id) && (!apresentacaoRef.current?.interativo || !apresentacaoRef.current.estacao || apresentacaoRef.current.estacao === id) ? 1 : 0;
       st.brilho += (alvo - st.brilho) * Math.min(1, dt * 6);
       const pul = red ? 0.8 : 0.72 + 0.28 * Math.sin(T * 3.4);
       (st.anel.material as MeshBasicMaterial).opacity = st.brilho * pul * 0.95;
@@ -399,9 +400,17 @@ export function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPro
       m.solta = false; m.k = 320; m.c = 26;
       const r = gl.domElement.getBoundingClientRect();
       ray.ndc.set(((d.x - r.left) / r.width) * 2 - 1, -((d.y - r.top) / r.height) * 2 + 1);
-      ray.r.setFromCamera(ray.ndc, camera);
-      ray.plano.constant = -(MESA + 0.1 + st.alto * 0.25);
-      if (ray.r.ray.intersectPlane(ray.plano, ray.hit)) m.alvo.copy(ray.hit).sub(tmp.a.set(0, st.alto * 0.25, 0));
+      const cameraToque = gl.xr.isPresenting ? gl.xr.getCamera().cameras[0] ?? camera : camera;
+      ray.r.setFromCamera(ray.ndc, cameraToque);
+      ray.plano.set(tmp.a.set(0, 1, 0), -(MESA + 0.1 + st.alto * 0.25));
+      if (apresentacaoRef.current) {
+        raizLocal.current!.updateWorldMatrix(true, false);
+        ray.plano.applyMatrix4(raizLocal.current!.matrixWorld);
+      }
+      if (ray.r.ray.intersectPlane(ray.plano, ray.hit)) {
+        if (apresentacaoRef.current) raizLocal.current!.worldToLocal(ray.hit);
+        m.alvo.copy(ray.hit).sub(tmp.a.set(0, st.alto * 0.25, 0));
+      }
     }
     (Object.keys(molas.current) as EstacaoId[]).forEach((id) => {
       const m = molas.current[id]!;
@@ -495,23 +504,35 @@ export function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPro
       }
     }
 
-    if (apresentacaoRef.current) return;
+    if (apresentacaoRef.current && !apresentacaoRef.current.interativo) return;
+    if (apresentacaoRef.current && performance.now() - tempoProj.current < 50) return;
+    tempoProj.current = performance.now();
     // tempo da ação atual, para o QA tirar prints no meio de cada ação
     (window as unknown as { __protoT: number }).__protoT = at.current ? at.current.t : -1;
     (window as unknown as { __protoId: string | null }).__protoId = at.current ? at.current.id : null;
     // projeção das estações e do lanche para o HUD (só quando muda)
-    const proj = (x: number, y: number, z: number) => { tmp.a.set(x, y, z).project(camera); return [(tmp.a.x + 1) / 2 * size.width, (1 - tmp.a.y) / 2 * size.height]; };
+    const cameraTela = gl.xr.isPresenting ? gl.xr.getCamera().cameras[0] ?? camera : camera;
+    const proj = (x: number, y: number, z: number) => {
+      tmp.a.set(x, y, z);
+      if (apresentacaoRef.current) raizLocal.current!.localToWorld(tmp.a);
+      tmp.a.project(cameraTela);
+      return [(tmp.a.x + 1) / 2 * size.width, (1 - tmp.a.y) / 2 * size.height, tmp.a.z];
+    };
     const est = {} as Record<EstacaoId, { x: number; y: number; r: number }>;
     Object.keys(lista).forEach((id) => {
       const st = lista[id]; const p = st.raiz.position;
-      const [cx, cy] = proj(p.x, MESA + st.alto * 0.45, p.z);
+      const [cx, cy, profundidade] = proj(p.x, MESA + st.alto * 0.45, p.z);
+      if (apresentacaoRef.current && (profundidade < -1 || profundidade > 1 || !Number.isFinite(cx + cy))) return;
       const [ex] = proj(p.x + st.raio, MESA + st.alto * 0.45, p.z);
-      est[id] = { x: Math.round(cx), y: Math.round(cy), r: Math.round(Math.max(30, Math.abs(ex - cx) * 1.25)) };
+      est[id] = { x: Math.round(cx), y: Math.round(cy), r: Math.round(apresentacaoRef.current ? Math.min(65, Math.max(24, Math.abs(ex - cx) * 1.25)) : Math.max(30, Math.abs(ex - cx) * 1.25)) };
     });
     const xs: number[] = [], ys: number[] = [];
     const cx = K.caixa;
-    for (const x of cx.x) for (const y of cx.y) for (const z of cx.z) { const [px, py] = proj(x, y, z); xs.push(px); ys.push(py); }
-    const lan = { x0: Math.round(Math.min(...xs)), y0: Math.round(Math.min(...ys)), x1: Math.round(Math.max(...xs)), y1: Math.round(Math.max(...ys)) };
+    for (const x of cx.x) for (const y of cx.y) for (const z of cx.z) {
+      const [px, py, profundidade] = proj(x, y, z);
+      if (!apresentacaoRef.current || (profundidade >= -1 && profundidade <= 1 && Number.isFinite(px + py))) { xs.push(px); ys.push(py); }
+    }
+    const lan = xs.length ? { x0: Math.round(Math.min(...xs)), y0: Math.round(Math.min(...ys)), x1: Math.round(Math.max(...xs)), y1: Math.round(Math.max(...ys)) } : { x0: 0, y0: 0, x1: 0, y1: 0 };
     const chave = JSON.stringify([est, lan, arranjo]);
     if (chave !== ultimaProj.current) { ultimaProj.current = chave; aoProjetar({ estacoes: est, lanche: lan, arranjo }); }
   });

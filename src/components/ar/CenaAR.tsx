@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useRef, type MutableRefObject, type RefOb
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, useGLTF } from "@react-three/drei";
 import { Group, Mesh, MeshStandardMaterial, PerspectiveCamera, Vector3 } from "three";
-import { Ambiente, Mundo, type ApiCena, type Bus } from "../bancada-proto/Cena";
+import { Ambiente, Mundo, type ApiCena, type Bus, type Projecao } from "../bancada-proto/Cena";
 import { clonar } from "../bancada-proto/kit";
 import type { Medidas } from "../bancada-proto/acoes";
 import type { LancheDef } from "../bancada-proto/layout";
@@ -18,6 +18,7 @@ export type PropsCenaAR = {
   ar: EstadoAR; giro: number; zoom: number; aoZoom: (valor: number) => void;
   painelAberto: boolean; overlay: RefObject<HTMLDivElement | null>; gestosAR: RefObject<HTMLDivElement | null>;
   api: MutableRefObject<ApiCena | null>; sessao: MutableRefObject<SessaoMesa | null>;
+  bus: MutableRefObject<Bus>; interativo: boolean; estacao: string | undefined; aoProjetar: (p: Projecao) => void;
   aoPronto: () => void; aoFim: (id: string) => void; aoEstadoAR: (e: EstadoAR) => void; aoFalhar: () => void;
 };
 const ignorar = () => {};
@@ -39,7 +40,6 @@ function Conteudo(props: PropsCenaAR) {
   const { gl, camera, invalidate, size } = useThree();
   const origem = useRef<Group>(null);
   const reticulo = useRef<Mesh>(null);
-  const bus = useRef<Bus>({ drag: { ativo: false, id: null, x: 0, y: 0 } });
   const camApi = useRef<ApiCamara | null>(null);
   const M = useMemo<Medidas>(() => ({ pasta: 0.05, costela: 0.08, creme: 0.085, muss: 0.1,
     fora: new Vector3(0.5, 0.16, 0.1), h: {}, p: {} }), [props.def.id, props.rodada]);
@@ -103,7 +103,8 @@ function Conteudo(props: PropsCenaAR) {
     camera.position.set(0.65, 0.65 - mesa[1], 1.15).multiplyScalar(distancia);
     camera.position.y += mesa[1]; camera.lookAt(...mesa);
     if (camera instanceof PerspectiveCamera) {
-      camera.setViewOffset(size.width, size.height, 0, props.painelAberto && size.width <= 700 ? size.height * 0.18 : 0, size.width, size.height);
+      const deslocamento = size.width <= 700 ? props.painelAberto ? 0.18 : !props.pronto ? 0.11 : 0 : 0;
+      camera.setViewOffset(size.width, size.height, 0, size.height * deslocamento, size.width, size.height);
     }
     camera.updateProjectionMatrix(); invalidate();
   }, [emAR, camera, invalidate, size.width, size.height, props.pronto, props.painelAberto]);
@@ -120,7 +121,7 @@ function Conteudo(props: PropsCenaAR) {
     <directionalLight position={[1, 2, 1.5]} intensity={2.4} color="#ffe1b5" />
     <directionalLight position={[-1, 1, -1]} intensity={0.8} color="#ffffff" />
     <Ambiente />
-    {!emAR && <OrbitControls makeDefault target={mesa} minDistance={0.48} maxDistance={4.5}
+    {!emAR && <OrbitControls makeDefault enabled={!props.bus.current.drag.ativo} target={mesa} minDistance={0.48} maxDistance={4.5}
       maxPolarAngle={Math.PI / 2.1} enableZoom={false} enablePan={false} enableDamping />}
     <mesh ref={reticulo} matrixAutoUpdate={false} visible={false}>
       <ringGeometry args={[0.085, 0.1, 48]} onUpdate={(g) => { g.rotateX(-Math.PI / 2); }} />
@@ -131,10 +132,10 @@ function Conteudo(props: PropsCenaAR) {
       <group rotation={[0, props.giro, 0]} position={[0, 0.028, 0]}>
         <Suspense fallback={null}>
           <Mundo key={`${props.def.id}:${props.rodada}`} def={props.def} arranjo="retrato" M={M}
-            ativo={props.ativo} reduzido={props.reduzido} bus={bus} api={props.api}
-            aoFim={props.aoFim} aoPronto={props.aoPronto} aoProjetar={ignorar} congelar={null}
+            ativo={props.ativo} reduzido={props.reduzido} bus={props.bus} api={props.api}
+            aoFim={props.aoFim} aoPronto={props.aoPronto} aoProjetar={props.aoProjetar} congelar={null}
             camApi={camApi} aoCamFora={ignorar} opcoes={props.opcoes}
-            apresentacao={{ pronto: props.pronto, pausado: props.pausado }} />
+            apresentacao={{ pronto: props.pronto, pausado: props.pausado, interativo: props.interativo, estacao: props.estacao }} />
         </Suspense>
         {props.bebida && <Suspense fallback={null}><Bebida3D bebida={props.bebida} /></Suspense>}
         {props.porcao && <Suspense fallback={null}><Peca arquivo={`porcao-${props.porcao}`} x={-0.25} /></Suspense>}

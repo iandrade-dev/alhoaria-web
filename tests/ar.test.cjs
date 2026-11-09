@@ -155,6 +155,76 @@ test('hit-test que termina depois da saída é cancelado e não reabre AR', asyn
   assert.equal(a.estados.at(-1).fase, '3d');
 });
 
+test('posição manual funciona sem hit-test e não depende de uma superfície', async () => {
+  let recursos;
+  const a = ambiente((modo, opcoes) => { recursos = opcoes; return Promise.resolve(a.sessao); });
+  a.sessao.requestHitTestSource = async () => { throw new Error('indisponível'); };
+  await a.controle.iniciar();
+  assert.deepEqual(recursos.requiredFeatures, ['dom-overlay']);
+  assert.deepEqual(recursos.optionalFeatures, ['hit-test']);
+  assert.equal(a.controle.colocarManualmente(), false, 'espera uma pose válida da câmera');
+  a.controle.atualizar(a.quadro(null));
+  assert.equal(a.estados.at(-1).podeManual, true);
+  assert.equal(a.controle.colocarManualmente(), true);
+  assert.equal(a.estados.at(-1).fase, 'ajustando');
+  assert.deepEqual(a.origem.position.toArray(), [0, 0.65, 0.35]);
+  a.controle.ajustarAltura(0.2); a.controle.ajustarAltura(0.2);
+  assert.ok(Math.abs(a.origem.position.y - 0.85) < 1e-8, 'altura absoluta não acumula');
+  a.controle.ajustarAltura(99); a.controle.ajustarDistancia(99);
+  assert.equal(a.estados.at(-1).ajusteAltura, 0.6);
+  assert.equal(a.estados.at(-1).ajusteDistancia, 1.5);
+  a.controle.ajustarAltura(NaN); a.controle.ajustarDistancia(Infinity);
+  assert.ok(a.origem.position.toArray().every(Number.isFinite));
+  assert.equal(a.controle.confirmarManual(), true);
+  const fixo = a.origem.position.toArray();
+  a.camera.position.x += 1; a.camera.updateMatrixWorld();
+  a.controle.atualizar(a.quadro(new Matrix4().makeTranslation(9, 9, 9)));
+  assert.deepEqual(a.origem.position.toArray(), fixo, 'câmera e superfícies não puxam o lanche');
+  assert.equal(a.controle.editarPosicao(), true);
+  assert.deepEqual(a.origem.position.toArray(), fixo, 'abrir ajustes não provoca salto');
+  a.controle.atualizar(a.quadro(null, false));
+  a.controle.ajustarAltura(-0.2);
+  assert.equal(a.controle.confirmarManual(), false);
+  assert.deepEqual(a.origem.position.toArray(), fixo);
+  assert.equal(a.origem.visible, false);
+  a.controle.atualizar(a.quadro(null));
+  assert.equal(a.origem.visible, true);
+  a.referencia.dispatchEvent(new Event('reset'));
+  assert.equal(a.controle.colocarManualmente(), false);
+  assert.equal(a.estados.at(-1).manual, false);
+  await a.controle.sair();
+});
+
+test('posição manual fica disponível enquanto hit-test demora e ignora o resultado tardio', async () => {
+  const a = ambiente(); let resolver;
+  a.sessao.requestHitTestSource = () => new Promise((r) => { resolver = r; });
+  const inicio = a.controle.iniciar();
+  for (let i = 0; !resolver && i < 100; i++) await new Promise((r) => setImmediate(r));
+  assert.ok(resolver);
+  a.controle.atualizar(a.quadro(null));
+  assert.equal(a.controle.colocarManualmente(), true);
+  const fixo = a.origem.position.toArray();
+  resolver({ cancel() {} }); await inicio;
+  a.controle.atualizar(a.quadro(new Matrix4().makeTranslation(9, 9, 9)));
+  assert.deepEqual(a.origem.position.toArray(), fixo);
+  assert.equal(a.estados.at(-1).fase, 'ajustando');
+  await a.controle.sair();
+});
+
+test('pose inválida bloqueia posição manual; olhar para baixo mantém direção horizontal válida', async () => {
+  const a = ambiente(); await a.controle.iniciar();
+  a.camera.matrixWorld.elements[0] = NaN;
+  a.controle.atualizar(a.quadro(null));
+  assert.equal(a.estados.at(-1).podeManual, false);
+  assert.equal(a.controle.colocarManualmente(), false);
+  a.camera.rotation.x = -Math.PI / 2; a.camera.updateMatrixWorld();
+  a.controle.atualizar(a.quadro(null));
+  assert.equal(a.controle.colocarManualmente(), true);
+  assert.ok(a.origem.position.toArray().every(Number.isFinite));
+  assert.ok(Math.abs(Math.hypot(a.origem.position.x - a.camera.position.x, a.origem.position.z - a.camera.position.z) - 0.65) < 1e-8);
+  await a.controle.sair();
+});
+
 test('receitas preservam as escolhas e sem queijo também remove o maçarico', () => {
   const p = pedidoDaURL(new URLSearchParams('pao=roseta&pasta=tradicional&creme=sem&queijo=sem'), 'costela');
   const passos = sequencia(LANCHES.costela, p.opcoes);

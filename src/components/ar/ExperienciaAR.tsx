@@ -3,14 +3,15 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, Check, ChevronDown, ChevronLeft, ChevronRight, Hand, MapPin, Maximize, Minus, Pause, Play, Plus, RotateCcw, RotateCw, ScanLine, Share2, SlidersHorizontal, UtensilsCrossed, X } from "lucide-react";
-import { LANCHES, ORDEM_LANCHES, ehLanche, type LancheId } from "../bancada-proto/layout";
+import { ArrowLeft, Check, ChevronDown, ChevronLeft, ChevronRight, Hand, MapPin, Minus, Pause, Play, Plus, RotateCcw, RotateCw, ScanLine, Share2, SlidersHorizontal, UtensilsCrossed, X } from "lucide-react";
+import { LANCHES, ORDEM_LANCHES, ehLanche, opcaoDaEstacao, passoDe, type LancheId } from "../bancada-proto/layout";
 import { BEBIDAS, LANCHES_PRECO, OPCOES, OPCOES_PADRAO, PORCOES, SABORES_LATA, SABORES_SODA, SEM_OPCAO, brl, novoPedido, totalDoPedido, type Bebida, type GrupoOpcao, type Pedido, type PorcaoId, type SaborLata, type SaborSoda } from "../bancada-proto/cardapio";
-import type { ApiCena } from "../bancada-proto/Cena";
+import type { ApiCena, Bus, Modo as ModoAcao, Projecao } from "../bancada-proto/Cena";
 import { ESTADO_3D, type SessaoMesa, type EstadoAR } from "./sessao";
 import { sequencia, estacao } from "./sequencia";
 import { pedidoDaURL, urlDoPedido } from "@/lib/pedido-url";
 import styles from "./ar.module.css";
+import Ingredientes from "./Ingredientes";
 
 const CenaAR = dynamic(() => import("./CenaAR"), { ssr: false });
 type Modo = "pronto" | "assistir" | "etapas";
@@ -43,21 +44,25 @@ export default function ExperienciaAR() {
   const [oculto, setOculto] = useState(false);
   const [falhou, setFalhou] = useState(false);
   const [aviso, setAviso] = useState("");
-  const [buscaDemorada, setBuscaDemorada] = useState(false);
+  const [proj, setProj] = useState<Projecao | null>(null);
   const overlay = useRef<HTMLDivElement>(null);
   const gestosAR = useRef<HTMLDivElement>(null);
   const api = useRef<ApiCena | null>(null);
   const sessao = useRef<SessaoMesa | null>(null);
+  const bus = useRef<Bus>({ drag: { ativo: false, id: null, x: 0, y: 0 } });
+  const emAcao = useRef(false);
   const def = LANCHES[pedido.lanche];
   const passos = useMemo(() => sequencia(def, pedido.opcoes), [def, pedido.opcoes]);
   const emAR = ar.fase !== "3d" && ar.fase !== "iniciando";
-  const buscando = emAR && ar.fase !== "colocado";
-  const bloquearAnimacao = pausado || oculto || ar.fase === "iniciando" || (emAR && (buscando || !ar.rastreando));
+  const ajustando = ar.fase === "ajustando";
+  const buscando = emAR && ar.fase !== "colocado" && !ajustando;
+  const bloquearAnimacao = pausado || oculto || ar.fase === "iniciando" || (emAR && (buscando || ajustando || !ar.rastreando));
   const terminou = etapa >= passos.length;
   const mostrarPronto = modo === "pronto" || terminou;
   const aoPronto = useCallback(() => setCarregado(true), []);
   const aoFalhar = useCallback(() => setFalhou(true), []);
-  const aoFim = useCallback(() => { setAnimando(false); setEtapa((v) => v + 1); }, []);
+  const aoFim = useCallback(() => { emAcao.current = false; setAnimando(false); setEtapa((v) => v + 1); }, []);
+  const interativo = modo === "etapas" && !terminou && !animando && !bloquearAnimacao && carregado;
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
@@ -92,12 +97,6 @@ export default function ExperienciaAR() {
     };
   }, []);
   useEffect(() => {
-    setBuscaDemorada(false);
-    if (ar.fase !== "buscando" || !ar.rastreando) return;
-    const timer = setTimeout(() => setBuscaDemorada(true), 5000);
-    return () => clearTimeout(timer);
-  }, [ar.fase, ar.rastreando]);
-  useEffect(() => {
     if (lendoURL) return;
     history.replaceState(null, "", `${urlDoPedido(pedido, "/ar")}&modo=${modo}`);
   }, [pedido, modo, lendoURL]);
@@ -108,12 +107,13 @@ export default function ExperienciaAR() {
     if (!carregado || modo !== "assistir" || terminou || animando || bloquearAnimacao) return;
     const timer = setTimeout(() => {
       if (!api.current) return;
-      setAnimando(true); api.current.acao(estacao(passos[etapa], pedido.opcoes), "auto");
+      emAcao.current = true; setAnimando(true); api.current.acao(estacao(passos[etapa], pedido.opcoes), "auto");
     }, 350);
     return () => clearTimeout(timer);
   }, [carregado, modo, terminou, animando, bloquearAnimacao, passos, etapa, pedido.opcoes]);
 
   const reiniciar = (m: Modo = modo) => {
+    bus.current.drag.ativo = false; emAcao.current = false; setProj(null);
     api.current = null; setCarregado(false); setAnimando(false); setEtapa(0); setPausado(false);
     setModo(m); setRodada((v) => v + 1);
   };
@@ -126,10 +126,13 @@ export default function ExperienciaAR() {
     setPedido((p) => ({ ...p, opcoes: p.opcoes ? { ...p.opcoes, [grupo]: valor } : null }));
     reiniciar("pronto");
   };
-  const avancar = () => {
-    if (!api.current || animando || terminou || bloquearAnimacao) return;
-    setAnimando(true); api.current.acao(estacao(passos[etapa], pedido.opcoes), "toque");
+  const usarIngrediente = (id: string, acao: ModoAcao) => {
+    if (!api.current || emAcao.current || terminou || bloquearAnimacao || !carregado || passoDe(id) !== passos[etapa].id) return;
+    const grupo = passos[etapa].grupo, opcao = opcaoDaEstacao(id);
+    if (grupo && opcao) setPedido((p) => ({ ...p, opcoes: p.opcoes ? { ...p.opcoes, [grupo]: opcao } : null }));
+    emAcao.current = true; setAnimando(true); api.current.acao(id, acao);
   };
+  const avancar = () => usarIngrediente(estacao(passos[etapa], pedido.opcoes), "toque");
   const abrirAR = () => {
     if (!sessao.current || !carregado) return;
     setZoom(1);
@@ -144,22 +147,23 @@ export default function ExperienciaAR() {
     } catch (e) { if (!(e instanceof DOMException && e.name === "AbortError")) setAviso("Não foi possível compartilhar agora. O endereço desta página também abre o lanche."); }
   };
 
-  return <div className={styles.pagina} data-testid="experiencia-ar" data-ar={emAR}>
+  return <div className={styles.pagina} data-testid="experiencia-ar" data-ar={emAR} data-ajustando={ajustando}>
     <div className={styles.fundo} aria-hidden="true" />
     <Limite3D falhar={aoFalhar}>
       {!lendoURL && !falhou && <CenaAR def={def} rodada={rodada} pronto={mostrarPronto} pausado={bloquearAnimacao} reduzido={reduzido}
         ativo={modo !== "pronto" && !terminou ? passos[etapa].id : null} opcoes={pedido.opcoes} bebida={pedido.bebida} porcao={pedido.porcao}
-        ar={ar} giro={giro} zoom={zoom} aoZoom={mudarZoom} painelAberto={painel} overlay={overlay} gestosAR={gestosAR} api={api} sessao={sessao} aoPronto={aoPronto} aoFim={aoFim} aoEstadoAR={setAR} aoFalhar={aoFalhar} />}
+        ar={ar} giro={giro} zoom={zoom} aoZoom={mudarZoom} painelAberto={painel} overlay={overlay} gestosAR={gestosAR} api={api} sessao={sessao}
+        bus={bus} interativo={interativo} estacao={interativo ? estacao(passos[etapa], pedido.opcoes) : undefined} aoProjetar={setProj}
+        aoPronto={aoPronto} aoFim={aoFim} aoEstadoAR={setAR} aoFalhar={aoFalhar} />}
     </Limite3D>
     <div ref={overlay} className={styles.overlay} data-testid="ar-overlay">
       <div ref={gestosAR} className={styles.areaGestos} style={{ pointerEvents: emAR ? "auto" : "none" }} aria-hidden="true" />
-      {ar.fase === "buscando" && ar.rastreando && !painel && <div className={styles.mira} aria-hidden="true"><span />Mire aqui na mesa</div>}
       <header className={styles.topo}>
         <Link href={urlDoPedido(pedido)} className={styles.marca} aria-label="Voltar para a bancada" onClick={() => { void sessao.current?.sair(); }}>
           <ArrowLeft size={17} /><span>ALHOARIA<small>na sua mesa</small></span>
         </Link>
         <div className={styles.topoAcoes}>
-          <span className={styles.selo}><span />{emAR ? "Na sua mesa" : "Explorar em 3D"}</span>
+          <span className={styles.selo}><span />{emAR ? ar.manual ? "Posição manual" : "Na sua mesa" : "Explorar em 3D"}</span>
           {!emAR && <button className={styles.icone} onClick={compartilhar} aria-label="Compartilhar este lanche"><Share2 size={18} /></button>}
           {emAR && <button className={styles.icone} onClick={() => { void sessao.current?.sair(); }} aria-label="Sair da realidade aumentada"><X size={18} /></button>}
         </div>
@@ -168,7 +172,7 @@ export default function ExperienciaAR() {
       <div className={styles.apresentacao}>
         <p className={styles.sobrancelha}>{emAR ? "UM POUCO DE ALHO. BASTANTE PRESENÇA." : "PODE OLHAR DE PERTINHO"}</p>
         <h1>{def.nome}</h1>
-        <p>{modo === "pronto" ? "Do nosso pão de alho para a sua mesa." : modo === "assistir" ? "Veja cada camada ganhar seu lugar." : "Um toque, uma camada. O capricho é seu."}</p>
+        <p>{modo === "pronto" ? "Do nosso pão de alho para a sua mesa." : modo === "assistir" ? "Veja cada camada ganhar seu lugar." : "Toque ou arraste o ingrediente destacado."}</p>
       </div>
 
       {falhou ? <section className={styles.erro} role="alert">
@@ -178,16 +182,27 @@ export default function ExperienciaAR() {
         <button className={styles.secundario} onClick={() => window.location.reload()}>Tentar o 3D novamente</button>
       </section> : <>
         {!carregado && <div className={styles.carregando} role="status"><span /><p>Caprichando no seu lanche…</p></div>}
-        <div className={styles.ferramentas} role="group" aria-label="Zoom e rotação">
+        {interativo && proj && !painel && <Ingredientes proj={proj} passo={passos[etapa]} opcoes={pedido.opcoes} bus={bus} api={api} aoUsar={usarIngrediente} />}
+        {!ajustando && <div className={styles.ferramentas} role="group" aria-label="Zoom e rotação">
           <button className={styles.icone} aria-label="Aumentar zoom" onClick={() => mudarZoom(zoom * 1.2)} disabled={!carregado || zoom >= 2.5}><Plus size={20} /></button>
           <button className={`${styles.icone} ${styles.percentualZoom}`} onClick={() => setZoom(1)} disabled={!carregado} aria-label={`Restaurar zoom para 100%. Zoom atual: ${Math.round(zoom * 100)}%`} title="Restaurar zoom">{Math.round(zoom * 100)}%</button>
           <button className={styles.icone} aria-label="Diminuir zoom" onClick={() => mudarZoom(zoom / 1.2)} disabled={!carregado || zoom <= 0.5}><Minus size={20} /></button>
           <button className={styles.icone} aria-label="Girar lanche para a esquerda" onClick={() => setGiro((g) => g - Math.PI / 6)} disabled={!carregado}><RotateCcw size={19} /></button>
           <button className={styles.icone} aria-label="Girar lanche para a direita" onClick={() => setGiro((g) => g + Math.PI / 6)} disabled={!carregado}><RotateCw size={19} /></button>
           {emAR && <button className={styles.icone} onClick={() => { sessao.current?.reposicionar(); setPainel(false); }} aria-label="Escolher outro lugar"><MapPin size={19} /></button>}
-        </div>
+        </div>}
 
         <section className={styles.rodape} aria-label="Controles do lanche">
+          {ajustando ? <div className={styles.ajusteManual} aria-label="Ajustar posição manual">
+            <h2>Ajuste na sua mesa</h2>
+            <p>Encoste a tábua na mesa usando a altura.</p>
+            <label><span>Mais baixo</span><input type="range" min="-0.6" max="0.6" step="0.02" value={ar.ajusteAltura}
+              aria-label="Altura do lanche" disabled={!ar.rastreando} onChange={(e) => sessao.current?.ajustarAltura(Number(e.target.value))} /><span>Mais alto</span></label>
+            <label><span>Mais perto</span><input type="range" min="0.35" max="1.5" step="0.05" value={ar.ajusteDistancia}
+              aria-label="Distância do lanche" disabled={!ar.rastreando} onChange={(e) => sessao.current?.ajustarDistancia(Number(e.target.value))} /><span>Mais longe</span></label>
+            <button className={styles.primario} disabled={!ar.rastreando} onClick={() => sessao.current?.confirmarManual()}><Check size={18} />Pronto, ficou bom</button>
+            {!ar.rastreando && <p role="status">{ar.mensagem}</p>}
+          </div> : <>
           <div className={styles.modos} role="group" aria-label="Modo de visualização">
             {MODOS.map(({ id, nome, icone: Icone }) => <button key={id} aria-pressed={modo === id} onClick={() => reiniciar(id)}><Icone size={16} />{nome}</button>)}
           </div>
@@ -197,24 +212,34 @@ export default function ExperienciaAR() {
             <div><span>{terminou ? "Feito com capricho!" : `${etapa + 1}/${passos.length} · ${passos[etapa].nome}`}</span>
               {terminou ? <button onClick={() => reiniciar()} aria-label="Repetir montagem"><RotateCcw size={16} />Repetir</button>
                 : modo === "assistir" ? <button onClick={() => setPausado((p) => !p)} disabled={!carregado}>{pausado ? <Play size={16} /> : <Pause size={16} />}{pausado ? "Continuar" : "Pausar"}</button>
-                  : <button onClick={avancar} disabled={!carregado || animando || bloquearAnimacao}><Hand size={16} />{animando ? "Montando…" : "Adicionar"}</button>}
+                  : <button onClick={avancar} disabled={!carregado || animando || bloquearAnimacao}><Hand size={16} />{animando ? "Montando…" : "Fazer etapa"}</button>}
             </div>
+            {modo === "etapas" && !terminou && <div className={styles.dicaMontagem}>
+              <p>{animando ? "Preparando esta camada…" : passos[etapa].tipo === "tampa" || passos[etapa].tipo === "dog-tampa" ? "Toque no pão destacado para fechar." : "Toque no ingrediente destacado ou arraste até o lanche."}</p>
+              {!animando && passos[etapa].grupo && <div className={styles.chips} aria-label={`Opções de ${passos[etapa].nome}`}>
+                {OPCOES[passos[etapa].grupo!].map((o) => <button key={o.id} aria-pressed={pedido.opcoes?.[passos[etapa].grupo!] === o.id}
+                  onClick={() => { const g = passos[etapa].grupo!; setPedido((p) => ({ ...p, opcoes: p.opcoes ? { ...p.opcoes, [g]: o.id } : null })); }}>{o.nome}</button>)}
+              </div>}
+            </div>}
           </div>}
 
-          {!emAR && <button className={styles.primario} onClick={suporte === false ? compartilhar : abrirAR} disabled={!carregado || suporte === null || ar.fase === "iniciando"}>
+          {!emAR && (modo === "pronto" || suporte !== false) && <button className={modo === "pronto" ? styles.primario : styles.secundario} onClick={suporte === false ? compartilhar : abrirAR} disabled={!carregado || suporte === null || ar.fase === "iniciando"}>
             {suporte === false ? <Share2 size={20} /> : <ScanLine size={20} />}{ar.fase === "iniciando" ? "Abrindo a câmera…" : suporte === false ? "Compartilhar este lanche" : "Ver na minha mesa"}
           </button>}
-          {!emAR && <p className={styles.nota}>{suporte === null ? "Conferindo a realidade aumentada deste aparelho…"
-            : suporte ? "Sem aplicativo. Aponte a câmera e escolha o lugar."
+          {!emAR && modo === "pronto" && <p className={styles.nota}>{suporte === null ? "Conferindo a realidade aumentada deste aparelho…"
+            : suporte ? "Sem aplicativo. Abra a câmera e ajuste a posição."
               : "Explore em 3D aqui. Para usar a câmera, abra no Chrome de um Android compatível com AR."}</p>}
-          {emAR && buscando && <button className={styles.primario} onClick={() => sessao.current?.colocar()} disabled={ar.fase !== "superficie" || !ar.rastreando}><MapPin size={20} />Colocar aqui</button>}
-          {emAR && !buscando && <button className={styles.secundario} onClick={() => { sessao.current?.reposicionar(); setPainel(false); }}><Maximize size={17} />Escolher outro lugar</button>}
+          {emAR && buscando && <>
+            <button className={styles.primario} onClick={() => { setPainel(false); sessao.current?.colocarManualmente(); }} disabled={!ar.podeManual}><MapPin size={20} />Posicionar manualmente</button>
+            {ar.fase === "superficie" && <button className={styles.secundario} onClick={() => sessao.current?.colocar()} disabled={!ar.rastreando}>Usar ponto detectado</button>}
+          </>}
+          {emAR && !buscando && <button className={styles.secundario} onClick={() => { setPainel(false); sessao.current?.editarPosicao(); }} disabled={!ar.rastreando}><SlidersHorizontal size={17} />Ajustar posição</button>}
           {((!emAR && ar.mensagem !== ESTADO_3D.mensagem) || emAR) && <p className={styles.nota} role="status">{ar.mensagem}</p>}
-          {buscaDemorada && ar.rastreando && <p className={styles.nota} role="status">Tente outra parte da mesa, com boa iluminação e detalhes visíveis.</p>}
           {aviso && <p className={styles.nota} role="status">{aviso}</p>}
+          </>}
         </section>
 
-        <aside className={`${styles.painel} ${painel ? styles.aberto : ""}`} aria-label="Personalizar lanche">
+        {!ajustando && <aside className={`${styles.painel} ${painel ? styles.aberto : ""}`} aria-label="Personalizar lanche">
           <button className={styles.abrirPainel} aria-expanded={painel} aria-controls="opcoes-ar" onClick={() => setPainel((v) => !v)}>
             <SlidersHorizontal size={18} /><span>Do seu jeito<small>{nomeBebida(pedido.bebida)}{pedido.porcao ? ` · ${PORCOES[pedido.porcao].nome}` : ""}</small></span>
             <ChevronDown size={18} />
@@ -246,7 +271,7 @@ export default function ExperienciaAR() {
             </div>
             <div className={styles.total}><span>A partir de <strong>{brl(totalDoPedido(pedido))}</strong></span><Link href={urlDoPedido(pedido)} onClick={() => { void sessao.current?.sair(); }}>Montar pedido <ChevronRight size={15} /></Link></div>
           </div>
-        </aside>
+        </aside>}
 
         {!painel && !emAR && modo === "pronto" && <nav className={styles.seletor} aria-label="Escolher lanche">
           <button className={styles.seta} aria-label="Lanche anterior" onClick={() => escolher(ORDEM_LANCHES[(ORDEM_LANCHES.indexOf(pedido.lanche) + ORDEM_LANCHES.length - 1) % ORDEM_LANCHES.length])}><ChevronLeft size={20} /></button>
