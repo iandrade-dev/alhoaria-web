@@ -110,16 +110,28 @@ function Bebida3D({ bebida }: { bebida: Bebida }) {
   return <Peca arquivo={`beb-${bebida.id}`} x={0.25} cor={cor} />;
 }
 function Peca({ arquivo, x, cor }: { arquivo: string; x: number; cor?: string }) {
+  const invalidate = useThree((s) => s.invalidate);
   const { scene } = useGLTF(`/assets/models/bancada/${arquivo}.glb`);
   const peca = useMemo(() => clonar(scene), [scene]);
   useEffect(() => {
     peca.traverse((o) => {
-      if (!(o instanceof Mesh) || !cor || !(o.material instanceof MeshStandardMaterial)) return;
-      if (o.name.includes("lata_corpo") || o.name.includes("soda_liquido")) {
+      if (!(o instanceof Mesh) || !(o.material instanceof MeshStandardMaterial)) return;
+      if (o.material.transparent) o.material.depthWrite = false;
+      if (o.name.includes("soda_liquido")) o.renderOrder = 1;
+      else if (o.name.includes("soda_gelo")) o.renderOrder = 2;
+      else if (o.name.includes("soda_vidro")) o.renderOrder = 3;
+      else if (o.name.includes("soda_gota")) o.renderOrder = 4;
+      if (cor && (o.name.includes("lata_corpo") || o.name.includes("soda_liquido"))) {
         o.material.map = null; o.material.vertexColors = false; o.material.color.set(cor); o.material.needsUpdate = true;
+        if (o.name.includes("soda_liquido")) {
+          o.material.opacity = 0.82; o.material.roughness = 0.24;
+          o.material.emissive.set(cor).multiplyScalar(0.04);
+        }
       }
     });
-  }, [peca, cor]);
+    // O GLB pode resolver um Suspense sem renderizar de novo o pai.
+    invalidate();
+  }, [peca, cor, invalidate]);
   useEffect(() => () => peca.traverse((o) => {
     if (o instanceof Mesh) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose());
   }), [peca]);
