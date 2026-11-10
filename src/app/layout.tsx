@@ -32,7 +32,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <SacolaProvider>
           <a href="#conteudo" className="skip-link">Pular para o conteúdo</a>
           <Header />
-          <main id="conteudo">{children}</main>
+          <main id="conteudo" tabIndex={-1} className="focus:outline-none">{children}</main>
           <Sacola />
         </SacolaProvider>
       </body>
