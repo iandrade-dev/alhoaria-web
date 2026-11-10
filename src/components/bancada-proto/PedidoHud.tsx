@@ -38,7 +38,7 @@ export function somarAdicional(pedido: Pedido, muda: Muda, anunciar: (s: string)
 /** Trilha das fases do pedido, com o total parcial. */
 export function TrilhaPedido({ fase, pedido }: { fase: FasePedido; pedido: Pedido }) {
   const atual = FASES.findIndex((f) => f.id === fase);
-  return <div className="pointer-events-none absolute inset-x-0 top-0 z-[5] flex items-start justify-center gap-2 px-3 pt-[max(12px,env(safe-area-inset-top))] min-[700px]:justify-between min-[700px]:px-6 min-[700px]:pt-5">
+  return <div data-topo-bancada className="pointer-events-none absolute inset-x-0 top-0 z-[5] flex items-start justify-center gap-2 px-3 pt-[max(12px,env(safe-area-inset-top))] min-[700px]:justify-between min-[700px]:px-6 min-[700px]:pt-5">
     <ol data-testid="trilha-pedido" aria-label="Pedido" className="pointer-events-auto flex items-center gap-1 rounded-full border border-[#fff8e7]/10 bg-[#120c09]/75 p-1 shadow-[0_8px_24px_rgba(0,0,0,.35)] backdrop-blur-md min-[700px]:gap-1.5 min-[700px]:p-1.5">
       {FASES.map((f, i) => {
         const estado = i < atual ? "feito" : i === atual ? "ativa" : "depois";

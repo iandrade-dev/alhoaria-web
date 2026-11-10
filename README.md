@@ -15,22 +15,22 @@ npm run dev
 
 ## Cardápio em 3D e realidade aumentada
 
-`/ar` reutiliza os quatro lanches e a montagem da bancada. É possível explorar o lanche pronto,
-assistir à montagem (com pausa) ou montar tocando no ingrediente destacado ou arrastando-o até o lanche.
-O botão **Fazer etapa** oferece a mesma ação sem arrastar. O painel recolhível permite trocar
-lanche, pão, pasta, creme, queijo, bebida e porção. As escolhas acompanham os links entre `/ar` e `/bancada`.
+`/bancada` e `/ar` abrem a mesma experiência e o mesmo estado de pedido. Na entrada, a pessoa
+escolhe **Montar na bancada** ou **Montar na minha mesa**. Não há navegação para outra montagem.
+Os dois ambientes compartilham pão, ingredientes, adicionais, bebidas, porções, combo, sacola e comanda.
+O pedido é copiado e finalizado na loja do Anota AI; o site não preenche o carrinho externo automaticamente.
 
-Em Android com WebXR compatível, por HTTPS, **Ver na minha mesa** abre a câmera. **Posicionar manualmente**
-coloca o conjunto à frente do aparelho sem esperar uma superfície: ajuste altura e distância e confirme
-em **Pronto, ficou bom**. A detecção de superfície é opcional, com **Usar ponto detectado** quando disponível.
-**Ajustar posição** reabre os ajustes sem reiniciar a detecção. Trocar o lanche preserva o lugar;
-**Escolher outro lugar** inicia um novo posicionamento. Perder o rastreamento pausa a montagem e os ajustes.
-Sem suporte a WebXR (inclusive iOS), o explorador 3D e as interações continuam disponíveis. Sem WebGL,
-há acesso à bancada clássica. Não há captura ou envio de imagens da câmera.
+Em Android com WebXR compatível, por HTTPS, a escolha da mesa abre a câmera (depois de escolher um lanche,
+se necessário). **Posicionar manualmente** coloca o conjunto à frente do aparelho sem esperar uma superfície:
+ajuste altura e distância e confirme em **Pronto, ficou bom**. A detecção de superfície é opcional.
+**Ajustar posição** reabre os ajustes. Zoom por botões e pinça e giro transformam todo o conjunto.
+**Voltar à bancada** encerra só a câmera: a etapa, os objetos, os adicionais, as bebidas e o pedido permanecem.
+Perder o rastreamento pausa tanto a montagem quanto as animações do pedido e os ajustes.
 
-O modo AR não inclui a cozinha nem as sombras de contato da bancada. Carrega o kit do lanche selecionado
-e os acompanhamentos escolhidos, usa um único canvas, limita a densidade de pixels e libera recursos
-gerados ao trocar de lanche. O preview parado renderiza sob demanda.
+A cozinha e as sombras de contato ficam ocultas na câmera. A mesma cena e o mesmo canvas permanecem
+montados, com projeções dos ingredientes, bebidas e sacola corrigidas pela posição, giro e tamanho em AR.
+Sem WebXR, a entrada oferece a bancada completa; sem WebGL, há acesso à bancada clássica.
+Não há captura ou envio de imagens da câmera.
 
 Verificação: `npm run test:ar` cobre ciclo de sessão, permissões, superfície horizontal, posição manual sem
 hit-test (ou com resposta tardia), ajustes absolutos e limitados, pose inválida, reposicionamento,

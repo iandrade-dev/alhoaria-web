@@ -17,6 +17,7 @@ import Camara, { type ApiCamara } from "./Camara";
 import Pedido3D, { type EstadoSacola, type FasePedido, type ProjPedido } from "./Pedido3D";
 import type { Opcoes, Pedido } from "./cardapio";
 import { liberarMontagem } from "../ar/recursos";
+import MesaXR, { type ModoMesa } from "../ar/MesaXR";
 
 const ROOT = "/assets/models/bancada/";
 // Arquivos em public/assets/models/bancada/ (contrato no blender/bancada3d/README.md). A mão é o mao-luva.glb.
@@ -49,8 +50,9 @@ export type Props = {
   /** Câmera: centralizar e o aviso de "fora da posição padrão" (botão Centralizar). */
   camApi: MutableRefObject<ApiCamara | null>;
   aoCamFora: (fora: boolean) => void;
-  /** /ar reutiliza a montagem sem a câmera da cozinha; projeta só o ingrediente interativo. */
+  /** Mantém a geometria local e pausa a montagem durante o posicionamento AR. */
   apresentacao?: { pronto: boolean; pausado: boolean; interativo?: boolean; estacao?: string };
+  modoMesa?: ModoMesa;
   /** Escolhas do pedido que mudam o lanche na tábua (pão parmesão ou roseta). */
   opcoes?: Opcoes | null;
   /** Pedido: potinhos do Turbinar (durante a montagem), bebida, acompanhamento e sacola (depois do lanche pronto). */
@@ -197,8 +199,7 @@ export function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPro
 
   useEffect(() => {
     if (!apresentacao) return;
-    const raiz = raizLocal.current!;
-    return () => liberarMontagem([raiz, K.raiz, H.raiz, anelPao.m, ...Object.values(K.estacoes).flatMap((s) => [s.raiz, s.anel]), ...K.extras], Object.values(A));
+    return () => liberarMontagem([K.raiz, H.raiz, anelPao.m, ...Object.values(K.estacoes).flatMap((s) => [s.raiz, s.anel]), ...K.extras], Object.values(A));
   }, [K, H, A, anelPao, !!apresentacao]);
 
   // ------------------------------------------------ estado da animação (tudo em refs: nada re-renderiza por quadro)
@@ -548,6 +549,7 @@ export function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPro
     {K.extras.map((o, i) => <primitive key={`x-${i}`} object={o} />)}
     {pedido?.atual && <Suspense fallback={null}>
       <Pedido3D K={K} H={H} M={M} arranjo={arranjo} fase={pedido.fase} pedido={pedido.atual} rodada={pedido.rodada} reduzido={reduzido}
+        pausado={apresentacao?.pausado}
         aoProjetar={pedido.aoProjetar} aoSacola={pedido.aoSacola} aoOcupado={pedido.aoOcupado}
         ensacar={pedido.ensacar} aoSacolaEstado={pedido.aoSacolaEstado} camApi={camApi} />
     </Suspense>}
@@ -566,6 +568,7 @@ export default function Cena(props: Props) {
   return <Canvas className="!absolute inset-0" dpr={[1, 1.5]} camera={camera} gl={{ alpha: true, antialias: true, powerPreference: "high-performance" }}
     style={{ touchAction: "none" }} onCreated={({ gl }) => {
       gl.setClearColor(0x120c09, 1);
+      gl.xr.enabled = true;
       gl.domElement.addEventListener("webglcontextlost", () => { if (montada.current) falhar.current?.(); }, { once: true });
     }}>
     <Interno {...props} />
@@ -577,21 +580,25 @@ function Interno(props: Props) {
   const arranjo = arranjoDe(size.width, size.height);
   const M = useMemo<Medidas>(() => ({ pasta: 0.05, costela: 0.08, creme: 0.085, muss: 0.1, fora: new Vector3(0.7, 0.24, 0.1), h: {}, p: {} }), []);
   const { def } = props;
+  const estado = props.modoMesa?.estado;
+  const emAR = !!estado && estado.fase !== "3d" && estado.fase !== "iniciando";
+  const pausado = !!estado && estado.fase !== "3d" && (estado.fase !== "colocado" || !estado.rastreando);
+  const mundo = def && <Suspense fallback={null}>
+    <Mundo key={def.id} {...props} def={def} arranjo={arranjo} M={M}
+      apresentacao={props.modoMesa ? { pronto: false, pausado, interativo: true } : undefined} />
+  </Suspense>;
   return <>
-    <Camara arranjo={arranjo} M={M} travada={!!props.congelar} reduzido={props.reduzido} api={props.camApi} aoFora={props.aoCamFora} segurando={() => props.bus.current.drag.ativo} />
+    {!emAR && <Camara arranjo={arranjo} M={M} travada={!!props.congelar} reduzido={props.reduzido} api={props.camApi} aoFora={props.aoCamFora} segurando={() => props.bus.current.drag.ativo} />}
     {/* luzes do README (as mesmas dos renders da cozinha) e uma poça quente da luminária sobre a tábua */}
     <hemisphereLight args={["#ffe6c8", "#1a0f0a", 0.55]} />
     <ambientLight intensity={0.25} color="#ffe2c0" />
     <directionalLight position={[0.15, 1.1, 0.35]} intensity={2.6} color="#ffd9a8" />
     <directionalLight position={[-0.6, 0.5, 0.8]} intensity={0.7} color="#fff1dc" />
-    <Poca />
+    {!emAR && <Poca />}
     <Ambiente />
-    <Suspense fallback={null}><Cozinha arranjo={arranjo} /></Suspense>
-    {def && <Suspense fallback={null}>
-      {/* um Mundo por lanche: trocar de lanche remonta só a cena, no mesmo contexto WebGL */}
-      <Mundo key={def.id} {...props} def={def} arranjo={arranjo} M={M} />
-    </Suspense>}
-    {def && <ContactShadows position={[0, MESA + 0.0008, 0]} scale={1.6} far={0.35} blur={2.2} opacity={0.75} resolution={512} color="#000000" frames={Infinity} />}
+    {!emAR && <Suspense fallback={null}><Cozinha arranjo={arranjo} /></Suspense>}
+    {props.modoMesa ? <MesaXR modo={props.modoMesa}>{mundo}</MesaXR> : mundo}
+    {def && !emAR && <ContactShadows position={[0, MESA + 0.0008, 0]} scale={1.6} far={0.35} blur={2.2} opacity={0.75} resolution={512} color="#000000" frames={Infinity} />}
   </>;
 }
 

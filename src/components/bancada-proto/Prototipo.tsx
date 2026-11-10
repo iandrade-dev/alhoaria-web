@@ -14,7 +14,9 @@ import {
   ADICIONAIS, OPCOES, OPCOES_PADRAO, SEM_OPCAO, brl, novoPedido, opcaoDe, textoDasOpcoes, type GrupoOpcao, type Pedido,
 } from "./cardapio";
 import { PEDIDO_URL } from "@/lib/links";
-import { pedidoDaURL, urlDoPedido } from "@/lib/pedido-url";
+import { pedidoDaURL } from "@/lib/pedido-url";
+import { ESTADO_3D, type EstadoAR, type SessaoMesa } from "../ar/sessao";
+import { EntradaMesa, ControlesMesa } from "../ar/ModoMesa";
 
 const Cena = dynamic(() => import("./Cena"), { ssr: false });
 
@@ -38,6 +40,22 @@ const AMOSTRA: Record<string, string> = {
 };
 
 export default function Prototipo() {
+  const overlay = useRef<HTMLDivElement>(null), gestosAR = useRef<HTMLDivElement>(null);
+  const sessaoAR = useRef<SessaoMesa | null>(null);
+  const [ambiente, setAmbiente] = useState<"bancada" | "ar" | null>(null);
+  const [suporteAR, setSuporteAR] = useState<boolean | null>(null);
+  const [xrPronto, setXrPronto] = useState(false);
+  const [ar, setAR] = useState<EstadoAR>(ESTADO_3D);
+  const aoEstadoAR = useCallback((e: EstadoAR) => {
+    setAR(e);
+    if (e.fase === "3d") setAmbiente((v) => v === null ? null : "bancada");
+  }, []);
+  const [zoomAR, setZoomAR] = useState(1), [giroAR, setGiroAR] = useState(0);
+  const aoXrPronto = useCallback(() => setXrPronto(true), []);
+  const mudarZoomAR = useCallback((n: number) => setZoomAR(Math.max(0.5, Math.min(2.5, n))), []);
+  const emAR = ar.fase !== "3d" && ar.fase !== "iniciando";
+  const bloqueioAR = ar.fase !== "3d" && (ar.fase !== "colocado" || !ar.rastreando);
+  const bloqueioRef = useRef(false); bloqueioRef.current = bloqueioAR || !ambiente;
   // undefined = ainda lendo a URL; null = tela de escolha
   const [lanche, setLanche] = useState<LancheId | null | undefined>(undefined);
   const [feitos, setFeitos] = useState(0);
@@ -118,6 +136,36 @@ export default function Prototipo() {
   }, []);
 
   useEffect(() => {
+    let vivo = true;
+    if (window.isSecureContext && navigator.xr) void navigator.xr.isSessionSupported("immersive-ar")
+      .then((v) => { if (vivo) setSuporteAR(v); }).catch(() => { if (vivo) setSuporteAR(false); });
+    else setSuporteAR(false);
+    const alvo = overlay.current;
+    const bloquear = (e: Event) => e.preventDefault();
+    alvo?.addEventListener("beforexrselect", bloquear);
+    const cabecalho = document.querySelector<HTMLElement>("body > header"), inerteAntes = cabecalho?.inert;
+    if (cabecalho) cabecalho.inert = true;
+    return () => {
+      vivo = false; alvo?.removeEventListener("beforexrselect", bloquear);
+      if (cabecalho) cabecalho.inert = inerteAntes ?? false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!bloqueioAR) return;
+    const t = toque.current;
+    bus.current.drag.ativo = false; toque.current = null;
+    if (t) api.current?.soltar(t.id);
+    setSegurando(null); setSobre(false);
+  }, [bloqueioAR]);
+
+  const escolherAmbiente = (usarAR: boolean) => {
+    if (usarAR && !sessaoAR.current) return;
+    setAmbiente(usarAR ? "ar" : "bancada");
+    if (usarAR && def) void sessaoAR.current?.iniciar();
+  };
+
+  useEffect(() => {
     if (semGl) {
       const q = typeof window !== "undefined" ? window.location.search : "";
       const timer = setTimeout(() => {
@@ -132,7 +180,7 @@ export default function Prototipo() {
 
   /** Começa a ação da estação `est` (a etapa, ou uma opção dela). */
   const disparar = useCallback((est: EstacaoId, modo: Modo) => {
-    if (animRef.current || !api.current || ocupadoRef.current) return;
+    if (bloqueioRef.current || animRef.current || !api.current || ocupadoRef.current) return;
     const passo = passosRef.current[feitosRef.current];
     if (!passo || passo.id !== passoDe(est)) return;
     const op = opcaoDaEstacao(est);
@@ -145,7 +193,7 @@ export default function Prototipo() {
 
   /** "Monta pra mim": faz a etapa atual (Turbinar: fecha sem adicionais). */
   const autoPasso = useCallback(() => {
-    if (!autoRef.current) return;
+    if (!autoRef.current || bloqueioRef.current) return;
     const p = passosRef.current[feitosRef.current];
     if (!p) return;
     if (p.tipo === "turbinar") { avancarRef.current(feitosRef.current); return; }
@@ -157,6 +205,12 @@ export default function Prototipo() {
     }
     disparar(estacaoAuto(p, pedidoRef.current), "auto");
   }, [disparar]);
+
+  useEffect(() => {
+    if (bloqueioAR || !autoRef.current || animRef.current) return;
+    const timer = setTimeout(autoPasso, 350);
+    return () => clearTimeout(timer);
+  }, [bloqueioAR, autoPasso]);
 
   /** Vai para a etapa seguinte (depois de fazer ou pular a etapa `i`; `n` etapas de uma vez). */
   const avancar = useCallback((i: number, n = 1) => {
@@ -232,6 +286,7 @@ export default function Prototipo() {
     zerarHud(id);
     setCongelar(null); setProj(null); setPronto(false);
     setLanche(id);
+    if (id && ambiente === "ar" && ar.fase === "3d") void sessaoAR.current?.iniciar();
   };
 
   // ---------------------------------------------------- gesto: arrastar a ferramenta até o lanche, ou tocar
@@ -276,18 +331,15 @@ export default function Prototipo() {
 
   const lan = proj?.lanche;
   const dica = ativoDef?.dica ?? "";
-  const livre = !animando && !auto && pronto && !ocupado;
+  const livre = !animando && !auto && pronto && !ocupado && !bloqueioAR;
   const podePular = !!ativoDef?.opcional && livre;
   // queijo em dobro: aparece depois da primeira dose de queijo (na etapa seguinte, antes do maçarico ou da palha)
   const iQueijo = PASSOS.findIndex((p) => p.tipo === "mussarela" || p.tipo === "dog-mussarela");
   const podeDobro = fase === "montagem" && iQueijo >= 0 && feitos === iQueijo + 1 && !fim && !pulados.includes(PASSOS[iQueijo].id) && !auto;
   const nDobro = pedido?.adicionais["queijo-dobro"] ?? 0;
   const dobro = (d: number) => { if (pedido && !animando) somarAdicional(pedido, muda, setAnuncio, "queijo-dobro", d); };
-  const resumoAuto = ehPao ? `${textoDasOpcoes(OPCOES_PADRAO)} · sem adicionais` : "Sem adicionais";
-  return <div className="fixed inset-0 z-[60] select-none overflow-clip bg-[#120c09] text-[#fff8e7]" style={{ WebkitTouchCallout: "none" }}>
-    <Link href={pedido ? urlDoPedido(pedido, "/ar") : "/ar"} className={`absolute left-3 top-[112px] z-[9] rounded-full border border-[#fff8e7]/25 bg-[#120c09]/85 px-4 py-3 text-xs font-semibold text-[#ffcf8a] min-[700px]:left-6 min-[700px]:top-[84px] ${foco}`}>
-      Ver na minha mesa ↗
-    </Link>
+  const resumoAuto = ehPao ? `${textoDasOpcoes({ ...OPCOES_PADRAO, ...Object.fromEntries(Object.entries(pedido?.opcoes ?? {}).filter(([, v]) => v)) })} · sem adicionais` : "Sem adicionais";
+  return <div ref={overlay} data-testid="bancada-unificada" data-ar={emAR} className="fixed inset-0 z-[60] select-none overflow-clip text-[#fff8e7]" style={{ WebkitTouchCallout: "none", background: emAR ? "transparent" : "#120c09" }}>
     <style>{`
       @keyframes proto-pop { 0% { transform: scale(1) } 35% { transform: scale(1.42) } 65% { transform: scale(.92) } 100% { transform: scale(1) } }
       @keyframes proto-pulso { 0%,100% { box-shadow: 0 0 0 0 rgba(255,150,60,.55) } 50% { box-shadow: 0 0 0 7px rgba(255,150,60,0) } }
@@ -297,13 +349,19 @@ export default function Prototipo() {
       @keyframes proto-fechou { 0% { opacity: 0; transform: translate(-50%, 6px) scale(.7) } 25% { opacity: 1; transform: translate(-50%, -6px) scale(1.06) } 75% { opacity: 1; transform: translate(-50%, -14px) scale(1) } 100% { opacity: 0; transform: translate(-50%, -26px) scale(1) } }
       @keyframes proto-chama { 0%,100% { box-shadow: 0 0 0 0 rgba(255,170,80,.55), inset 0 0 18px rgba(255,170,80,.25) } 50% { box-shadow: 0 0 0 10px rgba(255,170,80,0), inset 0 0 26px rgba(255,170,80,.4) } }
       @media (prefers-reduced-motion: reduce) { .proto-anim { animation: none !important } }
+      [data-ar="true"] [data-topo-bancada] { top:64px; }
+      [data-ar="true"] [data-testid="resumo"] { top:76px; max-height:calc(100dvh - 92px); }
     `}</style>
     {lanche !== undefined && !semGl && <Cena aoFalhar={aoFalhar} def={def} ativo={animando || escolhendoPao ? null : ativo} reduzido={reduzido} bus={bus} api={api} aoFim={aoFim} aoProjetar={setProj} aoPronto={aoPronto} congelar={congelar}
       opcoes={pedido?.opcoes ?? null} camApi={camApi} aoCamFora={setCamFora}
+      modoMesa={{ estado: ar, overlay, gestos: gestosAR, sessao: sessaoAR, aoEstado: aoEstadoAR, aoDisponivel: aoXrPronto, zoom: zoomAR, giro: giroAR, aoZoom: mudarZoomAR }}
       pedido={{ fase: fase3d, atual: pedido, rodada, aoProjetar: setProjPed, aoSacola, aoOcupado, ensacar, aoSacolaEstado: setSacolaEstado }} />}
 
+    <div ref={gestosAR} className="absolute inset-0 touch-none" style={{ pointerEvents: emAR ? "auto" : "none" }} aria-hidden="true" />
+    <div data-hud-bancada inert={!ambiente || bloqueioAR} aria-hidden={!ambiente || bloqueioAR ? true : undefined}>
+
     {/* câmera fora da posição padrão: volta para a frente */}
-    {camFora && def && !semGl && pronto && <button type="button" data-testid="centralizar" onClick={() => camApi.current?.centralizar()} aria-label="Centralizar a câmera"
+    {camFora && !emAR && def && !semGl && pronto && <button type="button" data-testid="centralizar" onClick={() => camApi.current?.centralizar()} aria-label="Centralizar a câmera"
       className={`proto-anim absolute right-3 top-[112px] z-[5] inline-flex h-9 items-center gap-1.5 rounded-full border border-[#fff8e7]/20 bg-[#120c09]/65 px-3 text-[12.5px] font-semibold text-[#fff8e7]/90 shadow-[0_6px_18px_rgba(0,0,0,.35)] backdrop-blur-md [animation:proto-sobe_.3s_ease-out] hover:bg-[#241a16] min-[700px]:right-6 min-[700px]:top-[84px] ${foco}`}>
       <svg viewBox="0 0 20 20" aria-hidden="true" className="h-4 w-4"><path d="M10 3.5a6.5 6.5 0 1 1-6.1 4.3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /><path d="M3 4.2v3.9h3.9" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /><circle cx="10" cy="10" r="1.7" fill="currentColor" /></svg>
       Centralizar
@@ -326,6 +384,7 @@ export default function Prototipo() {
         const vez = pd.id === ativo && livre && !escolhendoPao;
         const ests = Object.keys(proj.estacoes).filter((e) => passoDe(e) === pd.id);
         if (!ests.length) {
+          if (pd.tipo !== "tampa" && pd.tipo !== "dog-tampa") return null;
           if (!lan) return null;
           const style: CSSProperties = { left: lan.x0, top: lan.y0, width: lan.x1 - lan.x0, height: lan.y1 - lan.y0, borderRadius: "40%" };
           return <button key={pd.id} type="button" data-testid={`estacao-${pd.id}`} disabled={!vez} aria-label={vez ? pd.dica : pd.nome}
@@ -350,7 +409,7 @@ export default function Prototipo() {
 
       {/* topo: trilha + Monta pra mim (no pedido: trilha das fases com o total) */}
       {fase !== "montagem" && pedido && <TrilhaPedido fase={fase} pedido={pedido} />}
-      {fase === "montagem" && <div className="pointer-events-none absolute inset-x-0 top-0 z-[5] flex flex-wrap items-start justify-center gap-2 px-4 pt-[max(12px,env(safe-area-inset-top))] min-[700px]:justify-between min-[700px]:px-6 min-[700px]:pt-5">
+      {fase === "montagem" && <div data-topo-bancada className="pointer-events-none absolute inset-x-0 top-0 z-[5] flex flex-wrap items-start justify-center gap-2 px-4 pt-[max(12px,env(safe-area-inset-top))] min-[700px]:justify-between min-[700px]:px-6 min-[700px]:pt-5">
         <ol data-testid="trilha" aria-label="Camadas" className="pointer-events-auto flex items-center gap-1 rounded-full border border-[#fff8e7]/10 bg-[#120c09]/70 px-2 py-1.5 shadow-[0_8px_24px_rgba(0,0,0,.35)] backdrop-blur-md min-[700px]:gap-2 min-[700px]:px-3 min-[700px]:py-2">
           {PASSOS.map(({ id, icone, nome }, i) => {
             const pulou = pulados.includes(id);
@@ -442,6 +501,12 @@ export default function Prototipo() {
         <p className="font-hand text-3xl text-[#fff8e7]">Acendendo a chapa…</p>
       </div>}
     </>}
+    </div>
+    {!ambiente && <EntradaMesa suporte={suporteAR} pronto={xrPronto} aoEscolher={escolherAmbiente} />}
+    {ambiente && <ControlesMesa estado={ar} sessao={sessaoAR} zoom={zoomAR} aoZoom={mudarZoomAR} aoGirar={() => setGiroAR((v) => v + Math.PI / 6)} />}
+    {ambiente && ar.fase === "3d" && ar.mensagem !== ESTADO_3D.mensagem && <div role="status" className="absolute inset-x-4 top-28 z-30 mx-auto max-w-sm rounded-2xl bg-[#120c09]/95 p-4 text-center text-sm">
+      <p>{ar.mensagem}</p><button className="mt-2 rounded-full border border-[#ffcf8a]/50 px-4 py-2" onClick={() => setAR(ESTADO_3D)}>Continuar na bancada</button>
+    </div>}
     <p aria-live="polite" className="sr-only">{anuncio}</p>
   </div>;
 }

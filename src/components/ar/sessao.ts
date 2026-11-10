@@ -124,7 +124,7 @@ export class SessaoMesa {
     if (this.colocado) {
       this.emitir(this.ajustando ? "ajustando" : "colocado", this.ajustando
         ? "Ajuste a altura para encostar a tábua na mesa e toque em Pronto."
-        : "Pronto na sua mesa. Experimente as opções no canto.");
+        : "Pronto na sua mesa. Continue a montagem e o pedido aqui mesmo.");
       return;
     }
     this.direcao.set(0, 0, -1).transformDirection(this.matrizViewer);
@@ -195,7 +195,7 @@ export class SessaoMesa {
   confirmarManual() {
     if (!this.ajustando || !this.colocado || !this.rastreando) return false;
     this.ajustando = false;
-    this.emitir("colocado", "Pronto na sua mesa. Experimente as opções no canto.");
+    this.emitir("colocado", "Pronto na sua mesa. Continue a montagem e o pedido aqui mesmo.");
     return true;
   }
   editarPosicao() {
@@ -219,7 +219,7 @@ export class SessaoMesa {
     this.manual = false; this.ajustando = false;
     this.origem.visible = true;
     this.reticulo.visible = false;
-    this.emitir("colocado", "Pronto na sua mesa. Experimente as opções no canto.");
+    this.emitir("colocado", "Pronto na sua mesa. Continue a montagem e o pedido aqui mesmo.");
     return true;
   }
 
@@ -252,7 +252,11 @@ export class SessaoMesa {
   };
   async sair() {
     this.geracao++;
-    await this.sessao?.end().catch(() => {});
+    if (this.sessao) await this.sessao.end().catch(() => {});
+    else if (this.iniciando) {
+      this.rastreando = true; this.origem.visible = true;
+      this.emitir("3d", ESTADO_3D.mensagem);
+    }
   }
   destruir() {
     this.encerrado = true;

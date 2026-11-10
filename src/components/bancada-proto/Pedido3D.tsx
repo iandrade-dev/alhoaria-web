@@ -39,6 +39,7 @@ type Props = {
   ensacar: boolean;
   aoSacolaEstado: (e: EstadoSacola) => void;
   camApi: MutableRefObject<ApiCamara | null>;
+  pausado?: boolean;
 };
 
 const ARQ = ["beb-lata", "beb-chopp", "beb-soda", "porcao-batata", "porcao-dadinho", "sacola"] as const;
@@ -171,9 +172,9 @@ function tingir(item: Item, cor: string) {
 /** Lugar de cada potinho (índices em LUG.potes; o do meio da frente fica livre para os separados). */
 const LUGAR_POTE = [0, 1, 2, 3, 5];
 
-export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rodada, aoProjetar, aoSacola, aoOcupado, ensacar, aoSacolaEstado, camApi }: Props) {
+export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rodada, aoProjetar, aoSacola, aoOcupado, ensacar, aoSacolaEstado, camApi, pausado }: Props) {
   const cenas = useGLTF(ARQ.map(glb));
-  const { camera, size } = useThree();
+  const { camera, size, gl } = useThree();
   const A = useMemo(() => Object.fromEntries(ARQ.map((n, i) => [n, cenas[i].scene])) as unknown as Record<(typeof ARQ)[number], Object3D>, [cenas]);
   const opts = useRef({ fase, pedido, reduzido, arranjo, ensacar }); opts.current = { fase, pedido, reduzido, arranjo, ensacar };
   const estadoSacola = useRef(aoSacolaEstado); estadoSacola.current = aoSacolaEstado;
@@ -282,13 +283,16 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rod
       for (let p = n; p; p = p.parent) { if (!p.visible || (semTampa && p.name.includes("tampa"))) return false; if (p === K.lanche) return true; }
       return true;
     };
-    K.lanche.updateMatrixWorld(true);
+    const espaco = P.raiz.parent;
+    espaco?.updateWorldMatrix(true, false);
+    K.lanche.updateWorldMatrix(true, true);
     const h: number[] = [];
     for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
       o.set(x0 + ((x1 - x0) * i) / (nx - 1), 0.6, z0 + ((z1 - z0) * j) / (nz - 1));
       r.set(o, dir);
+      if (espaco) r.ray.applyMatrix4(espaco.matrixWorld);
       const hit = r.intersectObject(K.lanche, true).find((x) => visivel(x.object) && !P.cobertura.getObjectById(x.object.id));
-      h.push(hit ? hit.point.y : NaN);
+      h.push(hit ? (espaco ? espaco.worldToLocal(hit.point.clone()).y : hit.point.y) : NaN);
     }
     // fora do lanche (o raio não acertou nada): repete a altura vizinha, para a borda da camada não despencar até a tábua
     for (let volta = 0; volta < nx && h.some(Number.isNaN); volta++) {
@@ -590,7 +594,9 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rod
 
   // ------------------------------------------------ quadro a quadro
   const ultimo = useRef<string>("");
+  const tempoProj = useRef(0);
   useFrame((_, delta) => {
+    if (pausado) return;
     const pausa = (window as unknown as { __pedidoPausa?: boolean }).__pedidoPausa;
     const dt = pausa ? 0 : Math.min(delta, 0.1);
     const { fase, reduzido: red, arranjo: arr } = opts.current;
@@ -742,13 +748,20 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rod
     }
 
     // ---- projeção dos potinhos e prateleiras para o HUD
-    const proj = (x: number, y: number, z: number) => { tmp.c.set(x, y, z).project(camera); return [(tmp.c.x + 1) / 2 * size.width, (1 - tmp.c.y) / 2 * size.height]; };
+    if (gl.xr.isPresenting && performance.now() - tempoProj.current < 50) return;
+    tempoProj.current = performance.now();
+    const cameraTela = gl.xr.isPresenting ? gl.xr.getCamera().cameras[0] ?? camera : camera;
+    const proj = (x: number, y: number, z: number) => {
+      tmp.c.set(x, y, z); P.raiz.localToWorld(tmp.c); tmp.c.project(cameraTela);
+      return [(tmp.c.x + 1) / 2 * size.width, (1 - tmp.c.y) / 2 * size.height, tmp.c.z];
+    };
     const out: ProjPedido = {};
     const pp = (chave: string, o: Object3D, alto: number, raio: number) => {
-      const [cx, cy] = proj(o.position.x, o.position.y + alto * 0.5, o.position.z);
+      const [cx, cy, prof] = proj(o.position.x, o.position.y + alto * 0.5, o.position.z);
+      if (prof < -1 || prof > 1 || !Number.isFinite(cx + cy)) return;
       const [ex] = proj(o.position.x + raio, o.position.y + alto * 0.5, o.position.z);
       const [, ty] = proj(o.position.x, o.position.y + alto, o.position.z);
-      out[chave] = { x: Math.round(cx), y: Math.round(cy), r: Math.round(Math.max(26, Math.abs(ex - cx) * 1.25)), t: Math.round(ty) };
+      out[chave] = { x: Math.round(cx), y: Math.round(cy), r: Math.round(Math.min(80, Math.max(26, Math.abs(ex - cx) * 1.25))), t: Math.round(ty) };
     };
     P.potes.forEach((p) => pp(`adicional-${p.id}`, p.g, p.alto, p.raio));
     P.pratBeb.itens.forEach((it) => pp(`bebida-${it.chave}`, it.obj, it.alto, 0.04));

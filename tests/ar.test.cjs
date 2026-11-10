@@ -143,6 +143,18 @@ test('desmontar durante a permissão encerra a sessão tardia e não atualiza a 
   assert.equal(a.estados.length, 1);
 });
 
+test('voltar à bancada enquanto aguarda a câmera libera a tela e encerra a sessão tardia', async () => {
+  let resolver, encerramentos = 0;
+  const a = ambiente(() => new Promise((r) => { resolver = r; }));
+  const inicio = a.controle.iniciar();
+  await a.controle.sair();
+  assert.equal(a.estados.at(-1).fase, '3d');
+  assert.equal(a.origem.visible, true);
+  resolver({ end: async () => { encerramentos++; } }); await inicio;
+  assert.equal(encerramentos, 1);
+  assert.equal(a.estados.at(-1).fase, '3d');
+});
+
 test('hit-test que termina depois da saída é cancelado e não reabre AR', async () => {
   const a = ambiente(); let resolver;
   a.sessao.requestHitTestSource = () => new Promise((r) => { resolver = r; });
@@ -223,6 +235,25 @@ test('pose inválida bloqueia posição manual; olhar para baixo mantém direç�
   assert.ok(a.origem.position.toArray().every(Number.isFinite));
   assert.ok(Math.abs(Math.hypot(a.origem.position.x - a.camera.position.x, a.origem.position.z - a.camera.position.z) - 0.65) < 1e-8);
   await a.controle.sair();
+});
+
+test('entrar, ajustar, perder rastreamento e sair da câmera preservam a mesma montagem e pedido', async () => {
+  const a = ambiente();
+  const cena = new Group(); const lanche = new Mesh(), bebida = new Mesh();
+  cena.add(lanche, bebida); a.origem.add(cena);
+  const pedido = { lanche: 'pulled', feitos: 3, adicionais: { bacon: 2 }, bebida: { id: 'soda', sabor: 'maca-verde' }, combo: true };
+  cena.userData.pedido = pedido;
+  lanche.position.set(0.1, 0.05, 0.02); bebida.position.set(0.2, 0, -0.1);
+  await a.controle.iniciar(); a.controle.atualizar(a.quadro(null));
+  a.controle.colocarManualmente(); a.controle.ajustarAltura(0.2); a.controle.confirmarManual();
+  a.controle.atualizar(a.quadro(null, false)); a.controle.atualizar(a.quadro(null));
+  await a.controle.sair();
+  assert.equal(a.origem.children[0], cena);
+  assert.equal(cena.children[0], lanche); assert.equal(cena.children[1], bebida);
+  assert.equal(cena.userData.pedido, pedido);
+  assert.equal(pedido.feitos, 3); assert.equal(pedido.adicionais.bacon, 2); assert.equal(pedido.combo, true);
+  assert.deepEqual(lanche.position.toArray(), [0.1, 0.05, 0.02]);
+  assert.deepEqual(bebida.position.toArray(), [0.2, 0, -0.1]);
 });
 
 test('receitas preservam as escolhas e sem queijo também remove o maçarico', () => {
