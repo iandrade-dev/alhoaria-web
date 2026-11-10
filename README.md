@@ -29,7 +29,7 @@ Perder o rastreamento pausa tanto a montagem quanto as animações do pedido e o
 
 A cozinha e as sombras de contato ficam ocultas na câmera. A mesma cena e o mesmo canvas permanecem
 montados, com projeções dos ingredientes, bebidas e sacola corrigidas pela posição, giro e tamanho em AR.
-Sem WebXR, a entrada oferece a bancada completa; sem WebGL, há acesso à bancada clássica.
+Sem WebXR, entra direto na bancada, sem exibir a opção AR; sem WebGL, há acesso à bancada clássica.
 Não há captura ou envio de imagens da câmera.
 
 Verificação: `npm run test:ar` cobre ciclo de sessão, permissões, superfície horizontal, posição manual sem

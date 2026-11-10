@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useRef, type MutableRefObject } from "react";
+import Image from "next/image";
 import { Camera, Check, MapPin, Minus, Plus, RotateCw, X } from "lucide-react";
 import type { EstadoAR, SessaoMesa } from "./sessao";
 import styles from "./modo-mesa.module.css";
 
 export function EntradaMesa({ suporte, pronto, aoEscolher }: { suporte: boolean | null; pronto: boolean; aoEscolher: (ar: boolean) => void }) {
   const painel = useRef<HTMLDivElement>(null);
-  useEffect(() => { painel.current?.querySelector<HTMLButtonElement>("button")?.focus(); }, []);
+  useEffect(() => { painel.current?.querySelector<HTMLButtonElement>("button")?.focus(); }, [suporte]);
+  if (suporte !== true) return null;
   return <div className={styles.entrada}>
     <div ref={painel} className={styles.escolha} role="dialog" aria-modal="true" aria-labelledby="onde-montar" onKeyDown={(e) => {
       if (e.key === "Escape") { aoEscolher(false); return; }
@@ -16,12 +18,12 @@ export function EntradaMesa({ suporte, pronto, aoEscolher }: { suporte: boolean 
       const i = botoes.indexOf(document.activeElement as HTMLButtonElement);
       e.preventDefault(); botoes[(i + (e.shiftKey ? -1 : 1) + botoes.length) % botoes.length]?.focus();
     }}>
-      <span className={styles.marca}>ALHOARIA</span>
+      <Image src="/assets/photos/logo-anota.webp" alt="Alhoaria — pão de alho recheado" width={128} height={128} className={styles.marca} priority />
       <h1 id="onde-montar">Onde vamos montar?</h1>
       <p>O mesmo lanche, as bebidas e o pedido. Você escolhe o lugar.</p>
       <button autoFocus onClick={() => aoEscolher(false)}><span>Montar na bancada</span><small>Explore a cozinha em 3D</small></button>
-      <button disabled={suporte !== true || !pronto} onClick={() => aoEscolher(true)}><Camera size={23} /><span>Montar na minha mesa<small>Abra a câmera e ajuste a posição</small></span></button>
-      <p className={styles.nota}>{suporte === null ? "Conferindo a câmera deste aparelho…" : suporte === false ? "A câmera AR não está disponível neste navegador. A bancada 3D tem o pedido completo." : !pronto ? "Preparando a câmera…" : "Você pode sair da câmera e continuar na bancada quando quiser."}</p>
+      <button disabled={!pronto} onClick={() => aoEscolher(true)}><Camera size={23} /><span>Montar na minha mesa<small>Abra a câmera e ajuste a posição</small></span></button>
+      <p className={styles.nota}>{!pronto ? "Preparando a câmera…" : "Você pode sair da câmera e continuar na bancada quando quiser."}</p>
     </div>
   </div>;
 }

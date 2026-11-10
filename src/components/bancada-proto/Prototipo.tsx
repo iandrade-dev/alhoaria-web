@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import Image from "next/image";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as RPointerEvent } from "react";
 import type { ApiCena, Bus, Modo, Projecao } from "./Cena";
 import {
@@ -150,6 +151,10 @@ export default function Prototipo() {
       if (cabecalho) cabecalho.inert = inerteAntes ?? false;
     };
   }, []);
+
+  useEffect(() => {
+    if (suporteAR === false) setAmbiente((v) => v ?? "bancada");
+  }, [suporteAR]);
 
   useEffect(() => {
     if (!bloqueioAR) return;
@@ -523,6 +528,7 @@ function IconeTurbinar({ className = "" }: { className?: string }) {
 /** Tela leve de escolha: os 4 lanches sobre o fundo da cozinha. */
 function Escolha({ aoEscolher }: { aoEscolher: (id: LancheId) => void }) {
   return <div className="proto-anim absolute inset-0 z-[8] flex flex-col items-center justify-center gap-5 overflow-y-auto bg-[#120c09]/55 px-4 py-8 backdrop-blur-[2px] [animation:proto-sobe_.45s_ease-out] min-[700px]:gap-8">
+    <Image src="/assets/photos/logo-anota.webp" alt="Alhoaria — pão de alho recheado" width={128} height={128} className="h-28 w-28 shrink-0 object-contain" priority />
     <h1 className="text-center font-hand text-[38px] leading-none text-[#fff8e7] [text-shadow:0_2px_14px_rgba(0,0,0,.85)] min-[700px]:text-[52px]">Qual vai montar hoje?</h1>
     <ul className="grid w-full max-w-[380px] grid-cols-2 gap-3 min-[700px]:max-w-[1040px] min-[700px]:grid-cols-4 min-[700px]:gap-5">
       {ORDEM_LANCHES.map((id) => {

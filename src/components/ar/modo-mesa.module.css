@@ -1,6 +1,6 @@
 .entrada { position:absolute; inset:0; z-index:40; display:grid; place-items:center; padding:20px; background:#120c09c9; backdrop-filter:blur(10px); overflow:auto; }
 .escolha { width:min(390px,100%); padding:28px 22px; border:1px solid #fff8e726; border-radius:26px; background:#21160ff5; text-align:center; box-shadow:0 20px 80px #0005; }
-.marca { font-family:Anton,sans-serif; font-size:19px; letter-spacing:4px; color:#ffcf8a; }
+.marca { display:block; width:128px; height:128px; margin:0 auto; object-fit:contain; }
 .escolha h1 { font-family:"Caveat Brush",cursive; font-size:38px; line-height:1.1; margin:18px 0 10px; }
 .escolha p { color:#decbb3; font-size:13px; line-height:1.5; margin:0 0 20px; }
 .escolha button { display:flex; justify-content:center; align-items:center; flex-wrap:wrap; gap:4px 10px; width:100%; min-height:76px; margin:10px 0; padding:12px; border:1px solid #ffcf8a55; border-radius:16px; background:#fff8e708; color:#fff8e7; font-size:16px; font-weight:700; }
