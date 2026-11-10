@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { dispositivoLeve } from "@/lib/desempenho";
+import { restaurante } from "@/data/restaurante";
 
 const VIDEO = "/assets/home/monte-o-seu";
 const POSTER = `${VIDEO}.webp`;
@@ -15,7 +17,7 @@ export default function MonteOSeu() {
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const ver = () => setReduzido(media.matches);
+    const ver = () => setReduzido(media.matches || dispositivoLeve(navigator));
     ver();
     media.addEventListener("change", ver);
     return () => media.removeEventListener("change", ver);
@@ -44,9 +46,9 @@ export default function MonteOSeu() {
         <div className="relative aspect-[4/3] w-full overflow-hidden rounded border border-carvao-borda bg-carvao-leve">
           {reduzido ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={POSTER} alt="Lanche sendo montado na bancada da Alhoaria" className="h-full w-full object-cover" />
+            <img src={POSTER} alt={`Lanche sendo montado na bancada da ${restaurante.nome}`} loading="lazy" className="h-full w-full object-cover" />
           ) : (
-            <video ref={video} aria-label="Lanche sendo montado na bancada da Alhoaria" autoPlay muted loop playsInline preload="none" poster={POSTER} className="h-full w-full object-cover">
+            <video ref={video} aria-label={`Lanche sendo montado na bancada da ${restaurante.nome}`} autoPlay muted loop playsInline preload="none" poster={POSTER} className="h-full w-full object-cover">
               {carregar && <source src={`${VIDEO}.webm`} type="video/webm" />}
               {carregar && <source src={`${VIDEO}.mp4`} type="video/mp4" />}
             </video>

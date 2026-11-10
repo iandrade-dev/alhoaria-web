@@ -9,17 +9,17 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        carvao: "#0A0A0A",
-        "carvao-leve": "#141414",
-        "carvao-borda": "#262626",
-        osso: "#F5F5F0",
-        "osso-muted": "#A8A8A0",
-        creme: "#FFF8E7",
-        ouro: "#E8B84A",
-        queijo: "#F0C75E",
-        macarico: "#FF6A1A",
-        madeira: "#5C3D2E",
-        "madeira-escura": "#241812",
+        carvao: "rgb(var(--carvao-rgb) / <alpha-value>)",
+        "carvao-leve": "rgb(var(--carvao-leve-rgb) / <alpha-value>)",
+        "carvao-borda": "rgb(var(--carvao-borda-rgb) / <alpha-value>)",
+        osso: "rgb(var(--osso-rgb) / <alpha-value>)",
+        "osso-muted": "rgb(var(--osso-muted-rgb) / <alpha-value>)",
+        creme: "rgb(var(--creme-rgb) / <alpha-value>)",
+        ouro: "rgb(var(--ouro-rgb) / <alpha-value>)",
+        queijo: "rgb(var(--queijo-rgb) / <alpha-value>)",
+        macarico: "rgb(var(--macarico-rgb) / <alpha-value>)",
+        madeira: "rgb(var(--madeira-rgb) / <alpha-value>)",
+        "madeira-escura": "rgb(var(--madeira-escura-rgb) / <alpha-value>)",
       },
       fontFamily: {
         display: ["Anton", "sans-serif"],

@@ -11,6 +11,17 @@
   --queijo: #F0C75E;
   --macarico: #FF6A1A;
   --madeira: #5C3D2E;
+  --carvao-rgb: 10 10 10;
+  --carvao-leve-rgb: 20 20 20;
+  --carvao-borda-rgb: 38 38 38;
+  --osso-rgb: 245 245 240;
+  --osso-muted-rgb: 168 168 160;
+  --creme-rgb: 255 248 231;
+  --ouro-rgb: 232 184 74;
+  --queijo-rgb: 240 199 94;
+  --macarico-rgb: 255 106 26;
+  --madeira-rgb: 92 61 46;
+  --madeira-escura-rgb: 36 24 18;
 }
 
 @media (min-width: 640px) {
@@ -21,6 +32,8 @@ html { scroll-padding-top: var(--header-height); }
 body { margin: 0; overflow-x: clip; }
 section[id] { scroll-margin-top: var(--header-height); }
 :focus-visible { outline: 2px solid #E8B84A; outline-offset: 3px; }
+.skip-link { position:fixed; z-index:200; top:8px; left:8px; padding:12px 18px; border-radius:12px; background:var(--creme); color:var(--carvao); transform:translateY(-160%); }
+.skip-link:focus { transform:none; }
 
 .marquee-window { overflow: hidden; }
 .marquee-track { display: flex; width: max-content; padding-block: 0.3em; animation: alhoaria-marquee 36s linear infinite; }

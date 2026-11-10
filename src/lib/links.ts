@@ -1,4 +1,4 @@
-import menu from "@/data/menu.json";
+import { restaurante } from "@/data/restaurante";
 
-export const PEDIDO_URL = menu.brand.anota_ai_url;
-export const INSTAGRAM_URL = menu.brand.instagram;
+export const PEDIDO_URL = restaurante.checkout.url;
+export const INSTAGRAM_URL = restaurante.instagram;

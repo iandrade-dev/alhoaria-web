@@ -273,6 +273,17 @@ test('as escolhas vão e voltam entre AR e bancada; parâmetros inválidos não 
   assert.equal(invalido.bebida, null); assert.equal(invalido.porcao, null);
 });
 
+test('alternar do 3D ao simples preserva extras, potinhos, combo e bebida do pedido', () => {
+  const p = pedidoDaURL(new URLSearchParams('pao=roseta&pasta=sem&creme=4-queijos&queijo=colonial&bebida=chopp&porcao=dadinho'), 'pulled');
+  p.adicionais = { bacon: 2, 'tomate-seco': 1 };
+  p.separados = { 'pasta-ervas': 3 };
+  p.combo = true; p.lataCombo = 'pureza';
+  const url = urlDoPedido(p, '/cardapio');
+  assert.deepEqual(pedidoDaURL(new URLSearchParams(url.split('?')[1]), 'pulled'), p);
+  const invalido = pedidoDaURL(new URLSearchParams('adicional.bacon=999&separado.__proto__=1&lataCombo=__proto__'), 'pulled');
+  assert.deepEqual(invalido.adicionais, {}); assert.deepEqual(invalido.separados, {}); assert.equal(invalido.lataCombo, null);
+});
+
 test('plano local acompanha translação e rotação da âncora sem mudar sua geometria', () => {
   const { Plane } = require('three');
   const plano = new Plane(new Vector3(1, 0, 0), 0.1);
@@ -292,4 +303,21 @@ test('trocar lanche libera clones e preserva geometria e texturas do cache GLTF'
   for (const r of [fonte.geometry, fonte.material, fonte.material.map]) r.addEventListener('dispose', () => protegidos++);
   liberarMontagem([clone, gerado], [fonte]);
   assert.equal(liberados, 4); assert.equal(protegidos, 0);
+});
+
+test('liberação inclui objetos destacados e não toca no kit ou nas mãos compartilhadas', () => {
+  const { BoxGeometry, MeshStandardMaterial, Texture } = require('three');
+  const texturaCompartilhada = new Texture();
+  const geoKit = new BoxGeometry(), matKit = new MeshStandardMaterial({ map: texturaCompartilhada });
+  const kit = new Group(); kit.add(new Mesh(geoKit, matKit));
+  const mao = new Mesh(new BoxGeometry(), new MeshStandardMaterial());
+  const raiz = new Group(), proprio = new Mesh(new BoxGeometry(), new MeshStandardMaterial({ map: new Texture() }));
+  const destacado = new Mesh(geoKit, new MeshStandardMaterial({ map: texturaCompartilhada }));
+  raiz.add(proprio); raiz.add(destacado); destacado.removeFromParent();
+  let liberados = 0, protegidos = 0;
+  for (const r of [proprio.geometry, proprio.material, proprio.material.map, destacado.material]) r.addEventListener('dispose', () => liberados++);
+  for (const r of [geoKit, matKit, texturaCompartilhada, mao.geometry, mao.material]) r.addEventListener('dispose', () => protegidos++);
+  liberarMontagem([raiz, destacado, proprio], [kit, mao]);
+  assert.equal(liberados, 4, 'cada recurso próprio é liberado uma única vez');
+  assert.equal(protegidos, 0, 'fontes e recursos compartilhados permanecem intactos');
 });

@@ -2,7 +2,6 @@
 
 // HUD do pedido: o painel da etapa Turbinar (dentro da montagem, antes da tampa) e, depois do lanche pronto, a trilha
 // com o total, rótulos tocáveis sobre as bebidas/porções da cena, painéis de cada fase e o resumo que copia o pedido e abre o Anota AI.
-import { PEDIDO_URL } from "@/lib/links";
 import { useEffect, useRef, useState, type MutableRefObject, type PointerEvent as RPointerEvent, type ReactNode } from "react";
 import type { Bus } from "./Cena";
 import {
@@ -233,6 +232,7 @@ type Props = {
   fase: FasePos; pedido: Pedido; muda: Muda; proj: ProjPedido | null; zona: Zona;
   aoSeguir: () => void; sacolaPronta: boolean; aoOutro: () => void; anunciar: (s: string) => void;
   sacolaEstado: EstadoSacola; aoEnsacar: () => void;
+  aoGuardar: () => void; guardado: boolean;
 };
 
 export default function PedidoHud(props: Props) {
@@ -352,14 +352,14 @@ export default function PedidoHud(props: Props) {
           <span data-testid="selo" aria-label="Selo: com capricho" className="proto-anim mr-1 grid h-[74px] w-[74px] shrink-0 place-items-center rounded-full border-[3px] border-double border-[#c2410c] text-center font-hand text-[19px] leading-[.9] text-[#c2410c] opacity-90 [animation:proto-carimbo_1.5s_ease-out_both] [mix-blend-mode:multiply]"
             style={{ transform: "rotate(-14deg)", boxShadow: "inset 0 0 0 2px rgba(194,65,12,.35)" }}>com<br />capricho</span>
         </div>
-        <p className="mt-1.5 text-[11.5px] leading-snug text-[#5c3d2e]">Ao tocar em Pedir, copiamos este resumo e abrimos o Anota AI: monte o mesmo pedido lá e finalize.</p>
+        <p className="mt-1.5 text-[11.5px] leading-snug text-[#5c3d2e]">Guarde este lanche na sua sacola para conferir tudo junto, editar e escolher outros itens.</p>
       </div>
       <div className="grid grid-cols-2 gap-2 border-t border-dashed border-[#1f1510]/20 px-5 pb-5 pt-3">
-        <a data-testid="pedir" href={PEDIDO_URL} target="_blank" rel="noopener" onClick={() => { void copiar(); }} className={`col-span-2 grid h-11 place-items-center rounded-full bg-[#ff6a1a] text-sm font-bold text-[#120c09] hover:bg-[#ff8a3d] ${foco}`}>Pedir no Anota AI</a>
+        <button type="button" data-testid="pedir" onClick={props.aoGuardar} className={`col-span-2 grid h-11 place-items-center rounded-full bg-[#ff6a1a] text-sm font-bold text-[#120c09] hover:bg-[#ff8a3d] ${foco}`}>{props.guardado ? "Ver minha sacola" : "Adicionar à minha sacola"}</button>
         <button type="button" data-testid="copiar-pedido" onClick={copiar} className={`h-10 rounded-full bg-[#120c09] text-sm font-semibold text-[#fff8e7] hover:bg-[#2a1d18] ${foco}`}>
-          {copiado === "ok" ? "Copiado!" : copiado === "erro" ? "Não deu pra copiar" : "Copiar pedido"}
+          {copiado === "ok" ? "Copiado!" : copiado === "erro" ? "Não deu pra copiar" : "Copiar este lanche"}
         </button>
-        <button type="button" data-testid="montar-outro" onClick={aoOutro} className={`h-10 rounded-full border border-[#120c09]/25 text-sm font-semibold text-[#120c09] hover:bg-[#120c09]/5 ${foco}`}>Montar outro lanche</button>
+        <button type="button" data-testid="montar-outro" onClick={aoOutro} className={`h-10 rounded-full border border-[#120c09]/25 text-sm font-semibold text-[#120c09] hover:bg-[#120c09]/5 ${foco}`}>Guardar e montar outro</button>
         <p aria-live="polite" className="sr-only">{copiado === "ok" ? "Pedido copiado" : ""}</p>
       </div>
     </div>

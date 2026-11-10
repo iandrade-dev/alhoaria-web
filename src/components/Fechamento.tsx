@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import { motion, useReducedMotion } from "framer-motion";
-import { INSTAGRAM_URL, PEDIDO_URL } from "@/lib/links";
+import { INSTAGRAM_URL } from "@/lib/links";
+import { restaurante } from "@/data/restaurante";
 
 const words = "PÃO DE ALHO • MAÇARICO • GRATINADO • RECHEADO •";
 
@@ -46,14 +47,14 @@ export default function Fechamento() {
         </h2>
 
         <motion.div custom={1} variants={reducedMotion ? undefined : lineVariants} className="flex flex-col items-start gap-6 lg:items-end">
-          <a href={PEDIDO_URL} target="_blank" rel="noreferrer" className="group relative inline-flex min-h-12 items-center gap-3 overflow-hidden rounded bg-carvao px-6 py-3 font-bold text-creme transition-transform active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-carvao focus-visible:outline-offset-4">
+          <a href="/pedir" className="group relative inline-flex min-h-12 items-center gap-3 overflow-hidden rounded bg-carvao px-6 py-3 font-bold text-creme transition-transform active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-carvao focus-visible:outline-offset-4">
             <span aria-hidden="true" className="absolute inset-0 origin-bottom scale-y-0 bg-macarico transition-transform duration-[220ms] ease-out group-hover:scale-y-100 group-focus-visible:scale-y-100" />
             <span className="relative">Peça agora</span><span aria-hidden="true" className="relative inline-block transition-transform duration-150 group-hover:translate-x-1 group-focus-visible:translate-x-1">→</span>
           </a>
-          <a href={INSTAGRAM_URL} target="_blank" rel="noreferrer" className="instagram-link relative inline-flex min-h-11 items-center font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-carvao">Instagram @alhoaria</a>
+          <a href={INSTAGRAM_URL} target="_blank" rel="noreferrer" className="instagram-link relative inline-flex min-h-11 items-center font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-carvao">Instagram {restaurante.instagramNome}</a>
           <div className="flex items-center gap-3">
-            <Image src="/assets/photos/logo-anota.webp" alt="" width={64} height={64} className="h-12 w-12 object-contain grayscale" />
-            <span className="font-sans text-xs text-carvao">Alhoaria · desde 2023</span>
+            <Image src={restaurante.logo} alt="" width={64} height={64} className="h-12 w-12 object-contain grayscale" />
+            <span className="font-sans text-xs text-carvao">{restaurante.assinatura}</span>
           </div>
         </motion.div>
 

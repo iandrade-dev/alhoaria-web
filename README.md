@@ -1,6 +1,23 @@
-# Alhoaria — landing MVP
+# Alhoaria — cardápio e experiência 3D
 
 Landing de uma página para a Alhoaria, lanchonete de Palhoça/SC com lanches no pão de alho gratinado no maçarico.
+
+## Pedido e configuração
+
+`/pedir` oferece a escolha inicial entre cardápio simples (`/cardapio`) e experiência 3D (`/bancada`).
+A mesma sacola aceita vários lanches personalizados, bebidas e porções avulsas, com quantidade,
+edição, remoção e recuperação local após recarregar. Adicionar um lanche na bancada libera a escolha do próximo.
+O modo simples não monta um canvas 3D. Falhas de WebGL ou de carregamento oferecem recuperação nele.
+
+Identidade, cores, domínio, unidades e destino do checkout ficam em `src/data/restaurante.ts`;
+o catálogo compartilhado em `src/data/catalogo.ts`. O checkout externo pode ser trocado por WhatsApp
+em `src/lib/checkout.ts`. No Anota AI, a pessoa precisa refazer o pedido: não há transferência automática.
+O reaproveitamento atual é do frontend; receitas e assets da montagem ainda são específicos da Alhoaria.
+
+A home começa com foto e conteúdo renderizado no servidor. O vídeo principal só carrega ao tocar
+em “Ver a história do lanche”. A faixa de montagem usa imagem em economia de dados/aparelhos modestos;
+o 3D reduz resolução e sombras e pausa renderização com a sacola aberta ou página oculta.
+Detalhes da pesquisa e validação em `docs/EVOLUCAO-FRONTEND.md`.
 
 ## Stack
 
@@ -31,7 +48,7 @@ Perder o rastreamento pausa tanto a montagem quanto as animações do pedido e o
 
 A cozinha e as sombras de contato ficam ocultas na câmera. A mesma cena e o mesmo canvas permanecem
 montados, com projeções dos ingredientes, bebidas e sacola corrigidas pela posição, giro e tamanho em AR.
-Sem WebXR, entra direto na bancada, sem exibir a opção AR; sem WebGL, há acesso à bancada clássica.
+Sem WebXR, entra direto na bancada, sem exibir a opção AR; sem WebGL, há acesso ao modo simples.
 Não há captura ou envio de imagens da câmera.
 
 Verificação: `npm run test:ar` cobre ciclo de sessão, permissões, superfície horizontal, posição manual sem

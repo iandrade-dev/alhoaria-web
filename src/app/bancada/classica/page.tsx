@@ -1,12 +1,7 @@
-import type { Metadata } from "next";
-import Bancada from "@/components/bancada/Bancada";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Monte o seu, versão clássica — Alhoaria",
-  description: "A bancada 3D clássica da Alhoaria: monte o seu lanche camada por camada.",
-  robots: { index: false },
-};
-
-export default function PaginaBancadaClassica() {
-  return <Bancada />;
+export default async function PaginaBancadaClassica({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const q = new URLSearchParams();
+  for (const [nome, valor] of Object.entries(await searchParams)) for (const item of Array.isArray(valor) ? valor : valor === undefined ? [] : [valor]) q.append(nome, item);
+  redirect(q.size ? `/cardapio?${q}` : "/cardapio");
 }

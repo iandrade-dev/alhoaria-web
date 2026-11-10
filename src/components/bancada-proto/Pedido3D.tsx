@@ -21,6 +21,7 @@ import {
 import { dose, potinho, potinhoSeparado, punhadoNaMao, type Altura } from "./adicionais3d";
 import type { ApiCamara } from "./Camara";
 import type { Bus } from "./Cena";
+import { liberarMontagem } from "../ar/recursos";
 
 /** "turbinar" = a etapa Turbinar da montagem (antes da tampa); as outras três vêm depois do lanche pronto. */
 export type FasePedido = "montagem" | "turbinar" | "bebida" | "acomp" | "sacola";
@@ -99,7 +100,7 @@ const cubica = (out: Vector3, a: Vector3, b: Vector3, c: Vector3, d: Vector3, k:
 function estampar(sacola: Object3D) {
   const frentes: MeshStandardMaterial[] = [];
   sacola.traverse((n) => { if (n instanceof Mesh && n.name.endsWith("_frente")) frentes.push(n.material as MeshStandardMaterial); });
-  if (!frentes.length) return;
+  if (!frentes.length) return () => {};
   const W = 528, Hh = 768;
   const cv = document.createElement("canvas"); cv.width = W; cv.height = Hh;
   const g = cv.getContext("2d")!;
@@ -123,11 +124,9 @@ function estampar(sacola: Object3D) {
     const x = rnd() * W, y = rnd() * Hh, a = rnd() * Math.PI, l = 4 + rnd() * 12;
     g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
   }
-  const aplicar = () => {
-    const tex = new CanvasTexture(cv);
-    tex.colorSpace = SRGBColorSpace; tex.flipY = false; tex.anisotropy = 4;
-    frentes.forEach((m) => { m.map = tex; m.needsUpdate = true; });
-  };
+  const tex = new CanvasTexture(cv);
+  tex.colorSpace = SRGBColorSpace; tex.flipY = false; tex.anisotropy = 4;
+  const aplicar = () => { tex.needsUpdate = true; frentes.forEach((m) => { m.map = tex; m.needsUpdate = true; }); };
   aplicar();
   const img = new Image();
   img.onload = () => {
@@ -158,6 +157,7 @@ function estampar(sacola: Object3D) {
     aplicar();
   };
   img.src = "/assets/photos/logo-anota-w320.webp";
+  return () => { img.onload = null; };
 }
 
 function tingir(item: Item, cor: string) {
@@ -187,6 +187,8 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rod
   // ------------------------------------------------ objetos
   const P = useMemo(() => {
     const raiz = new Group();
+    const proprios = new Set<Object3D>();
+    const registrar = <T extends Object3D>(obj: T): T => { proprios.add(obj); return obj; };
     const tabua = K.raiz.children[0];
     const bt = caixa(tabua);
     const naTabua = (x: number, z: number) => x > bt.min.x + 0.02 && x < bt.max.x - 0.02 && z > bt.min.z + 0.02 && z < bt.max.z - 0.02;
@@ -201,7 +203,7 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rod
     };
     const novoItem = (chave: Chave): Item => {
       const arq = chave === "batata" || chave === "dadinho" ? `porcao-${chave}` : `beb-${chave}`;
-      const obj = new Group(); obj.add(clonar(A[arq as keyof typeof A]));
+      const obj = registrar(new Group()); obj.add(clonar(A[arq as keyof typeof A]));
       obj.traverse((n) => { if (n instanceof Mesh && (n.material as MeshStandardMaterial).transparent) n.castShadow = false; });
       const it: Item = { chave, obj, alto: caixa(obj).max.y, cor: "" };
       return it;
@@ -216,7 +218,7 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rod
     const sacola = clonar(A.sacola);
     const aberta = sacola.getObjectByName("sacola_aberta")!, fechada = sacola.getObjectByName("sacola_fechada")!;
     aberta.visible = true; fechada.visible = false; sacola.visible = false;
-    estampar(sacola);
+    const cancelarEstampa = estampar(sacola);
     raiz.add(sacola);
     // aba da dobra: a boca dobra para a frente (articulada na borda de trás) antes de virar a sacola fechada
     let kraft: MeshStandardMaterial | null = null;
@@ -237,10 +239,24 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rod
     const cobertura = new Group();
     K.lanche.add(cobertura);
     const copos = new Group(); raiz.add(copos);
-    return { raiz, tabua, bt, yEm, potes, pratBeb, pratPor, novoItem, sacola, aberta, fechada, aba, etiquetas, cobertura, copos };
+    return { raiz, tabua, bt, yEm, potes, pratBeb, pratPor, novoItem, sacola, aberta, fechada, aba, etiquetas, cobertura, copos, proprios, registrar, cancelarEstampa };
   }, [K, A]);
 
-  useEffect(() => () => { P.cobertura.removeFromParent(); }, [P]);
+  // React pode executar uma limpeza de ensaio seguida de remontagem no modo estrito.
+  const geracoes = useRef(new Map<typeof P, number>());
+  useEffect(() => {
+    const geracao = (geracoes.current.get(P) ?? 0) + 1;
+    geracoes.current.set(P, geracao);
+    return () => { queueMicrotask(() => {
+      if (geracoes.current.get(P) !== geracao) return;
+      geracoes.current.delete(P);
+      P.cancelarEstampa();
+      P.cobertura.removeFromParent();
+      const fontes = [...Object.values(A), K.raiz, K.lanche, ...K.extras, ...Object.values(K.estacoes).map((e) => e.raiz), ...Object.values(K.fer).filter((x): x is Object3D => x !== null), H.raiz, ...Object.values(H.poses), ...Object.values(H.fer).filter((x): x is Object3D => x !== null)];
+      liberarMontagem([P.raiz, P.cobertura, ...P.proprios], fontes);
+      P.proprios.clear();
+    }); };
+  }, [P, A, K, H]);
 
   // ------------------------------------------------ estado da mesa (refs: nada re-renderiza por quadro)
   const S = useRef({
@@ -323,7 +339,7 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rod
       const larg = (K.caixa.x[1] - K.caixa.x[0]) * 0.4;
       const off: [number, number] = [[-0.012, 0.01, 0.006, -0.008, 0.012, 0][k], [-0.014, 0.014, -0.004, 0.01, 0.002, 0][k]];
       s.doses[id] = [0, 1, 2].map((i) => {
-        const d = dose(id, i, alt, larg, 101 + k * 17 + i * 5, off);
+        const d = P.registrar(dose(id, i, alt, larg, 101 + k * 17 + i * 5, off));
         d.visible = false; P.cobertura.add(d); return d;
       });
     }
@@ -396,7 +412,7 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rod
     const pega = pegaDe(id);
     const d = dosesDe(id)[i];
     const alvo = d.position.clone(); alvo.y += 0.05;
-    const mao = punhadoNaMao(id, 300 + i);
+    const mao = P.registrar(punhadoNaMao(id, 300 + i));
     mao.visible = false; P.raiz.add(mao);
     return novaAnim(`punhado-${id}`, pega, alvo, 0.02, {
       punhado: mao,
@@ -567,7 +583,7 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rod
       let c = s.copos.get(chave);
       const x = cx + i * 0.047, z = cz + (i % 2) * 0.006;
       if (!c) {
-        const obj = potinhoSeparado(chave.split("#")[0] as (typeof ORDEM_SEPARADOS)[number]);
+        const obj = P.registrar(potinhoSeparado(chave.split("#")[0] as (typeof ORDEM_SEPARADOS)[number]));
         obj.position.set(x, P.bt.max.y, z); obj.scale.setScalar(0.001); P.copos.add(obj);
         c = { obj, t: 0, x, z }; s.copos.set(chave, c);
       }

@@ -2,17 +2,14 @@
 // lida em ATUALIZADO. Valores em centavos. O protótipo não monta o carrinho do Anota AI: o resumo é
 // copiado e a pessoa finaliza o pedido no Anota AI.
 import type { LancheId } from "./layout";
+import { CATALOGO_POR_ID } from "../../data/catalogo";
+import { restaurante } from "../../data/restaurante";
 
-export const ATUALIZADO = "2026-11-06";
-export const AVISO = "Preços do cardápio de 06/11/2026. O valor final é o da loja.";
+export const ATUALIZADO = restaurante.versaoCatalogo;
+export const AVISO = restaurante.avisoPrecos;
 
 
-export const LANCHES_PRECO: Record<LancheId, { nome: string; preco: number }> = {
-  costela: { nome: "A Costela!", preco: 4490 },
-  pulled: { nome: "Pulled Pork!", preco: 3590 },
-  brocolis: { nome: "Brócolis & Queijo!", preco: 3390 },
-  dogalho: { nome: "Dogalho", preco: 2690 },
-};
+export const LANCHES_PRECO: Record<LancheId, { nome: string; preco: number }> = CATALOGO_POR_ID;
 
 // ---------------------------------------------------------------- Opções do pedido (lanches de pão de alho)
 // Cada grupo do Anota AI pede "Escolha 1 item". O Dogalho não tem grupos de escolha. As opções não mudam o preço.
@@ -224,6 +221,6 @@ export function textoDoPedido(p: Pedido) {
     if (l.obs) s += `\n${recuo}${l.obs}`;
     return s;
   });
-  return ["Olá! Quero fazer este pedido, montado no site da Alhoaria:", ...linhas, `Total: ${brl(totalDoPedido(p))}`].join("\n");
+  return [`Olá! Quero fazer este pedido, montado no site de ${restaurante.nome}:`, ...linhas, `Total: ${brl(totalDoPedido(p))}`].join("\n");
 }
 

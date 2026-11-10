@@ -1,35 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { INSTAGRAM_URL } from "@/lib/links";
+import { restaurante } from "@/data/restaurante";
 
 const reels = ["DbO6MswRits", "DaD_lHPx6yS", "Dd2BEyCsw7E"];
 
 export default function QuemProva() {
-  const sectionRef = useRef<HTMLElement>(null);
-  const [isVisible, setIsVisible] = useState(false);
-
-  useEffect(() => {
-    const section = sectionRef.current;
-    if (!section || isVisible) return;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsVisible(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "0px" },
-    );
-
-    observer.observe(section);
-    return () => observer.disconnect();
-  }, [isVisible]);
+  const [ativo, setAtivo] = useState<string | null>(null);
 
   return (
     <section
-      ref={sectionRef}
       id="quem-prova"
       className="scroll-mt-[var(--header-height)] bg-carvao px-5 py-16 text-osso sm:px-10 sm:py-24"
     >
@@ -43,11 +24,12 @@ export default function QuemProva() {
         <ul className="-mx-5 mt-8 flex snap-x snap-mandatory gap-4 overflow-x-auto px-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:mx-0 md:justify-center md:overflow-visible">
           {reels.map((reelId, index) => (
             <li key={reelId} className="w-[326px] shrink-0 snap-center">
-              <div className="h-[613px] w-[326px] overflow-hidden rounded-md bg-white">
-                {isVisible ? (
+              <div className="relative min-h-[400px] w-[326px] overflow-hidden rounded-xl border border-carvao-borda bg-carvao-leve">
+                {ativo === reelId ? <>
+                  <button type="button" onClick={() => setAtivo(null)} className="flex min-h-11 w-full items-center justify-center bg-carvao px-4 font-semibold text-osso">Fechar vídeo</button>
                   <iframe
                     src={`https://www.instagram.com/reel/${reelId}/embed/`}
-                    title={`Reel do Instagram da Alhoaria, ${index + 1} de 3`}
+                    title={`Reel do Instagram da ${restaurante.nome}, ${index + 1} de 3`}
                     width="326"
                     height="613"
                     scrolling="no"
@@ -56,12 +38,13 @@ export default function QuemProva() {
                     allowFullScreen
                     className="border-0"
                   />
-                ) : (
-                  <div
-                    aria-hidden="true"
-                    className="h-[613px] w-[326px] border border-carvao-borda bg-carvao-leve"
-                  />
-                )}
+                </> : <div className="flex min-h-[400px] flex-col items-center justify-center gap-6 p-7 text-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={restaurante.logo} alt={restaurante.nome} width={100} height={100} loading="lazy" className="h-24 w-24 object-contain" />
+                  <p className="font-hand text-3xl">Direto do nosso Instagram</p>
+                  <button type="button" onClick={() => setAtivo(reelId)} aria-label={`Carregar vídeo ${index + 1} do Instagram`} className="min-h-12 rounded-full bg-macarico px-6 font-bold text-carvao">▶ Ver vídeo {index + 1}</button>
+                  <a href={`https://www.instagram.com/reel/${reelId}/`} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center text-sm underline">Abrir no Instagram ↗</a>
+                </div>}
               </div>
             </li>
           ))}
@@ -71,10 +54,10 @@ export default function QuemProva() {
           href={INSTAGRAM_URL}
           target="_blank"
           rel="noopener noreferrer"
-          aria-label="Ver mais no Instagram @alhoaria (abre em nova aba)"
+          aria-label={`Ver mais no Instagram ${restaurante.instagramNome} (abre em nova aba)`}
           className="group mt-8 inline-flex min-h-11 items-center gap-2 rounded border border-macarico px-4 font-semibold text-macarico transition-colors duration-150 hover:bg-macarico hover:text-carvao focus-visible:outline focus-visible:outline-2 focus-visible:outline-osso"
         >
-          Ver mais no @alhoaria <span aria-hidden="true">→</span>
+          Ver mais no {restaurante.instagramNome} <span aria-hidden="true">→</span>
         </a>
       </div>
     </section>

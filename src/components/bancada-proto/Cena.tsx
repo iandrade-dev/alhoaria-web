@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, type MutableRefObject } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { ContactShadows, useGLTF } from "@react-three/drei";
+import { ContactShadows, useGLTF, useProgress } from "@react-three/drei";
 import {
   AdditiveBlending, CylinderGeometry, Euler, Group, Material, MathUtils, Matrix4, Mesh, MeshBasicMaterial, Object3D,
   Plane, PlaneGeometry, PMREMGenerator, Quaternion, Raycaster, SpotLight, Vector2, Vector3,
@@ -47,6 +47,7 @@ export type Props = {
   congelar: { id: Passo; t: number } | null;
   /** Contexto WebGL perdido com a cena montada. */
   aoFalhar?: () => void;
+  leve?: boolean; suspenso?: boolean; aoProgresso?: (valor: number) => void;
   /** Câmera: centralizar e o aviso de "fora da posição padrão" (botão Centralizar). */
   camApi: MutableRefObject<ApiCamara | null>;
   aoCamFora: (fora: boolean) => void;
@@ -559,6 +560,8 @@ export function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPro
 
 // ---------------------------------------------------------------- canvas
 export default function Cena(props: Props) {
+  const { progress } = useProgress();
+  useEffect(() => props.aoProgresso?.(Math.round(progress)), [props.aoProgresso, progress]);
   const camera = useMemo(() => ({ position: [0, 1, 1.4] as [number, number, number], fov: 50, near: 0.05, far: 12 }), []);
   // Perda de contexto só conta como falha enquanto a cena está montada: ao desmontar, o R3F chama forceContextLoss.
   const falhar = useRef(props.aoFalhar);
@@ -566,7 +569,7 @@ export default function Cena(props: Props) {
   const montada = useRef(true);
   useEffect(() => { montada.current = true; return () => { montada.current = false; }; }, []);
   // Sem sombras em tempo real: só as sombras de contato (a luz da cozinha já vem assada no GLB).
-  return <Canvas className="!absolute inset-0" dpr={[1, 1.5]} camera={camera} gl={{ alpha: true, antialias: true, powerPreference: "high-performance" }}
+  return <Canvas className="!absolute inset-0" frameloop={props.suspenso ? "never" : "always"} dpr={props.leve ? 1 : [1, 1.5]} camera={camera} gl={{ alpha: true, antialias: !props.leve, powerPreference: "default" }}
     style={{ touchAction: "none" }} onCreated={({ gl }) => {
       gl.setClearColor(0x120c09, 1);
       gl.xr.enabled = true;
@@ -583,7 +586,7 @@ function Interno(props: Props) {
   const { def } = props;
   const estado = props.modoMesa?.estado;
   const emAR = !!estado && estado.fase !== "3d" && estado.fase !== "iniciando";
-  const pausado = !!estado && estado.fase !== "3d" && (estado.fase !== "colocado" || !estado.rastreando);
+  const pausado = !!props.suspenso || !!estado && estado.fase !== "3d" && (estado.fase !== "colocado" || !estado.rastreando);
   const mundo = def && <Suspense fallback={null}>
     <Mundo key={def.id} {...props} def={def} arranjo={arranjo} M={M}
       apresentacao={props.modoMesa ? { pronto: false, pausado, interativo: true } : undefined} />
@@ -599,7 +602,7 @@ function Interno(props: Props) {
     <Ambiente />
     {!emAR && <Suspense fallback={null}><Cozinha arranjo={arranjo} /></Suspense>}
     {props.modoMesa ? <MesaXR modo={props.modoMesa}>{mundo}</MesaXR> : mundo}
-    {def && !emAR && <ContactShadows position={[0, MESA + 0.0008, 0]} scale={1.6} far={0.35} blur={2.2} opacity={0.75} resolution={512} color="#000000" frames={Infinity} />}
+    {def && !emAR && !props.leve && <ContactShadows position={[0, MESA + 0.0008, 0]} scale={1.6} far={0.35} blur={2.2} opacity={0.75} resolution={256} color="#000000" frames={Infinity} />}
   </>;
 }
 

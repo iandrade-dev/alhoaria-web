@@ -1,8 +1,8 @@
-import menu from "@/data/menu.json";
+import { restaurante } from "@/data/restaurante";
 
 export default function Unidades() {
-  const locations = menu.units.filter((unit) => unit.id !== "praia-de-fora");
-  const comingSoon = menu.units.find((unit) => unit.id === "praia-de-fora");
+  const locations = restaurante.unidades.filter((unit) => !unit.is_coming_soon);
+  const comingSoon = restaurante.unidades.find((unit) => unit.is_coming_soon);
   return (
     <section id="unidades" className="scroll-mt-[var(--header-height)] bg-carvao px-5 py-16 text-osso sm:px-10 sm:py-24">
       <div className="mx-auto max-w-7xl">
