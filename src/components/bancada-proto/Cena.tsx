@@ -549,6 +549,7 @@ export function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPro
     {K.extras.map((o, i) => <primitive key={`x-${i}`} object={o} />)}
     {pedido?.atual && <Suspense fallback={null}>
       <Pedido3D K={K} H={H} M={M} arranjo={arranjo} fase={pedido.fase} pedido={pedido.atual} rodada={pedido.rodada} reduzido={reduzido}
+        bus={bus}
         pausado={apresentacao?.pausado}
         aoProjetar={pedido.aoProjetar} aoSacola={pedido.aoSacola} aoOcupado={pedido.aoOcupado}
         ensacar={pedido.ensacar} aoSacolaEstado={pedido.aoSacolaEstado} camApi={camApi} />

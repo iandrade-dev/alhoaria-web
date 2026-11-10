@@ -18,6 +18,8 @@ npm run dev
 `/bancada` e `/ar` abrem a mesma experiência e o mesmo estado de pedido. Na entrada, a pessoa
 escolhe **Montar na bancada** ou **Montar na minha mesa**. Não há navegação para outra montagem.
 Os dois ambientes compartilham pão, ingredientes, adicionais, bebidas, porções, combo, sacola e comanda.
+Na etapa Turbinar, tocar no potinho seleciona e mostra só seus controles +/−; arrastar o potinho 3D até o pão
+adiciona uma dose. Soltar fora devolve sem adicionar. Pastas e cremes separados ficam numa bandeja recolhida.
 O pedido é copiado e finalizado na loja do Anota AI; o site não preenche o carrinho externo automaticamente.
 
 Em Android com WebXR compatível, por HTTPS, a escolha da mesa abre a câmera (depois de escolher um lanche,

@@ -3,7 +3,8 @@
 // HUD do pedido: o painel da etapa Turbinar (dentro da montagem, antes da tampa) e, depois do lanche pronto, a trilha
 // com o total, rótulos tocáveis sobre as bebidas/porções da cena, painéis de cada fase e o resumo que copia o pedido e abre o Anota AI.
 import { PEDIDO_URL } from "@/lib/links";
-import { useRef, useState, type PointerEvent as RPointerEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type MutableRefObject, type PointerEvent as RPointerEvent, type ReactNode } from "react";
+import type { Bus } from "./Cena";
 import {
   ADICIONAIS, AVISO, BEBIDAS, LANCHES_PRECO, ORDEM_BEBIDAS, ORDEM_PORCOES, ORDEM_SABORES_LATA, ORDEM_SABORES_SODA, POTINHOS,
   ORDEM_SEPARADOS, PORCOES, SABORES_LATA, SABORES_SODA, SEPARADOS, brl, economiaDoTrio, linhasDoPedido, saborDaLataDoCombo, textoDoPedido,
@@ -58,13 +59,19 @@ export function TrilhaPedido({ fase, pedido }: { fase: FasePedido; pedido: Pedid
 }
 
 /** Botão invisível sobre um objeto da cena (potinho, bebida, porção) com etiqueta de nome e preço; tocar ou arrastar até o lanche. */
-function NaCena({ testid, ponto, nome, preco, conta, ativo, zona, aoUsar, rotulo, desligado, acima, semRotulo }: {
+function NaCena({ testid, ponto: recebido, nome, preco, conta, ativo, zona, aoUsar, rotulo, desligado, acima, semRotulo, aoToque, aoArrastar, aoSelecionar }: {
   testid: string; ponto?: { x: number; y: number; r: number; t: number }; nome: string; preco: string; conta?: number; ativo?: boolean; zona: Zona;
   aoUsar: () => void; rotulo: string; desligado?: boolean; acima?: boolean; semRotulo?: boolean;
+  aoToque?: () => void; aoSelecionar?: () => void; aoArrastar?: (ativo: boolean, x: number, y: number) => void;
 }) {
   const t = useRef<{ id: number; x: number; y: number; moveu: boolean } | null>(null);
   const supr = useRef(false);
   const [fant, setFant] = useState<{ x: number; y: number; sobre: boolean } | null>(null);
+  const arrastarRef = useRef(aoArrastar); arrastarRef.current = aoArrastar;
+  const ultimoPonto = useRef(recebido);
+  if (recebido) ultimoPonto.current = recebido;
+  const ponto = recebido ?? (t.current ? ultimoPonto.current : undefined);
+  useEffect(() => () => { if (t.current) arrastarRef.current?.(false, 0, 0); }, []);
   if (!ponto) return null;
   // etiqueta sempre dentro da tela
   const larg = typeof window === "undefined" ? 1e4 : window.innerWidth;
@@ -75,20 +82,27 @@ function NaCena({ testid, ponto, nome, preco, conta, ativo, zona, aoUsar, rotulo
       if (e.button !== 0) return;
       e.currentTarget.setPointerCapture(e.pointerId);
       t.current = { id: e.pointerId, x: e.clientX, y: e.clientY, moveu: false };
+      aoSelecionar?.();
     },
     onPointerMove: (e: RPointerEvent<HTMLButtonElement>) => {
       const c = t.current; if (!c || c.id !== e.pointerId) return;
       if (!c.moveu && Math.hypot(e.clientX - c.x, e.clientY - c.y) > 8) c.moveu = true;
-      if (c.moveu) setFant({ x: e.clientX, y: e.clientY, sobre: sobre(e.clientX, e.clientY) });
+      if (c.moveu) {
+        if (aoArrastar) aoArrastar(true, e.clientX, e.clientY);
+        else setFant({ x: e.clientX, y: e.clientY, sobre: sobre(e.clientX, e.clientY) });
+      }
     },
     onPointerUp: (e: RPointerEvent<HTMLButtonElement>) => {
       const c = t.current; if (!c || c.id !== e.pointerId) return;
       t.current = null; setFant(null);
+      aoArrastar?.(false, e.clientX, e.clientY);
       supr.current = true; setTimeout(() => { supr.current = false; }, 0);
-      if (!c.moveu || sobre(e.clientX, e.clientY)) aoUsar();
+      if (!c.moveu) (aoToque ?? aoUsar)();
+      else if (sobre(e.clientX, e.clientY)) aoUsar();
     },
-    onPointerCancel: () => { t.current = null; setFant(null); },
-    onClick: () => { if (!supr.current) aoUsar(); },
+    onPointerCancel: () => { t.current = null; setFant(null); aoArrastar?.(false, 0, 0); },
+    onLostPointerCapture: () => { if (t.current) { t.current = null; setFant(null); aoArrastar?.(false, 0, 0); } },
+    onClick: () => { if (!supr.current) (aoToque ?? aoUsar)(); },
   };
   return <>
     <button type="button" data-testid={testid} aria-label={rotulo} aria-pressed={ativo} {...ev}
@@ -128,70 +142,86 @@ function ChipsSabor<T extends string>({ ordem, nomes, atual, aoEscolher, titulo 
   </div>;
 }
 
-/**
- * Adicionais num canto: quantidades junto de cada item, separados numa aba própria.
- * Os potinhos continuam tocáveis/arrastáveis sem etiquetas cobrindo o lanche.
- */
-export function PainelTurbinar({ pedido, muda, proj, zona, anunciar, aoFechar, fechando }: {
-  pedido: Pedido; muda: Muda; proj: ProjPedido | null; zona: Zona; anunciar: (s: string) => void; aoFechar: () => void; fechando: boolean;
+/** Potinhos são a interação principal; só o selecionado mostra nome, preço e quantidade. */
+export function PainelTurbinar({ pedido, muda, proj, zona, bus, anunciar, aoFechar, fechando }: {
+  pedido: Pedido; muda: Muda; proj: ProjPedido | null; zona: Zona; bus: MutableRefObject<Bus>;
+  anunciar: (s: string) => void; aoFechar: () => void; fechando: boolean;
 }) {
-  const [aba, setAba] = useState<"lanche" | "separados">("lanche");
-  const [aberto, setAberto] = useState(true);
+  const [selecionado, setSelecionado] = useState<AdicionalId | null>(null);
+  const [pastas, setPastas] = useState(false);
+  const [arrastando, setArrastando] = useState(false);
+  const [sobrePao, setSobrePao] = useState(false);
+  const abrirPastas = useRef<HTMLButtonElement>(null);
   const somar = (id: AdicionalId) => somarAdicional(pedido, muda, anunciar, id);
   const tirar = (id: AdicionalId) => somarAdicional(pedido, muda, anunciar, id, -1);
-  const separado = (id: SeparadoId, d: number) => muda((p) => ({ ...p, separados: { ...p.separados, [id]: Math.max(0, Math.min(SEPARADOS[id].max, (p.separados[id] ?? 0) + d)) } }));
-  const nLanche = POTINHOS.reduce((n, id) => n + (pedido.adicionais[id] ?? 0), 0);
+  const separado = (id: SeparadoId, d: number) => {
+    muda((p) => ({ ...p, separados: { ...p.separados, [id]: Math.max(0, Math.min(SEPARADOS[id].max, (p.separados[id] ?? 0) + d)) } }));
+    anunciar(`${SEPARADOS[id].nome}: ${Math.max(0, Math.min(SEPARADOS[id].max, (pedido.separados[id] ?? 0) + d))}`);
+  };
+  useEffect(() => () => { bus.current.drag.ativo = false; }, [bus]);
   const nSeparados = ORDEM_SEPARADOS.reduce((n, id) => n + (pedido.separados[id] ?? 0), 0);
+  const selecionar = (id: AdicionalId) => { setSelecionado(id); setPastas(false); };
+  const ponto = selecionado ? proj?.[`adicional-${selecionado}`] : null;
+  const largura = typeof window === "undefined" ? 390 : window.innerWidth;
+  const altura = typeof window === "undefined" ? 844 : window.innerHeight;
+  const acima = !!ponto && (!zona || ponto.y < (zona.y0 + zona.y1) / 2);
+  const esquerda = ponto ? Math.max(10, Math.min(largura - 240, ponto.x - 115)) : 10;
+  const topo = ponto ? Math.max(130, Math.min(altura - 210, acima ? ponto.y - ponto.r - 84 : ponto.y + ponto.r + 14)) : 130;
   return <>
     {!fechando && POTINHOS.map((id) => {
-      const a = ADICIONAIS[id]; const n = pedido.adicionais[id] ?? 0;
-      return <NaCena key={id} testid={`adicional-${id}`} ponto={proj?.[`adicional-${id}`]} nome={a.curto} preco={brl(a.preco)} conta={n} ativo={n > 0} zona={zona}
-        semRotulo desligado={n >= a.max} aoUsar={() => somar(id)} rotulo={`${a.nome}, ${brl(a.preco)}${n ? `, ${n} no lanche` : ""}${n >= a.max ? " (no máximo)" : ""}`} />;
+      const a = ADICIONAIS[id], n = pedido.adicionais[id] ?? 0;
+      return <NaCena key={id} testid={`adicional-${id}`} ponto={proj?.[`adicional-${id}`]} nome={a.curto} preco={brl(a.preco)} conta={n}
+        ativo={selecionado === id} zona={zona} semRotulo desligado={n >= a.max}
+        aoSelecionar={() => selecionar(id)} aoToque={() => selecionar(id)} aoUsar={() => { selecionar(id); somar(id); }}
+        aoArrastar={(ativo, x, y) => {
+          bus.current.drag = { ativo, id: `adicional:${id}`, x, y };
+          setArrastando(ativo);
+          setSobrePao(ativo && !!zona && x >= zona.x0 - 50 && x <= zona.x1 + 50 && y >= zona.y0 - 50 && y <= zona.y1 + 50);
+        }}
+        rotulo={`${a.nome}, ${brl(a.preco)}. Toque para escolher ou arraste até o pão${n ? `, ${n} no lanche` : ""}`} />;
     })}
-    <section data-testid="painel-turbinar" className={extras.painel} aria-label="Adicionais e pastas">
-      <button type="button" className={extras.cabecalho} aria-expanded={aberto} aria-controls="opcoes-turbinar" onClick={() => setAberto((v) => !v)}>
-        <span>Do seu jeito<small>Adicionais e pastas{nLanche + nSeparados > 0 ? ` · ${nLanche + nSeparados} no pedido` : ""}</small></span>
-        <span aria-hidden="true" className={extras.seta} style={{ transform: aberto ? "rotate(180deg)" : undefined }}>⌄</span>
+    {arrastando && zona && <div className={`${extras.alvo} ${sobrePao ? extras.sobre : ""}`} aria-hidden="true"
+      style={{ left: zona.x0 - 12, top: zona.y0 - 12, width: zona.x1 - zona.x0 + 24, height: zona.y1 - zona.y0 + 24 }}>Solte no pão</div>}
+    {selecionado && ponto && !arrastando && !pastas && !fechando && <div className={extras.selecao} style={{ left: esquerda, top: topo }}
+      role="group" aria-label={`Ingrediente selecionado: ${ADICIONAIS[selecionado].curto}`} onKeyDown={(e) => {
+        if (e.key === "Escape") { setSelecionado(null); document.querySelector<HTMLButtonElement>(`[data-testid="adicional-${selecionado}"]`)?.focus(); }
+      }}>
+      <button type="button" className={extras.fecharSelecao} aria-label="Fechar controles do ingrediente" onClick={() => setSelecionado(null)}>×</button>
+      <ul><QuantidadeExtra item={ADICIONAIS[selecionado]} quantidade={pedido.adicionais[selecionado] ?? 0}
+        maisId={`adicionar-${selecionado}`} menosId={`tirar-${selecionado}`} aoMais={() => somar(selecionado)} aoMenos={() => tirar(selecionado)} desligado={fechando} /></ul>
+    </div>}
+    <aside className={extras.pastas} aria-label="Pastas e cremes à parte">
+      {pastas && <div id="bandeja-pastas" className={extras.bandeja} onKeyDown={(e) => { if (e.key === "Escape") { setPastas(false); abrirPastas.current?.focus(); } }}>
+        <div className={extras.cabecalho}><span>Pastas & cremes<small>Em potinhos separados</small></span><button type="button" aria-label="Recolher pastas" onClick={() => { setPastas(false); abrirPastas.current?.focus(); }}>×</button></div>
+        <ul className={extras.lista}>{ORDEM_SEPARADOS.map((id) => <QuantidadeExtra key={id} item={SEPARADOS[id]} quantidade={pedido.separados[id] ?? 0}
+          maisId={`separado-${id}`} menosId={`separado-${id}-menos`} aoMais={() => separado(id, 1)} aoMenos={() => separado(id, -1)} desligado={fechando} separado />)}</ul>
+      </div>}
+      <button ref={abrirPastas} type="button" className={extras.abrirPastas} aria-expanded={pastas} aria-controls="bandeja-pastas"
+        onClick={() => { setPastas((v) => !v); setSelecionado(null); }}>
+        <img src="/assets/bancada/icones/pasta.webp" alt="" />Pastas à parte{nSeparados > 0 && <b>{nSeparados}</b>}
       </button>
-      <div id="opcoes-turbinar" hidden={!aberto}>
-        <div className={extras.abas} role="tablist" aria-label="Tipo de adicional">
-          <button type="button" role="tab" id="aba-no-lanche" aria-selected={aba === "lanche"} aria-controls="lista-no-lanche" tabIndex={aba === "lanche" ? 0 : -1}
-            onClick={() => setAba("lanche")} onKeyDown={(e) => { if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); setAba("separados"); document.getElementById("aba-separados")?.focus(); } }}>No lanche{nLanche > 0 && <b>{nLanche}</b>}</button>
-          <button type="button" role="tab" id="aba-separados" aria-selected={aba === "separados"} aria-controls="lista-separados" tabIndex={aba === "separados" ? 0 : -1}
-            onClick={() => setAba("separados")} onKeyDown={(e) => { if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); setAba("lanche"); document.getElementById("aba-no-lanche")?.focus(); } }}>Pastas à parte{nSeparados > 0 && <b>{nSeparados}</b>}</button>
-        </div>
-        <div className={extras.lista}>
-          <div role="tabpanel" id="lista-no-lanche" aria-labelledby="aba-no-lanche" hidden={aba !== "lanche"}>
-            <p className={extras.dica}>Entram no recheio do seu lanche.</p>
-            <ul>{POTINHOS.map((id) => <QuantidadeExtra key={id} item={ADICIONAIS[id]} quantidade={pedido.adicionais[id] ?? 0}
-              maisId={`adicionar-${id}`} menosId={`tirar-${id}`} aoMais={() => somar(id)} aoMenos={() => tirar(id)} desligado={fechando} />)}</ul>
-          </div>
-          <div role="tabpanel" id="lista-separados" aria-labelledby="aba-separados" hidden={aba !== "separados"}>
-            <p className={extras.dica}>Pastas e cremes em potinhos separados.</p>
-            <ul>{ORDEM_SEPARADOS.map((id) => <QuantidadeExtra key={id} item={SEPARADOS[id]} quantidade={pedido.separados[id] ?? 0}
-              maisId={`separado-${id}`} menosId={`separado-${id}-menos`} aoMais={() => separado(id, 1)} aoMenos={() => separado(id, -1)} desligado={fechando} separado />)}</ul>
-          </div>
-        </div>
-      </div>
-      <div className={extras.rodape}>
-        <span>Total<strong data-testid="total-turbinar">{brl(totalDoPedido(pedido))}</strong></span>
-        <button type="button" data-testid="fechar-lanche" onClick={aoFechar} disabled={fechando}
-          className={extras.fechar}>{fechando ? "Fechando…" : "Fechar o lanche"}</button>
-      </div>
-    </section>
+    </aside>
+    <footer data-testid="painel-turbinar" className={extras.rodape}>
+      <div><p className={extras.dica}>{arrastando ? "Solte no pão para adicionar" : "Arraste um potinho até o pão"}</p>
+        <small>Toque para escolher · <strong data-testid="total-turbinar" aria-label={`Total ${brl(totalDoPedido(pedido))}`}>{brl(totalDoPedido(pedido))}</strong></small></div>
+      <button type="button" data-testid="fechar-lanche" onClick={aoFechar} disabled={fechando} className={extras.fechar}>{fechando ? "Fechando…" : "Fechar o lanche"}</button>
+    </footer>
   </>;
 }
+
 
 function QuantidadeExtra({ item, quantidade, maisId, menosId, aoMais, aoMenos, desligado, separado }: {
   item: { nome: string; curto: string; preco: number; max: number }; quantidade: number;
   maisId: string; menosId: string; aoMais: () => void; aoMenos: () => void; desligado: boolean; separado?: boolean;
 }) {
+  const mais = useRef<HTMLButtonElement>(null), devolverFoco = useRef(false);
+  useEffect(() => { if (quantidade === 0 && devolverFoco.current) { devolverFoco.current = false; mais.current?.focus(); } }, [quantidade]);
   const nome = `${item.nome}${separado ? " separado" : ""}`;
   return <li className={extras.item} data-selecionado={quantidade > 0}>
     <span className={extras.nome}>{item.curto}<small>{brl(item.preco)} cada</small></span>
     <div className={extras.quantidade} role="group" aria-label={`Quantidade de ${nome}`}>
-      {quantidade > 0 && <><button type="button" data-testid={menosId} aria-label={`Tirar um ${nome}`} disabled={desligado} onClick={aoMenos}>−</button><span aria-label={`${quantidade} no pedido`}>{quantidade}</span></>}
-      <button type="button" data-testid={maisId} aria-label={`Adicionar ${nome}, ${brl(item.preco)}`} disabled={desligado || quantidade >= item.max} onClick={aoMais}>+</button>
+      {quantidade > 0 && <><button type="button" data-testid={menosId} aria-label={`Tirar uma unidade de ${nome}`} disabled={desligado} onClick={(e) => { devolverFoco.current = document.activeElement === e.currentTarget; aoMenos(); }}>−</button><span aria-label={`${quantidade} no pedido`}>{quantidade}</span></>}
+      <button ref={mais} type="button" data-testid={maisId} aria-label={`Adicionar ${nome}, ${brl(item.preco)}`} disabled={desligado || quantidade >= item.max} onClick={aoMais}>+</button>
     </div>
   </li>;
 }

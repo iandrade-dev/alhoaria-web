@@ -10,7 +10,7 @@ import { useEffect, useMemo, useRef, type MutableRefObject } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import {
-  BoxGeometry, CanvasTexture, DoubleSide, Group, Mesh, MeshStandardMaterial, Object3D, Quaternion, Raycaster, SRGBColorSpace, Vector3,
+  BoxGeometry, CanvasTexture, DoubleSide, Group, Mesh, MeshStandardMaterial, Object3D, Plane, Quaternion, Raycaster, SRGBColorSpace, Vector2, Vector3,
 } from "three";
 import { POSES, caixa, clonar, qBase, type Kit } from "./kit";
 import { c01, eIn2, eIO3, eIOs, eOut3, mola, seg, type Medidas, type Pose } from "./acoes";
@@ -20,6 +20,7 @@ import {
 } from "./cardapio";
 import { dose, potinho, potinhoSeparado, punhadoNaMao, type Altura } from "./adicionais3d";
 import type { ApiCamara } from "./Camara";
+import type { Bus } from "./Cena";
 
 /** "turbinar" = a etapa Turbinar da montagem (antes da tampa); as outras três vêm depois do lanche pronto. */
 export type FasePedido = "montagem" | "turbinar" | "bebida" | "acomp" | "sacola";
@@ -40,6 +41,7 @@ type Props = {
   aoSacolaEstado: (e: EstadoSacola) => void;
   camApi: MutableRefObject<ApiCamara | null>;
   pausado?: boolean;
+  bus?: MutableRefObject<Bus>;
 };
 
 const ARQ = ["beb-lata", "beb-chopp", "beb-soda", "porcao-batata", "porcao-dadinho", "sacola"] as const;
@@ -172,7 +174,7 @@ function tingir(item: Item, cor: string) {
 /** Lugar de cada potinho (índices em LUG.potes; o do meio da frente fica livre para os separados). */
 const LUGAR_POTE = [0, 1, 2, 3, 5];
 
-export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rodada, aoProjetar, aoSacola, aoOcupado, ensacar, aoSacolaEstado, camApi, pausado }: Props) {
+export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rodada, aoProjetar, aoSacola, aoOcupado, ensacar, aoSacolaEstado, camApi, pausado, bus }: Props) {
   const cenas = useGLTF(ARQ.map(glb));
   const { camera, size, gl } = useThree();
   const A = useMemo(() => Object.fromEntries(ARQ.map((n, i) => [n, cenas[i].scene])) as unknown as Record<(typeof ARQ)[number], Object3D>, [cenas]);
@@ -381,7 +383,11 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rod
   /** Onde a mão pega o punhado: o potinho do Turbinar ou, no queijo em dobro, a tigela do queijo escolhido. */
   const pegaDe = (id: AdicionalId): Vector3 => {
     const pote = P.potes.find((p) => p.id === id);
-    if (pote) { const v = pote.g.position.clone(); v.y += pote.alto + 0.006; return v; }
+    if (pote) {
+      // Depois de soltar, o potinho volta ao lugar enquanto a mão chega para pegar o ingrediente.
+      const [x, z] = LUG[opts.current.arranjo].potes[LUGAR_POTE[P.potes.indexOf(pote)]];
+      return new Vector3(x, MESA + pote.alto + 0.006, z);
+    }
     const q = opts.current.pedido?.opcoes?.queijo;
     const st = K.estacoes[`mussarela:${q}`] ?? K.estacoes["dog-mussarela"] ?? Object.values(K.estacoes)[0];
     const v = st.raiz.position.clone(); v.y = MESA + st.alto + 0.012; return v;
@@ -595,6 +601,7 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rod
   // ------------------------------------------------ quadro a quadro
   const ultimo = useRef<string>("");
   const tempoProj = useRef(0);
+  const arraste = useMemo(() => ({ raio: new Raycaster(), ndc: new Vector2(), plano: new Plane(), ponto: new Vector3(), alvo: new Vector3(), movidos: new Set<AdicionalId>() }), []);
   useFrame((_, delta) => {
     if (pausado) return;
     const pausa = (window as unknown as { __pedidoPausa?: boolean }).__pedidoPausa;
@@ -626,7 +633,26 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rod
     const lu = LUG[arr];
     P.potes.forEach((p, i) => {
       const [x, z] = lu.potes[LUGAR_POTE[i]];
-      p.g.position.set(x, MESA, z);
+      const d = bus?.current.drag;
+      if (fase === "turbinar" && d?.ativo && d.id === `adicional:${p.id}`) {
+        const r = gl.domElement.getBoundingClientRect();
+        const cameraToque = gl.xr.isPresenting ? gl.xr.getCamera().cameras[0] ?? camera : camera;
+        arraste.ndc.set(((d.x - r.left) / r.width) * 2 - 1, -((d.y - r.top) / r.height) * 2 + 1);
+        arraste.raio.setFromCamera(arraste.ndc, cameraToque);
+        P.raiz.updateWorldMatrix(true, false);
+        arraste.plano.set(arraste.alvo.set(0, 1, 0), -(MESA + 0.07)).applyMatrix4(P.raiz.matrixWorld);
+        if (arraste.raio.ray.intersectPlane(arraste.plano, arraste.ponto)) {
+          P.raiz.worldToLocal(arraste.ponto);
+          arraste.ponto.x = Math.max(-0.8, Math.min(0.8, arraste.ponto.x));
+          arraste.ponto.z = Math.max(-0.7, Math.min(0.7, arraste.ponto.z));
+          p.g.position.lerp(arraste.ponto, 1 - Math.exp(-dt * 28));
+          arraste.movidos.add(p.id);
+        }
+      } else if (arraste.movidos.has(p.id)) {
+        arraste.alvo.set(x, MESA, z);
+        p.g.position.lerp(arraste.alvo, 1 - Math.exp(-dt * 16));
+        if (p.g.position.distanceToSquared(arraste.alvo) < 1e-6) { p.g.position.copy(arraste.alvo); arraste.movidos.delete(p.id); }
+      } else p.g.position.set(x, MESA, z);
       const k = c01(s.fade.potes * 1.25 - i * 0.05);
       p.g.visible = k > 0.01; p.g.scale.setScalar(esc(k, alvo.potes === 1));
     });

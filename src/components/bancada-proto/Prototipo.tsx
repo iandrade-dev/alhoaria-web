@@ -480,7 +480,7 @@ export default function Prototipo() {
       </div>}
 
       {/* Turbinar, dentro do lanche, antes da tampa */}
-      {turbinando && pronto && pedido && !auto && <PainelTurbinar pedido={pedido} muda={muda} proj={projPed} zona={lan ?? null} anunciar={setAnuncio} aoFechar={fecharLanche} fechando={fechando} />}
+      {turbinando && pronto && pedido && !auto && <PainelTurbinar pedido={pedido} muda={muda} proj={projPed} zona={lan ?? null} bus={bus} anunciar={setAnuncio} aoFechar={fecharLanche} fechando={fechando} />}
 
       {/* fim */}
       {fim && !animando && fase === "montagem" && <div data-testid="pronto" role="status"
