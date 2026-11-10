@@ -10,6 +10,7 @@ import {
   totalDoPedido, trioDe, type AdicionalId, type BebidaId, type Pedido, type PorcaoId, type SaborLata, type SaborSoda, type SeparadoId,
 } from "./cardapio";
 import type { EstadoSacola, FasePedido, ProjPedido } from "./Pedido3D";
+import extras from "./turbinar.module.css";
 
 export type Zona = { x0: number; y0: number; x1: number; y1: number } | null;
 export type Muda = (f: (p: Pedido) => Pedido) => void;
@@ -57,9 +58,9 @@ export function TrilhaPedido({ fase, pedido }: { fase: FasePedido; pedido: Pedid
 }
 
 /** Botão invisível sobre um objeto da cena (potinho, bebida, porção) com etiqueta de nome e preço; tocar ou arrastar até o lanche. */
-function NaCena({ testid, ponto, nome, preco, conta, ativo, zona, aoUsar, rotulo, desligado, acima }: {
+function NaCena({ testid, ponto, nome, preco, conta, ativo, zona, aoUsar, rotulo, desligado, acima, semRotulo }: {
   testid: string; ponto?: { x: number; y: number; r: number; t: number }; nome: string; preco: string; conta?: number; ativo?: boolean; zona: Zona;
-  aoUsar: () => void; rotulo: string; desligado?: boolean; acima?: boolean;
+  aoUsar: () => void; rotulo: string; desligado?: boolean; acima?: boolean; semRotulo?: boolean;
 }) {
   const t = useRef<{ id: number; x: number; y: number; moveu: boolean } | null>(null);
   const supr = useRef(false);
@@ -95,10 +96,10 @@ function NaCena({ testid, ponto, nome, preco, conta, ativo, zona, aoUsar, rotulo
       style={{ left: ponto.x - ponto.r, top: ponto.y - ponto.r, width: ponto.r * 2, height: ponto.r * 2 }}>
       {ativo && <span aria-hidden="true" className="pointer-events-none absolute inset-[-6px] rounded-full ring-2 ring-[#ff9a4a]/80" />}
       {!!conta && <span aria-hidden="true" className="absolute -right-1 -top-1 grid h-6 min-w-6 place-items-center rounded-full bg-[#e8b84a] px-1 text-[12px] font-black text-[#120c09] shadow">{conta}</span>}
-      <span aria-hidden="true" style={{ transform: `translate(calc(-50% + ${desvio}px), ${acima ? Math.min(0, ponto.t - (ponto.y - ponto.r)) : 0}px)` }} className={`pointer-events-none absolute left-1/2 ${acima ? "bottom-full mb-1" : "top-full mt-1"} w-max max-w-[124px] rounded-lg px-2 py-1 text-center text-[11px] leading-[1.15] shadow-[0_6px_16px_rgba(0,0,0,.45)] backdrop-blur-md min-[700px]:max-w-[150px] min-[700px]:text-[12px] ${ativo ? "bg-[#fff8e7] text-[#120c09]" : "bg-[#120c09]/80 text-[#fff8e7]"} ${desligado ? "opacity-60" : ""}`}>
+      {!semRotulo && <span aria-hidden="true" style={{ transform: `translate(calc(-50% + ${desvio}px), ${acima ? Math.min(0, ponto.t - (ponto.y - ponto.r)) : 0}px)` }} className={`pointer-events-none absolute left-1/2 ${acima ? "bottom-full mb-1" : "top-full mt-1"} w-max max-w-[124px] rounded-lg px-2 py-1 text-center text-[11px] leading-[1.15] shadow-[0_6px_16px_rgba(0,0,0,.45)] backdrop-blur-md min-[700px]:max-w-[150px] min-[700px]:text-[12px] ${ativo ? "bg-[#fff8e7] text-[#120c09]" : "bg-[#120c09]/80 text-[#fff8e7]"} ${desligado ? "opacity-60" : ""}`}>
         <span className="block font-semibold">{nome}</span>
         <span className={`block whitespace-nowrap tabular-nums ${ativo ? "text-[#7a3a12]" : "text-[#ffcf8a]"}`}>{preco}</span>
-      </span>
+      </span>}
     </button>
     {fant && <span aria-hidden="true" className="pointer-events-none fixed z-[9] h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[#ff9a4a] bg-[#ff6a1a]/30 transition-transform"
       style={{ left: fant.x, top: fant.y, transform: `translate(-50%,-50%) scale(${fant.sobre ? 1.25 : 1})` }} />}
@@ -128,55 +129,71 @@ function ChipsSabor<T extends string>({ ordem, nomes, atual, aoEscolher, titulo 
 }
 
 /**
- * Etapa Turbinar da montagem, antes da tampa: rótulos sobre os 5 potinhos (a mão joga sobre o recheio e o adicional
- * fica dentro do lanche), a fileira dos separados e "Fechar o lanche", que segue para a tampa (dá para fechar sem nada).
+ * Adicionais num canto: quantidades junto de cada item, separados numa aba própria.
+ * Os potinhos continuam tocáveis/arrastáveis sem etiquetas cobrindo o lanche.
  */
 export function PainelTurbinar({ pedido, muda, proj, zona, anunciar, aoFechar, fechando }: {
   pedido: Pedido; muda: Muda; proj: ProjPedido | null; zona: Zona; anunciar: (s: string) => void; aoFechar: () => void; fechando: boolean;
 }) {
+  const [aba, setAba] = useState<"lanche" | "separados">("lanche");
+  const [aberto, setAberto] = useState(true);
   const somar = (id: AdicionalId) => somarAdicional(pedido, muda, anunciar, id);
   const tirar = (id: AdicionalId) => somarAdicional(pedido, muda, anunciar, id, -1);
   const separado = (id: SeparadoId, d: number) => muda((p) => ({ ...p, separados: { ...p.separados, [id]: Math.max(0, Math.min(SEPARADOS[id].max, (p.separados[id] ?? 0) + d)) } }));
-  const postos = POTINHOS.filter((id) => (pedido.adicionais[id] ?? 0) > 0);
+  const nLanche = POTINHOS.reduce((n, id) => n + (pedido.adicionais[id] ?? 0), 0);
+  const nSeparados = ORDEM_SEPARADOS.reduce((n, id) => n + (pedido.separados[id] ?? 0), 0);
   return <>
     {!fechando && POTINHOS.map((id) => {
       const a = ADICIONAIS[id]; const n = pedido.adicionais[id] ?? 0;
       return <NaCena key={id} testid={`adicional-${id}`} ponto={proj?.[`adicional-${id}`]} nome={a.curto} preco={brl(a.preco)} conta={n} ativo={n > 0} zona={zona}
-        desligado={n >= a.max} aoUsar={() => somar(id)} rotulo={`${a.nome}, ${brl(a.preco)}${n ? `, ${n} no lanche` : ""}${n >= a.max ? " (no máximo)" : ""}`} />;
+        semRotulo desligado={n >= a.max} aoUsar={() => somar(id)} rotulo={`${a.nome}, ${brl(a.preco)}${n ? `, ${n} no lanche` : ""}${n >= a.max ? " (no máximo)" : ""}`} />;
     })}
-    <Painel testid="painel-turbinar">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <Dica>Turbine por dentro</Dica>
-          <p className="mt-1 text-[12px] leading-snug text-[#fff8e7]/75">Toque ou arraste um potinho até o lanche · Total <b data-testid="total-turbinar" className="tabular-nums text-[#ffcf8a]">{brl(totalDoPedido(pedido))}</b></p>
+    <section data-testid="painel-turbinar" className={extras.painel} aria-label="Adicionais e pastas">
+      <button type="button" className={extras.cabecalho} aria-expanded={aberto} aria-controls="opcoes-turbinar" onClick={() => setAberto((v) => !v)}>
+        <span>Do seu jeito<small>Adicionais e pastas{nLanche + nSeparados > 0 ? ` · ${nLanche + nSeparados} no pedido` : ""}</small></span>
+        <span aria-hidden="true" className={extras.seta} style={{ transform: aberto ? "rotate(180deg)" : undefined }}>⌄</span>
+      </button>
+      <div id="opcoes-turbinar" hidden={!aberto}>
+        <div className={extras.abas} role="tablist" aria-label="Tipo de adicional">
+          <button type="button" role="tab" id="aba-no-lanche" aria-selected={aba === "lanche"} aria-controls="lista-no-lanche" tabIndex={aba === "lanche" ? 0 : -1}
+            onClick={() => setAba("lanche")} onKeyDown={(e) => { if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); setAba("separados"); document.getElementById("aba-separados")?.focus(); } }}>No lanche{nLanche > 0 && <b>{nLanche}</b>}</button>
+          <button type="button" role="tab" id="aba-separados" aria-selected={aba === "separados"} aria-controls="lista-separados" tabIndex={aba === "separados" ? 0 : -1}
+            onClick={() => setAba("separados")} onKeyDown={(e) => { if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); setAba("lanche"); document.getElementById("aba-no-lanche")?.focus(); } }}>Pastas à parte{nSeparados > 0 && <b>{nSeparados}</b>}</button>
         </div>
-        <button type="button" data-testid="fechar-lanche" onClick={aoFechar} disabled={fechando}
-          className={`h-11 shrink-0 rounded-full bg-[#ff6a1a] px-5 text-sm font-bold text-[#120c09] transition-colors hover:bg-[#ff8a3d] disabled:opacity-60 ${foco}`}>{fechando ? "Fechando…" : "Fechar o lanche"}</button>
+        <div className={extras.lista}>
+          <div role="tabpanel" id="lista-no-lanche" aria-labelledby="aba-no-lanche" hidden={aba !== "lanche"}>
+            <p className={extras.dica}>Entram no recheio do seu lanche.</p>
+            <ul>{POTINHOS.map((id) => <QuantidadeExtra key={id} item={ADICIONAIS[id]} quantidade={pedido.adicionais[id] ?? 0}
+              maisId={`adicionar-${id}`} menosId={`tirar-${id}`} aoMais={() => somar(id)} aoMenos={() => tirar(id)} desligado={fechando} />)}</ul>
+          </div>
+          <div role="tabpanel" id="lista-separados" aria-labelledby="aba-separados" hidden={aba !== "separados"}>
+            <p className={extras.dica}>Pastas e cremes em potinhos separados.</p>
+            <ul>{ORDEM_SEPARADOS.map((id) => <QuantidadeExtra key={id} item={SEPARADOS[id]} quantidade={pedido.separados[id] ?? 0}
+              maisId={`separado-${id}`} menosId={`separado-${id}-menos`} aoMais={() => separado(id, 1)} aoMenos={() => separado(id, -1)} desligado={fechando} separado />)}</ul>
+          </div>
+        </div>
       </div>
-      <p className="mt-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#fff8e7]/60">Separados, no potinho com tampa · {brl(400)} cada</p>
-      <ul className="-mx-1 mt-1.5 flex gap-1.5 overflow-x-auto px-1 pb-1">
-        {ORDEM_SEPARADOS.map((id) => {
-          const s = SEPARADOS[id]; const n = pedido.separados[id] ?? 0;
-          return <li key={id} className={`flex shrink-0 items-center rounded-full border ${n ? "border-[#ff9a4a] bg-[#ff6a1a]/20" : "border-[#fff8e7]/20 bg-[#120c09]/60"}`}>
-            {n > 0 && <button type="button" data-testid={`separado-${id}-menos`} aria-label={`Tirar ${s.nome}`} onClick={() => separado(id, -1)}
-              className={`grid h-9 w-8 place-items-center rounded-full text-lg font-bold text-[#fff8e7] hover:bg-[#fff8e7]/10 ${foco}`}>−</button>}
-            <button type="button" data-testid={`separado-${id}`} aria-label={`Pôr ${s.nome} separado, ${brl(s.preco)}${n ? `, ${n} no pedido` : ""}`} onClick={() => separado(id, 1)}
-              className={`flex h-9 items-center gap-1.5 rounded-full pl-3 pr-2.5 text-[12px] font-semibold text-[#fff8e7] hover:bg-[#fff8e7]/10 ${n ? "pl-1" : ""} ${foco}`}>
-              {s.curto}{n > 0 && <span className="rounded-full bg-[#e8b84a] px-1.5 text-[11px] font-black text-[#120c09]">{n}</span>}<span aria-hidden="true" className="text-base leading-none text-[#ffcf8a]">+</span>
-            </button>
-          </li>;
-        })}
-      </ul>
-      {postos.length > 0 && <ul aria-label="No lanche" className="mt-2 flex flex-wrap gap-1.5 border-t border-[#fff8e7]/10 pt-2">
-        {postos.map((id) => <li key={id}>
-          <button type="button" data-testid={`tirar-${id}`} onClick={() => tirar(id)} aria-label={`Tirar um ${ADICIONAIS[id].nome}`}
-            className={`${chip} h-8 border-[#fff8e7]/15 bg-[#fff8e7]/8 px-2.5 text-[12px] text-[#fff8e7]/90 hover:bg-[#fff8e7]/15`}>
-            {ADICIONAIS[id].curto} ×{pedido.adicionais[id]} <span aria-hidden="true" className="text-[#ff9a4a]">− Tirar</span>
-          </button>
-        </li>)}
-      </ul>}
-    </Painel>
+      <div className={extras.rodape}>
+        <span>Total<strong data-testid="total-turbinar">{brl(totalDoPedido(pedido))}</strong></span>
+        <button type="button" data-testid="fechar-lanche" onClick={aoFechar} disabled={fechando}
+          className={extras.fechar}>{fechando ? "Fechando…" : "Fechar o lanche"}</button>
+      </div>
+    </section>
   </>;
+}
+
+function QuantidadeExtra({ item, quantidade, maisId, menosId, aoMais, aoMenos, desligado, separado }: {
+  item: { nome: string; curto: string; preco: number; max: number }; quantidade: number;
+  maisId: string; menosId: string; aoMais: () => void; aoMenos: () => void; desligado: boolean; separado?: boolean;
+}) {
+  const nome = `${item.nome}${separado ? " separado" : ""}`;
+  return <li className={extras.item} data-selecionado={quantidade > 0}>
+    <span className={extras.nome}>{item.curto}<small>{brl(item.preco)} cada</small></span>
+    <div className={extras.quantidade} role="group" aria-label={`Quantidade de ${nome}`}>
+      {quantidade > 0 && <><button type="button" data-testid={menosId} aria-label={`Tirar um ${nome}`} disabled={desligado} onClick={aoMenos}>−</button><span aria-label={`${quantidade} no pedido`}>{quantidade}</span></>}
+      <button type="button" data-testid={maisId} aria-label={`Adicionar ${nome}, ${brl(item.preco)}`} disabled={desligado || quantidade >= item.max} onClick={aoMais}>+</button>
+    </div>
+  </li>;
 }
 
 /** Bordas serrilhadas da comanda (papel de cozinha destacado do bloco). */
