@@ -13,7 +13,8 @@ export default function Unidades() {
             <article key={unit.id} className="border border-carvao-borda bg-carvao-leve p-6">
               <h3 className="font-display text-3xl uppercase">{unit.name}</h3>
               <p className="mt-4 leading-6 text-osso-muted">{unit.address}</p>
-              <p className="mt-3 text-sm text-osso-muted">Horários e pedidos pelo cardápio online</p>
+              {"hours" in unit && unit.hours && <p className="mt-3 text-sm">{unit.hours}</p>}
+              {"phone" in unit && unit.phone && <p className="mt-2 text-sm">{unit.phone}</p>}
               <a href={unit.maps_url} target="_blank" rel="noreferrer" className="group mt-5 inline-flex min-h-11 items-center gap-2 rounded border border-macarico px-4 font-semibold text-macarico transition-colors duration-150 hover:bg-macarico hover:text-carvao focus-visible:outline focus-visible:outline-2 focus-visible:outline-osso">Como chegar <span aria-hidden="true" className="inline-block transition-transform duration-150 group-hover:translate-x-[3px] group-focus-visible:translate-x-[3px]">→</span></a>
             </article>
           ))}

@@ -4,7 +4,6 @@ import MonteOSeu from "@/components/MonteOSeu";
 import Unidades from "@/components/Unidades";
 import Fechamento from "@/components/Fechamento";
 import Rodape from "@/components/Rodape";
-import BarraPedidoMobile from "@/components/BarraPedidoMobile";
 import { restaurante } from "@/data/restaurante";
 import { CATALOGO } from "@/data/catalogo";
 import { jsonLdSeguro } from "@/lib/seo";
@@ -25,7 +24,6 @@ export default function Home() {
       <Unidades />
       <Fechamento />
       <Rodape />
-      <BarraPedidoMobile />
     </>
   );
 }

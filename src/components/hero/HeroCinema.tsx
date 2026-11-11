@@ -391,6 +391,7 @@ export default function HeroCinema() {
     if (status === "loading") {
       fail(); // No metadata is required to skip the loader.
     } else enterFinal();
+    document.querySelector("#unidades")?.scrollIntoView({ behavior: "instant" });
   };
   const visible = staticHero || status === "ready";
   const stage = stages[staticHero ? finalIndex : stageIndex];
@@ -418,11 +419,7 @@ export default function HeroCinema() {
                 {stage.id === "abertura" && <>
                   <h1 className={headlineClass}><RevelarPalavras texto="LANCHES NO PÃO DE ALHO" visivel atraso={0} /></h1>
                   <p className={`mt-3 ${supportClass}`}><RevelarPalavras texto="O resto é pão." visivel atraso={0.3} apoio /></p>
-                  <div className="mt-6 flex flex-wrap gap-3">
-                    <motion.a whileTap={{ scale: 0.98 }} href={PEDIDO_URL}  className="inline-flex min-h-12 items-center rounded bg-macarico px-5 font-bold text-carvao transition-colors duration-160 hover:bg-queijo focus-visible:outline focus-visible:outline-2 focus-visible:outline-ouro">Peça agora</motion.a>
-                    <motion.div whileTap={{ scale: 0.98 }} className="inline-flex"><Link href="/bancada" prefetch={false} data-testid="home-abertura-monte" className="inline-flex min-h-12 items-center rounded border-2 border-macarico px-5 font-bold text-osso transition-colors duration-160 hover:bg-macarico hover:text-carvao focus-visible:outline focus-visible:outline-2 focus-visible:outline-ouro">Monte o seu</Link></motion.div>
-                    <motion.button type="button" onClick={nextStage} whileTap={{ scale: 0.98 }} className="inline-flex min-h-12 items-center rounded border border-osso/30 px-4 font-semibold text-osso transition-colors duration-160 hover:bg-osso/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ouro">Ver como é feito</motion.button>
-                  </div>
+                  <motion.button type="button" onClick={nextStage} whileTap={{ scale: 0.98 }} className="mt-6 min-h-12 rounded bg-macarico px-5 py-3 font-bold text-carvao transition-colors duration-160 hover:bg-queijo focus-visible:outline focus-visible:outline-2 focus-visible:outline-ouro">Ver como é feito</motion.button>
                 </>}
                 {stage.id === "macarico" && <div className="mt-4 max-w-full">
                   <h2 className={headlineClass}><RevelarPalavras texto="QUEIJO GRATINADO NO MAÇARICO." visivel={show("caption")} /></h2>

@@ -5,7 +5,7 @@ import Link from "next/link";
 
 export default function Rodape() {
   return (
-    <footer className="border-t border-carvao-borda bg-carvao px-5 py-8 pb-[calc(2rem+env(safe-area-inset-bottom)+56px)] text-osso sm:px-10 md:pb-8">
+    <footer className="border-t border-carvao-borda bg-carvao px-5 py-8 text-osso sm:px-10">
       <div className="mx-auto flex max-w-7xl flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <Image src={restaurante.logo} alt={`Logo ${restaurante.nome}`} width={48} height={48} className="h-10 w-10 object-contain" />
