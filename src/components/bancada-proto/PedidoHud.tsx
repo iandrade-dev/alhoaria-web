@@ -36,25 +36,19 @@ export function somarAdicional(pedido: Pedido, muda: Muda, anunciar: (s: string)
   anunciar(`${a.nome}: ${novo}`);
 }
 
-/** Trilha das fases do pedido, com o total parcial. */
-export function TrilhaPedido({ fase, pedido }: { fase: FasePedido; pedido: Pedido }) {
+/** Trilha das fases do pedido. */
+export function TrilhaPedido({ fase }: { fase: FasePedido }) {
   const atual = FASES.findIndex((f) => f.id === fase);
-  return <div data-topo-bancada className="pointer-events-none absolute inset-x-0 top-0 z-[5] flex items-start justify-center gap-2 px-3 pt-[max(12px,env(safe-area-inset-top))] min-[700px]:justify-between min-[700px]:px-6 min-[700px]:pt-5">
-    <ol data-testid="trilha-pedido" aria-label="Pedido" className="pointer-events-auto flex items-center gap-1 rounded-full border border-[#fff8e7]/10 bg-[#120c09]/75 p-1 shadow-[0_8px_24px_rgba(0,0,0,.35)] backdrop-blur-md min-[700px]:gap-1.5 min-[700px]:p-1.5">
-      {FASES.map((f, i) => {
-        const estado = i < atual ? "feito" : i === atual ? "ativa" : "depois";
-        return <li key={f.id} data-estado={estado} aria-current={estado === "ativa" ? "step" : undefined} aria-label={`${f.nome}: ${estado === "feito" ? "feito" : estado === "ativa" ? "agora" : "depois"}`}
-          className={`flex h-8 items-center gap-1.5 rounded-full px-2 text-[12px] font-semibold min-[700px]:h-9 min-[700px]:px-3 min-[700px]:text-[13px] ${estado === "ativa" ? "bg-[#ff6a1a]/25 text-[#fff8e7] ring-2 ring-[#ff9a4a]" : estado === "feito" ? "text-[#fff8e7]/85" : "text-[#fff8e7]/45"}`}>
-          <span aria-hidden="true" className={`grid h-5 w-5 place-items-center rounded-full text-[11px] font-black ${estado === "feito" ? "bg-[#e8b84a] text-[#120c09]" : estado === "ativa" ? "bg-[#ff9a4a] text-[#120c09]" : "bg-[#fff8e7]/15"}`}>{estado === "feito" ? "✓" : i + 1}</span>
-          <span className={estado === "ativa" ? "" : "hidden min-[700px]:inline"}>{f.nome}</span>
-        </li>;
-      })}
-    </ol>
-    <p className="pointer-events-auto flex h-10 items-center gap-1.5 rounded-full border border-[#fff8e7]/10 bg-[#120c09]/75 px-3 text-[#fff8e7] shadow-[0_8px_24px_rgba(0,0,0,.35)] backdrop-blur-md min-[700px]:h-11 min-[700px]:px-4">
-      <span className="hidden text-[11px] uppercase tracking-wide text-[#fff8e7]/60 min-[420px]:inline">Total</span>
-      <span data-testid="total" className="whitespace-nowrap text-[15px] font-bold tabular-nums min-[700px]:text-base">{brl(totalDoPedido(pedido))}</span>
-    </p>
-  </div>;
+  return <ol data-testid="trilha-pedido" aria-label="Pedido" className="pointer-events-auto flex items-center gap-1 rounded-full border border-[#fff8e7]/12 bg-[#120c09]/78 p-1 shadow-[0_8px_24px_rgba(0,0,0,.35)] backdrop-blur-md min-[700px]:gap-1.5">
+    {FASES.map((f, i) => {
+      const estado = i < atual ? "feito" : i === atual ? "ativa" : "depois";
+      return <li key={f.id} data-estado={estado} aria-current={estado === "ativa" ? "step" : undefined} aria-label={`${f.nome}: ${estado === "feito" ? "feito" : estado === "ativa" ? "agora" : "depois"}`}
+        className={`flex h-8 items-center gap-1.5 rounded-full px-2 text-[12px] font-semibold min-[700px]:h-9 min-[700px]:px-3 min-[700px]:text-[13px] ${estado === "ativa" ? "bg-[#ff6a1a]/25 text-[#fff8e7] ring-2 ring-[#ff9a4a]" : estado === "feito" ? "text-[#fff8e7]/85" : "text-[#fff8e7]/50"}`}>
+        <span aria-hidden="true" className={`grid h-5 w-5 place-items-center rounded-full text-[11px] font-black ${estado === "feito" ? "bg-[#e8b84a] text-[#120c09]" : estado === "ativa" ? "bg-[#ff9a4a] text-[#120c09]" : "bg-[#fff8e7]/15"}`}>{estado === "feito" ? "✓" : i + 1}</span>
+        <span className={estado === "ativa" ? "" : "hidden min-[700px]:inline"}>{f.nome}</span>
+      </li>;
+    })}
+  </ol>;
 }
 
 /** Botão invisível sobre um objeto da cena (potinho, bebida, porção) com etiqueta de nome e preço; tocar ou arrastar até o lanche. */
@@ -169,8 +163,10 @@ export function PainelTurbinar({ pedido, muda, proj, zona, bus, anunciar, aoFech
   return <>
     {!fechando && POTINHOS.map((id) => {
       const a = ADICIONAIS[id], n = pedido.adicionais[id] ?? 0;
-      return <NaCena key={id} testid={`adicional-${id}`} ponto={proj?.[`adicional-${id}`]} nome={a.curto} preco={brl(a.preco)} conta={n}
-        ativo={selecionado === id} zona={zona} semRotulo desligado={n >= a.max}
+      const p = proj?.[`adicional-${id}`];
+      const acima = !!p && !!zona && p.y < (zona.y0 + zona.y1) / 2;
+      return <NaCena key={id} testid={`adicional-${id}`} ponto={p} nome={a.curto} preco={brl(a.preco)} conta={n}
+        ativo={selecionado === id} zona={zona} acima={acima} desligado={n >= a.max}
         aoSelecionar={() => selecionar(id)} aoToque={() => selecionar(id)} aoUsar={() => { selecionar(id); somar(id); }}
         aoArrastar={(ativo, x, y) => {
           bus.current.drag = { ativo, id: `adicional:${id}`, x, y };
@@ -305,9 +301,9 @@ export default function PedidoHud(props: Props) {
             <p className="text-[12px] tabular-nums text-[#fff8e7]/80">de <s>{brl(trio.de)}</s> por <b className="text-[15px] text-[#ffcf8a]">{brl(trio.preco)}</b></p>
           </div>
           <p className="mt-0.5 text-[12px] leading-snug text-[#fff8e7]/75">{LANCHES_PRECO[pedido.lanche].nome} + {trio.batata} + refri lata. Você economiza <b className="text-[#ffcf8a]">{brl(economia)}</b> em relação aos itens soltos.</p>
-          <div className="mt-2 flex gap-1.5">
+          <div className="mt-2 flex flex-wrap gap-1.5">
             <button type="button" data-testid="combo-aceitar" aria-pressed={pedido.combo} onClick={aceitar} className={`${chip} ${pedido.combo ? chipOn : "border-[#ff9a4a] bg-[#ff6a1a] text-[#120c09] hover:bg-[#ff8a3d]"}`}>{pedido.combo ? "✓ Trio no pedido" : "Quero o trio"}</button>
-            <button type="button" data-testid="combo-recusar" aria-pressed={!pedido.combo && recusou} onClick={recusar} className={`${chip} ${chipOff}`}>{pedido.combo ? "Tirar o trio" : "Agora não"}</button>
+            {pedido.combo && <button type="button" data-testid="combo-recusar" aria-pressed={!pedido.combo && recusou} onClick={recusar} className={`${chip} ${chipOff}`}>Tirar o trio</button>}
           </div>
           {pedido.combo && pedido.bebida?.id !== "lata" && <div className="mt-2.5">
             <p className="mb-1.5 text-[12px] font-semibold text-[#fff8e7]/85">{sabor ? "Lata do trio:" : "Qual o sabor da lata do trio?"}</p>
@@ -348,18 +344,17 @@ export default function PedidoHud(props: Props) {
           <span>Total</span><span data-testid="resumo-total" className="tabular-nums">{brl(totalDoPedido(pedido))}</span>
         </p>
         <div className="relative mt-1 flex items-end justify-between gap-2">
-          <p className="max-w-[60%] text-[10.5px] leading-snug text-[#7a5a48]">{AVISO}</p>
+          <p className="max-w-[62%] text-[11.5px] leading-snug text-[#6b5040]">{AVISO}</p>
           <span data-testid="selo" aria-label="Selo: com capricho" className="proto-anim mr-1 grid h-[74px] w-[74px] shrink-0 place-items-center rounded-full border-[3px] border-double border-[#c2410c] text-center font-hand text-[19px] leading-[.9] text-[#c2410c] opacity-90 [animation:proto-carimbo_1.5s_ease-out_both] [mix-blend-mode:multiply]"
             style={{ transform: "rotate(-14deg)", boxShadow: "inset 0 0 0 2px rgba(194,65,12,.35)" }}>com<br />capricho</span>
         </div>
-        <p className="mt-1.5 text-[11.5px] leading-snug text-[#5c3d2e]">Guarde este lanche na sua sacola para conferir tudo junto, editar e escolher outros itens.</p>
       </div>
       <div className="grid grid-cols-2 gap-2 border-t border-dashed border-[#1f1510]/20 px-5 pb-5 pt-3">
         <button type="button" data-testid="pedir" onClick={props.aoGuardar} className={`col-span-2 grid h-11 place-items-center rounded-full bg-[#ff6a1a] text-sm font-bold text-[#120c09] hover:bg-[#ff8a3d] ${foco}`}>{props.guardado ? "Ver minha sacola" : "Adicionar à minha sacola"}</button>
-        <button type="button" data-testid="copiar-pedido" onClick={copiar} className={`h-10 rounded-full bg-[#120c09] text-sm font-semibold text-[#fff8e7] hover:bg-[#2a1d18] ${foco}`}>
+        <button type="button" data-testid="copiar-pedido" onClick={copiar} className={`h-11 rounded-full bg-[#120c09] px-3 text-xs font-semibold text-[#fff8e7] hover:bg-[#2a1d18] min-[420px]:text-sm ${foco}`}>
           {copiado === "ok" ? "Copiado!" : copiado === "erro" ? "Não deu pra copiar" : "Copiar este lanche"}
         </button>
-        <button type="button" data-testid="montar-outro" onClick={aoOutro} className={`h-10 rounded-full border border-[#120c09]/25 text-sm font-semibold text-[#120c09] hover:bg-[#120c09]/5 ${foco}`}>Guardar e montar outro</button>
+        <button type="button" data-testid="montar-outro" onClick={aoOutro} className={`h-11 rounded-full border border-[#120c09]/25 px-3 text-xs font-semibold text-[#120c09] hover:bg-[#120c09]/5 min-[420px]:text-sm ${foco}`}>Guardar e montar outro</button>
         <p aria-live="polite" className="sr-only">{copiado === "ok" ? "Pedido copiado" : ""}</p>
       </div>
     </div>

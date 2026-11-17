@@ -43,6 +43,17 @@ export const SEM_OPCAO: Record<Exclude<GrupoOpcao, "pao">, { nome: string; texto
 /** Escolha de cada grupo: o id da opção, "sem" ou null (ainda não escolheu). */
 export type Opcoes = Record<GrupoOpcao, string | null>;
 export const ORDEM_GRUPOS: GrupoOpcao[] = ["pao", "pasta", "creme", "queijo"];
+/** Amostra visual compartilhada entre o cardápio simples e a bancada 3D. */
+export const COR_OPCAO: Record<string, string> = {
+  parmesao: "radial-gradient(circle at 30% 35%, #f6e6ae 0 12%, transparent 13%), radial-gradient(circle at 65% 60%, #f6e6ae 0 11%, transparent 12%), radial-gradient(circle at 60% 25%, #f6e6ae 0 9%, transparent 10%), #c98a3f",
+  roseta: "radial-gradient(circle at 30% 35%, #3d6a22 0 12%, transparent 13%), radial-gradient(circle at 65% 60%, #3d6a22 0 11%, transparent 12%), radial-gradient(circle at 60% 25%, #3d6a22 0 9%, transparent 10%), #c98a3f",
+  tradicional: "#f1e6c6",
+  ervas: "radial-gradient(circle at 35% 40%, #3f6e24 0 13%, transparent 14%), radial-gradient(circle at 65% 62%, #3f6e24 0 12%, transparent 13%), #c3d58a",
+  cheddar: "#e2791f",
+  "4-queijos": "#f2e2b0",
+  mucarela: "#f6eed4",
+  colonial: "#f1c23a",
+};
 export const opcoesVazias = (): Opcoes => ({ pao: null, pasta: null, creme: null, queijo: null });
 /** "Monta pra mim": a primeira opção de cada grupo. */
 export const OPCOES_PADRAO: Opcoes = { pao: OPCOES.pao[0].id, pasta: OPCOES.pasta[0].id, creme: OPCOES.creme[0].id, queijo: OPCOES.queijo[0].id };

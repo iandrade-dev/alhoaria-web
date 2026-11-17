@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef, type MutableRefObject } from "react";
-import Image from "next/image";
 import { Camera, Check, MapPin, Minus, Plus, RotateCw, X } from "lucide-react";
 import type { EstadoAR, SessaoMesa } from "./sessao";
 import styles from "./modo-mesa.module.css";
 import { restaurante } from "@/data/restaurante";
+import MarcaLogo from "../MarcaLogo";
 
 export function EntradaMesa({ suporte, pronto, aoEscolher }: { suporte: boolean | null; pronto: boolean; aoEscolher: (ar: boolean) => void }) {
   const painel = useRef<HTMLDivElement>(null);
@@ -19,7 +19,7 @@ export function EntradaMesa({ suporte, pronto, aoEscolher }: { suporte: boolean 
       const i = botoes.indexOf(document.activeElement as HTMLButtonElement);
       e.preventDefault(); botoes[(i + (e.shiftKey ? -1 : 1) + botoes.length) % botoes.length]?.focus();
     }}>
-      <Image src={restaurante.logo} alt={`${restaurante.nome} — ${restaurante.subtitulo}`} width={128} height={128} className={styles.marca} priority />
+      <MarcaLogo size={112} selo alt={`${restaurante.nome} — ${restaurante.subtitulo}`} className={styles.marca} priority />
       <h1 id="onde-montar">Onde vamos montar?</h1>
       <p>O mesmo lanche, as bebidas e o pedido. Você escolhe o lugar.</p>
       <button autoFocus onClick={() => aoEscolher(false)}><span>Montar na bancada</span><small>Explore a cozinha em 3D</small></button>

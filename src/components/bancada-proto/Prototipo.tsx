@@ -2,7 +2,6 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import Image from "next/image";
 import { Component, useCallback, useEffect, useRef, useState, type ReactNode, type CSSProperties, type PointerEvent as RPointerEvent } from "react";
 import type { ApiCena, Bus, Modo, Projecao } from "./Cena";
 import {
@@ -12,12 +11,12 @@ import type { EstadoSacola, FasePedido, ProjPedido } from "./Pedido3D";
 import type { ApiCamara } from "./Camara";
 import PedidoHud, { PainelTurbinar, TrilhaPedido, somarAdicional, type FasePos } from "./PedidoHud";
 import {
-  ADICIONAIS, OPCOES, OPCOES_PADRAO, SEM_OPCAO, brl, novoPedido, opcaoDe, textoDasOpcoes, type GrupoOpcao, type Pedido,
+  ADICIONAIS, COR_OPCAO, OPCOES, OPCOES_PADRAO, SEM_OPCAO, brl, novoPedido, opcaoDe, textoDasOpcoes, totalDoPedido, type GrupoOpcao, type Pedido,
 } from "./cardapio";
 import { pedidoDaURL, urlDoPedido } from "@/lib/pedido-url";
 import { useSacola } from "../pedido/SacolaProvider";
 import BotaoSacola from "../pedido/BotaoSacola";
-import { restaurante } from "@/data/restaurante";
+import MarcaLogo from "../MarcaLogo";
 import { dispositivoLeve } from "@/lib/desempenho";
 import { ESTADO_3D, type EstadoAR, type SessaoMesa } from "../ar/sessao";
 import { EntradaMesa, ControlesMesa } from "../ar/ModoMesa";
@@ -31,17 +30,40 @@ type Toque = { id: EstacaoId; pointer: number; x: number; y: number; moveu: bool
 /** Estação que o "Monta pra mim" usa na etapa: a primeira opção do grupo, ou a própria etapa. */
 const estacaoAuto = (p: PassoDef, pedido: Pedido | null) => (p.grupo ? `${p.id}:${pedido?.opcoes?.[p.grupo] || OPCOES[p.grupo][0].id}` : p.id);
 const foco = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8b84a]";
-/** Amostra de cor de cada opção (bolinha nos rótulos e nos botões do pão). */
-const AMOSTRA: Record<string, string> = {
-  parmesao: "radial-gradient(circle at 30% 35%, #f6e6ae 0 12%, transparent 13%), radial-gradient(circle at 65% 60%, #f6e6ae 0 11%, transparent 12%), radial-gradient(circle at 60% 25%, #f6e6ae 0 9%, transparent 10%), #c98a3f",
-  roseta: "radial-gradient(circle at 30% 35%, #3d6a22 0 12%, transparent 13%), radial-gradient(circle at 65% 60%, #3d6a22 0 11%, transparent 12%), radial-gradient(circle at 60% 25%, #3d6a22 0 9%, transparent 10%), #c98a3f",
-  tradicional: "#f1e6c6",
-  ervas: "radial-gradient(circle at 35% 40%, #3f6e24 0 13%, transparent 14%), radial-gradient(circle at 65% 62%, #3f6e24 0 12%, transparent 13%), #c3d58a",
-  cheddar: "#e2791f",
-  "4-queijos": "#f2e2b0",
-  mucarela: "#f6eed4",
-  colonial: "#f1c23a",
-};
+
+/** Evita que rótulos de estações irmãs próximas se sobreponham ou cubram os ingredientes. */
+function estiloRotuloEstacao(
+  p: { x: number; y: number; r: number },
+  irmaos: { x: number; y: number; r: number }[],
+  passoId: string,
+  lanche?: { x0: number; y0: number; x1: number; y1: number }
+): CSSProperties {
+  const superior =
+    passoId === "pasta" ||
+    passoId === "dog-pasta" ||
+    passoId === "creme" ||
+    passoId === "dog-molhos" ||
+    (lanche ? p.y < (lanche.y0 + lanche.y1) / 2 : false);
+  const respiroPasta = passoId === "pasta" || passoId === "dog-pasta" ? 12 : 6;
+  const vertical: CSSProperties = superior
+    ? { bottom: "100%", marginBottom: respiroPasta }
+    : { top: "100%", marginTop: 6 };
+
+  if (irmaos.length <= 1) return { left: "50%", ...vertical, transform: "translateX(-50%)" };
+
+  const ordenado = [...irmaos].sort((a, b) => a.x - b.x || a.y - b.y);
+  const idx = Math.max(0, ordenado.indexOf(p));
+  const dx = Math.abs(ordenado[ordenado.length - 1].x - ordenado[0].x);
+  if (dx < 110) {
+    const desloca = idx === 0 ? "-96%" : idx === ordenado.length - 1 ? "-4%" : "-50%";
+    return { left: "50%", ...vertical, transform: `translateX(${desloca})` };
+  }
+  if (dx < 160) {
+    const desloca = idx === 0 ? "-82%" : idx === ordenado.length - 1 ? "-18%" : "-50%";
+    return { left: "50%", ...vertical, transform: `translateX(${desloca})` };
+  }
+  return { left: "50%", ...vertical, transform: "translateX(-50%)" };
+}
 
 export default function Prototipo() {
   const sacola = useSacola();
@@ -390,15 +412,20 @@ export default function Prototipo() {
       pedido={{ fase: fase3d, atual: pedido, rodada, aoProjetar: setProjPed, aoSacola, aoOcupado, ensacar, aoSacolaEstado: setSacolaEstado }} />}</LimiteCena>
 
     <div ref={gestosAR} className="absolute inset-0 touch-none" style={{ pointerEvents: emAR ? "auto" : "none" }} aria-hidden="true" />
-    <nav aria-label="Pedido e visualização" className={`absolute left-3 right-3 z-[10] flex items-center justify-between gap-2 ${emAR ? "top-16" : "top-[112px] min-[700px]:top-[84px]"}`}>
-      <Link href={pedido ? urlDoPedido(pedido, "/cardapio") : "/cardapio"} prefetch={false} onClick={() => { void sessaoAR.current?.sair(); }} className="inline-flex min-h-11 items-center rounded-full border border-[#fff8e7]/25 bg-[#120c09]/90 px-3 text-xs text-[#fff8e7]">Modo simples</Link>
-      <div className="flex items-center gap-2"><button type="button" onClick={() => setLeve((v) => !v)} aria-pressed={leve} className="min-h-11 rounded-full border border-[#fff8e7]/25 bg-[#120c09]/90 px-3 text-xs text-[#fff8e7]">{leve ? "Leve ✓" : "Modo leve"}</button><BotaoSacola aoAbrir={() => sessaoAR.current?.sair()} /></div>
-    </nav>
+    {lanche === null && (
+      <nav aria-label="Navegação da bancada" className="absolute inset-x-3 top-[max(12px,env(safe-area-inset-top))] z-[10] flex items-center justify-between gap-2 min-[700px]:inset-x-6 min-[700px]:top-4">
+        <Link href={pedido ? urlDoPedido(pedido, "/cardapio") : "/cardapio"} prefetch={false} onClick={() => { void sessaoAR.current?.sair(); }} className="inline-flex min-h-11 items-center rounded-full border border-[#fff8e7]/20 bg-[#120c09]/90 px-3.5 text-xs font-semibold text-[#fff8e7] hover:bg-[#241a16]">Modo simples</Link>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => setLeve((v) => !v)} aria-pressed={leve} className="min-h-11 rounded-full border border-[#fff8e7]/20 bg-[#120c09]/90 px-3.5 text-xs font-semibold text-[#fff8e7] hover:bg-[#241a16]">{leve ? "Leve ✓" : "Modo leve"}</button>
+          <BotaoSacola aoAbrir={() => sessaoAR.current?.sair()} />
+        </div>
+      </nav>
+    )}
     <div data-hud-bancada inert={!ambiente || bloqueioAR} aria-hidden={!ambiente || bloqueioAR ? true : undefined}>
 
     {/* câmera fora da posição padrão: volta para a frente */}
     {camFora && !emAR && def && !semGl && pronto && <button type="button" data-testid="centralizar" onClick={() => camApi.current?.centralizar()} aria-label="Centralizar a câmera"
-      className={`proto-anim absolute right-3 top-[166px] z-[5] inline-flex h-9 items-center gap-1.5 rounded-full border border-[#fff8e7]/20 bg-[#120c09]/65 px-3 text-[12.5px] font-semibold text-[#fff8e7]/90 shadow-[0_6px_18px_rgba(0,0,0,.35)] backdrop-blur-md [animation:proto-sobe_.3s_ease-out] hover:bg-[#241a16] min-[700px]:right-6 min-[700px]:top-[136px] ${foco}`}>
+      className={`proto-anim absolute right-3 top-[120px] z-[5] inline-flex h-10 items-center gap-1.5 rounded-full border border-[#fff8e7]/20 bg-[#120c09]/80 px-3.5 text-[12.5px] font-semibold text-[#fff8e7]/90 shadow-[0_6px_18px_rgba(0,0,0,.35)] backdrop-blur-md [animation:proto-sobe_.3s_ease-out] hover:bg-[#241a16] min-[700px]:right-6 min-[1024px]:top-[72px] ${foco}`}>
       <svg viewBox="0 0 20 20" aria-hidden="true" className="h-4 w-4"><path d="M10 3.5a6.5 6.5 0 1 1-6.1 4.3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /><path d="M3 4.2v3.9h3.9" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /><circle cx="10" cy="10" r="1.7" fill="currentColor" /></svg>
       Centralizar
     </button>}
@@ -427,6 +454,7 @@ export default function Prototipo() {
             className={`absolute z-[1] touch-none bg-transparent outline-none focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-4 focus-visible:outline-[#e8b84a] ${vez ? "cursor-grab active:cursor-grabbing" : "pointer-events-none"}`}
             style={style} {...(vez ? gesto(pd.id, false) : {})} />;
         }
+        const pontosIrmaos = ests.map((k) => proj.estacoes[k]);
         return ests.map((e) => {
           const p = proj.estacoes[e];
           const op = opcaoDaEstacao(e);
@@ -436,38 +464,63 @@ export default function Prototipo() {
             aria-label={opc ? `${pd.nome}: ${opc.sub}${vez ? ". Toque ou arraste até o lanche" : ""}` : vez ? pd.dica : pd.nome}
             className={`absolute z-[2] touch-none bg-transparent outline-none focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-4 focus-visible:outline-[#e8b84a] ${vez ? "cursor-grab active:cursor-grabbing" : "pointer-events-none"}`}
             style={style} {...(vez ? gesto(e, true) : {})}>
-            {opc && vez && segurando !== e && <span aria-hidden="true" className="pointer-events-none absolute left-1/2 top-full mt-0.5 flex w-max max-w-[118px] -translate-x-1/2 items-center gap-1 rounded-lg bg-[#120c09]/80 px-2 py-1 text-[11px] font-semibold leading-tight text-[#fff8e7] shadow-[0_6px_16px_rgba(0,0,0,.45)] backdrop-blur-md min-[700px]:text-[12px]">
-              <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-[#fff8e7]/40" style={{ background: AMOSTRA[op!] }} />{opc.nome}
+            {opc && vez && segurando !== e && <span aria-hidden="true" style={estiloRotuloEstacao(p, pontosIrmaos, pd.id, lan)} className="pointer-events-none absolute flex w-max max-w-[120px] items-center gap-1 rounded-lg border border-[#fff8e7]/15 bg-[#120c09]/88 px-2 py-1 text-[11px] font-semibold leading-tight text-[#fff8e7] shadow-[0_6px_16px_rgba(0,0,0,.45)] min-[700px]:text-[12px]">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-[#fff8e7]/40" style={{ background: COR_OPCAO[op!] }} />{opc.nome}
             </span>}
           </button>;
         });
       })}
 
-      {/* topo: trilha + Monta pra mim (no pedido: trilha das fases com o total) */}
-      {fase !== "montagem" && pedido && <TrilhaPedido fase={fase} pedido={pedido} />}
-      {fase === "montagem" && <div data-topo-bancada className="pointer-events-none absolute inset-x-0 top-0 z-[5] flex flex-wrap items-start justify-center gap-2 px-4 pt-[max(12px,env(safe-area-inset-top))] min-[700px]:justify-between min-[700px]:px-6 min-[700px]:pt-5">
-        <ol data-testid="trilha" aria-label="Camadas" className="pointer-events-auto flex items-center gap-1 rounded-full border border-[#fff8e7]/10 bg-[#120c09]/70 px-2 py-1.5 shadow-[0_8px_24px_rgba(0,0,0,.35)] backdrop-blur-md min-[700px]:gap-2 min-[700px]:px-3 min-[700px]:py-2">
-          {PASSOS.map(({ id, icone, nome }, i) => {
-            const pulou = pulados.includes(id);
-            const estado = i < feitos ? (pulou ? "pulada" : "feito") : i === feitos ? "ativa" : "pendente";
-            const rotulo = estado === "feito" ? "feito" : estado === "pulada" ? "pulado" : estado === "ativa" ? "agora" : "depois";
-            const popa = pop === i ? "proto-anim [animation:proto-pop_.5s_cubic-bezier(.3,1.6,.5,1)]" : "";
-            return <li key={id} data-estado={estado} data-etapa={id} aria-label={`${nome}: ${rotulo}`}
-              className={`relative grid h-9 w-9 place-items-center rounded-full transition-[background-color,opacity] duration-300 min-[700px]:h-11 min-[700px]:w-11 ${estado === "ativa" ? "proto-anim bg-[#ff6a1a]/25 ring-2 ring-[#ff9a4a] [animation:proto-pulso_1.6s_ease-in-out_infinite]" : estado === "feito" ? "bg-[#fff8e7]/10" : estado === "pulada" ? "opacity-45 grayscale" : "opacity-40 grayscale"}`}>
-              {icone
-                // eslint-disable-next-line @next/next/no-img-element
-                ? <img src={`/assets/bancada/icones/${icone}.webp`} alt="" draggable={false} className={`h-7 w-7 object-contain min-[700px]:h-9 min-[700px]:w-9 ${popa}`} />
-                : <IconeTurbinar className={`h-6 w-6 min-[700px]:h-7 min-[700px]:w-7 ${popa}`} />}
-              {estado === "feito" && <span aria-hidden="true" className={`absolute -bottom-0.5 -right-0.5 grid h-4 w-4 place-items-center rounded-full bg-[#e8b84a] text-[10px] font-black text-[#120c09] ${popa}`}>✓</span>}
-              {estado === "pulada" && <span aria-hidden="true" className="absolute left-1.5 right-1.5 top-1/2 h-[2px] -rotate-45 rounded-full bg-[#fff8e7]/80" />}
-            </li>;
-          })}
-        </ol>
-        {!fim && <button type="button" data-testid="monta-pra-mim" onClick={auto ? parar : montaPraMim} disabled={!pronto}
-          className="pointer-events-auto ml-auto inline-flex h-10 items-center gap-2 rounded-full border border-[#fff8e7]/20 bg-[#120c09]/70 px-4 text-sm font-semibold text-[#fff8e7] shadow-[0_8px_24px_rgba(0,0,0,.35)] backdrop-blur-md transition-colors hover:bg-[#241a16] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e8b84a] disabled:opacity-50 min-[700px]:ml-0 min-[700px]:h-11 min-[700px]:px-5">
-          {auto ? "Parar" : "Monta pra mim"}
-        </button>}
-      </div>}
+      {/* topo unificado: barra única no desktop (>=1024px) e duas faixas fixas sem colisão no celular */}
+      <div data-topo-bancada className={`pointer-events-none absolute inset-x-0 z-[10] flex flex-wrap items-center gap-x-2 gap-y-2 px-3 min-[700px]:px-6 ${emAR ? "top-16" : "top-[max(10px,env(safe-area-inset-top))] min-[700px]:top-4"}`}>
+        <Link href={pedido ? urlDoPedido(pedido, "/cardapio") : "/cardapio"} prefetch={false} onClick={() => { void sessaoAR.current?.sair(); }}
+          className="pointer-events-auto order-1 inline-flex h-10 items-center rounded-full border border-[#fff8e7]/20 bg-[#120c09]/88 px-3 text-xs font-semibold text-[#fff8e7] hover:bg-[#241a16] min-[700px]:h-11 min-[700px]:px-3.5">
+          Modo simples
+        </Link>
+
+        <div className="pointer-events-auto order-2 ml-auto flex items-center gap-1.5 min-[700px]:gap-2 min-[1024px]:order-4 min-[1024px]:ml-0">
+          <button type="button" onClick={() => setLeve((v) => !v)} aria-pressed={leve} className="h-10 rounded-full border border-[#fff8e7]/20 bg-[#120c09]/88 px-3 text-xs font-semibold text-[#fff8e7] hover:bg-[#241a16] min-[700px]:h-11 min-[700px]:px-3.5">{leve ? "Leve ✓" : "Modo leve"}</button>
+          <BotaoSacola aoAbrir={() => sessaoAR.current?.sair()} />
+        </div>
+
+        <div aria-hidden="true" className="order-3 h-0 basis-full min-[1024px]:hidden" />
+
+        {fase === "montagem" ? (
+          <>
+            <ol data-testid="trilha" aria-label="Camadas" className="pointer-events-auto order-4 flex items-center gap-0.5 rounded-full border border-[#fff8e7]/12 bg-[#120c09]/78 px-1.5 py-1 shadow-[0_8px_24px_rgba(0,0,0,.35)] backdrop-blur-md min-[420px]:gap-1 min-[420px]:px-2 min-[700px]:gap-1.5 min-[700px]:px-2.5 min-[700px]:py-1.5 min-[1024px]:order-2">
+              {PASSOS.map(({ id, icone, nome }, i) => {
+                const pulou = pulados.includes(id);
+                const estado = i < feitos ? (pulou ? "pulada" : "feito") : i === feitos ? "ativa" : "pendente";
+                const rotulo = estado === "feito" ? "feito" : estado === "pulada" ? "pulado" : estado === "ativa" ? "agora" : "depois";
+                const popa = pop === i ? "proto-anim [animation:proto-pop_.5s_cubic-bezier(.3,1.6,.5,1)]" : "";
+                return <li key={id} data-estado={estado} data-etapa={id} aria-label={`${nome}: ${rotulo}`}
+                  className={`relative grid h-7 w-7 place-items-center rounded-full transition-[background-color,opacity] duration-300 min-[420px]:h-8 min-[420px]:w-8 min-[700px]:h-9 min-[700px]:w-9 ${estado === "ativa" ? "proto-anim bg-[#ff6a1a]/25 ring-2 ring-[#ff9a4a] [animation:proto-pulso_1.6s_ease-in-out_infinite]" : estado === "feito" ? "bg-[#fff8e7]/10" : estado === "pulada" ? "opacity-45 grayscale" : "opacity-40 grayscale"}`}>
+                  {icone
+                    // eslint-disable-next-line @next/next/no-img-element
+                    ? <img src={`/assets/bancada/icones/${icone}.webp`} alt="" draggable={false} className={`h-5 w-5 object-contain min-[420px]:h-6 min-[420px]:w-6 min-[700px]:h-7 min-[700px]:w-7 ${popa}`} />
+                    : <IconeTurbinar className={`h-5 w-5 min-[700px]:h-6 min-[700px]:w-6 ${popa}`} />}
+                  {estado === "feito" && <span aria-hidden="true" className={`absolute -bottom-0.5 -right-0.5 grid h-3.5 w-3.5 place-items-center rounded-full bg-[#e8b84a] text-[9px] font-black text-[#120c09] ${popa}`}>✓</span>}
+                  {estado === "pulada" && <span aria-hidden="true" className="absolute left-1 right-1 top-1/2 h-[2px] -rotate-45 rounded-full bg-[#fff8e7]/80" />}
+                </li>;
+              })}
+            </ol>
+            {!fim && (
+              <button type="button" data-testid="monta-pra-mim" onClick={auto ? parar : montaPraMim} disabled={!pronto}
+                className="pointer-events-auto order-5 ml-auto inline-flex h-10 shrink-0 items-center rounded-full border border-[#fff8e7]/20 bg-[#120c09]/82 px-3 text-xs font-semibold text-[#fff8e7] shadow-[0_8px_24px_rgba(0,0,0,.35)] backdrop-blur-md transition-colors hover:bg-[#241a16] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e8b84a] disabled:opacity-50 min-[700px]:h-11 min-[700px]:px-4 min-[700px]:text-sm min-[1024px]:order-3">
+                {auto ? "Parar" : "Monta pra mim"}
+              </button>
+            )}
+          </>
+        ) : pedido && (
+          <>
+            <div className="pointer-events-auto order-4 min-[1024px]:order-2"><TrilhaPedido fase={fase} /></div>
+            <p className="pointer-events-auto order-5 ml-auto flex h-10 items-center gap-1.5 rounded-full border border-[#fff8e7]/12 bg-[#120c09]/82 px-3 text-[#fff8e7] shadow-[0_8px_24px_rgba(0,0,0,.35)] backdrop-blur-md min-[700px]:h-11 min-[700px]:px-3.5 min-[1024px]:order-3">
+              <span className="hidden text-[11px] uppercase tracking-wide text-[#fff8e7]/65 min-[420px]:inline">Total</span>
+              <span data-testid="total" className="whitespace-nowrap text-sm font-bold tabular-nums min-[700px]:text-[15px]">{brl(totalDoPedido(pedido))}</span>
+            </p>
+          </>
+        )}
+      </div>
 
       {/* toque em qualquer lugar interrompe o "Monta pra mim" */}
       {auto && <button type="button" aria-label="Parar a montagem automática" onPointerDown={parar} className="absolute inset-0 z-[4] cursor-pointer bg-transparent" />}
@@ -479,7 +532,7 @@ export default function Prototipo() {
         <div className="flex w-full max-w-[420px] gap-2.5">
           {OPCOES.pao.map((o) => <button key={o.id} type="button" data-testid={`opcao-pao-${o.id}`} onClick={() => { escolherOpcao("pao", o.id); setAnuncio(`${o.texto}. Agora a pasta`); }}
             className={`flex flex-1 items-center gap-2.5 rounded-2xl border border-[#fff8e7]/15 bg-[#120c09]/80 px-3 py-2.5 text-left shadow-[0_14px_36px_rgba(0,0,0,.45)] backdrop-blur-md transition-colors hover:border-[#ff9a4a]/70 hover:bg-[#241a16] ${foco}`}>
-            <span aria-hidden="true" className="h-9 w-9 shrink-0 rounded-full border border-[#fff8e7]/25" style={{ background: AMOSTRA[o.id] }} />
+            <span aria-hidden="true" className="h-9 w-9 shrink-0 rounded-full border border-[#fff8e7]/25" style={{ background: COR_OPCAO[o.id] }} />
             <span className="min-w-0"><span className="block font-hand text-[24px] leading-none">{o.nome}</span><span className="block text-[11.5px] leading-tight text-[#fff8e7]/70">{o.sub}</span></span>
           </button>)}
         </div>
@@ -515,18 +568,18 @@ export default function Prototipo() {
 
       {/* fim */}
       {fim && !animando && fase === "montagem" && <div data-testid="pronto" role="status"
-        className="proto-anim absolute inset-x-4 bottom-[max(18px,env(safe-area-inset-bottom))] z-[6] mx-auto max-w-[420px] rounded-2xl bg-[#fff8e7]/95 px-5 py-4 text-[#120c09] shadow-[0_18px_50px_rgba(0,0,0,.5)] [animation:proto-sobe_.5s_cubic-bezier(.2,1.3,.4,1)] min-[700px]:bottom-8">
+        className="proto-anim absolute inset-x-4 bottom-[max(18px,env(safe-area-inset-bottom))] z-[6] mx-auto max-w-[420px] rounded-2xl border border-[#241812]/10 bg-[#fff8e7] px-5 py-4 text-[#120c09] shadow-[0_18px_50px_rgba(0,0,0,.5)] [animation:proto-sobe_.5s_cubic-bezier(.2,1.3,.4,1)] min-[700px]:bottom-8">
         <p className="font-hand text-[27px] leading-none text-[#c2410c] min-[700px]:text-[32px]">Ficou com capricho!</p>
         <p className="mt-1 text-sm text-[#5c3d2e]">{def.fim}</p>
         {pedido?.opcoes && <p data-testid="pronto-opcoes" className="mt-1 text-[12.5px] leading-snug text-[#7a5a48]">{textoDasOpcoes(pedido.opcoes)}</p>}
         <button type="button" data-testid="seguir-pedido" onClick={seguirPedido}
-          className="mt-3 w-full rounded-full bg-[#ff6a1a] px-4 py-2.5 text-sm font-bold text-[#120c09] transition-colors hover:bg-[#ff8a3d] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8b84a]">Escolher bebida e porção</button>
-        <button type="button" onClick={() => guardarPedido()} disabled={!sacola.pronta} className="mt-2 min-h-11 w-full rounded-full border border-[#120c09]/25 px-4 py-2 text-sm font-semibold">{guardado.current ? "Ver minha sacola" : "Adicionar só o lanche à sacola"}</button>
-        <div className="mt-2 flex gap-2">
+          className="mt-3 min-h-11 w-full rounded-full bg-[#ff6a1a] px-4 py-2.5 text-sm font-bold text-[#120c09] transition-colors hover:bg-[#ff8a3d] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8b84a]">Escolher bebida e porção</button>
+        <button type="button" onClick={() => guardarPedido()} disabled={!sacola.pronta} className="mt-2 min-h-11 w-full rounded-full border border-[#120c09]/25 px-4 py-2 text-sm font-semibold hover:bg-[#120c09]/5">{guardado.current ? "Ver minha sacola" : "Guardar só o lanche"}</button>
+        <div className="mt-1.5 flex items-center justify-center gap-5 text-sm font-semibold text-[#5c3d2e]">
           <button type="button" data-testid="montar-de-novo" onClick={deNovo}
-            className="flex-1 rounded-full bg-[#120c09] px-4 py-2.5 text-sm font-semibold text-[#fff8e7] transition-colors hover:bg-[#2a1d18] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8b84a]">Montar de novo</button>
+            className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-[#120c09] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8b84a]">Montar de novo</button>
           <button type="button" data-testid="outro-lanche" onClick={() => escolher(null)}
-            className="flex-1 rounded-full border border-[#120c09]/25 px-4 py-2.5 text-sm font-semibold text-[#120c09] transition-colors hover:bg-[#120c09]/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8b84a]">Outro lanche</button>
+            className="inline-flex min-h-11 items-center underline underline-offset-4 hover:text-[#120c09] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e8b84a]">Trocar lanche</button>
         </div>
       </div>}
 
@@ -535,15 +588,15 @@ export default function Prototipo() {
         aoGuardar={() => guardarPedido()} guardado={!!guardado.current}
         sacolaEstado={sacolaEstado} aoEnsacar={() => { setEnsacar(true); setAnuncio("Lanche na sacola"); }} />}
 
-      {!pronto && <div className="absolute inset-0 z-[7] grid place-items-center bg-[#120c09]/70 backdrop-blur-sm">
-        <div className="mx-4 max-w-sm rounded-3xl border border-[#fff8e7]/15 bg-[#120c09]/95 p-6 text-center" role="status"><Image src={restaurante.logo} alt={restaurante.nome} width={96} height={96} className="mx-auto h-24 w-24 object-contain" /><p className="mt-4 font-hand text-3xl">Preparando a bancada…</p><progress className="mt-4 h-2 w-full accent-[#ff6a1a]" max={100} value={progresso} aria-label="Carregamento da bancada" /><p className="mt-3 text-xs leading-5 text-[#fff8e7]/70">Seu pedido continua salvo. Se preferir, escolha sem animações.</p><Link href={pedido ? urlDoPedido(pedido, "/cardapio") : "/cardapio"} prefetch={false} className="mt-4 inline-flex min-h-11 items-center rounded-full bg-[#ff6a1a] px-5 text-sm font-bold text-[#120c09]">Abrir modo simples</Link></div>
+      {!pronto && <div className="absolute inset-0 z-[7] grid place-items-center bg-[#120c09]/85">
+        <div className="mx-4 max-w-sm rounded-2xl border border-[#fff8e7]/15 bg-[#120c09] p-6 text-center" role="status"><MarcaLogo size={96} className="mx-auto h-24 w-24" /><p className="mt-4 font-hand text-3xl">Preparando a bancada…</p><progress className="mt-4 h-2 w-full accent-[#ff6a1a]" max={100} value={progresso} aria-label="Carregamento da bancada" /><p className="mt-3 text-xs leading-5 text-[#fff8e7]/70">Seu pedido continua salvo. Se preferir, escolha sem 3D.</p><Link href={pedido ? urlDoPedido(pedido, "/cardapio") : "/cardapio"} prefetch={false} className="mt-4 inline-flex min-h-11 items-center rounded-full bg-[#ff6a1a] px-5 text-sm font-bold text-[#120c09]">Abrir modo simples</Link></div>
       </div>}
     </>}
     </div>
     {!ambiente && <EntradaMesa suporte={suporteAR} pronto={xrPronto} aoEscolher={escolherAmbiente} />}
     {ambiente && <ControlesMesa estado={ar} sessao={sessaoAR} zoom={zoomAR} aoZoom={mudarZoomAR} aoGirar={() => setGiroAR((v) => v + Math.PI / 6)} />}
     {ambiente && ar.fase === "3d" && ar.mensagem !== ESTADO_3D.mensagem && <div role="status" className="absolute inset-x-4 top-28 z-30 mx-auto max-w-sm rounded-2xl bg-[#120c09]/95 p-4 text-center text-sm">
-      <p>{ar.mensagem}</p><button className="mt-2 rounded-full border border-[#ffcf8a]/50 px-4 py-2" onClick={() => setAR(ESTADO_3D)}>Continuar na bancada</button>
+      <p>{ar.mensagem}</p><button className="mt-2 min-h-11 rounded-full border border-[#ffcf8a]/50 px-4 py-2" onClick={() => setAR(ESTADO_3D)}>Continuar na bancada</button>
     </div>}
     <p aria-live="polite" className="sr-only">{anuncio}</p>
   </div>;
@@ -558,20 +611,20 @@ function IconeTurbinar({ className = "" }: { className?: string }) {
   </svg>;
 }
 
-/** Tela leve de escolha: os 4 lanches sobre o fundo da cozinha. */
+/** Tela leve de escolha: os 4 lanches sobre o fundo da cozinha, sem colidir com o topo. */
 function Escolha({ aoEscolher }: { aoEscolher: (id: LancheId) => void }) {
-  return <div className="proto-anim absolute inset-0 z-[8] flex flex-col items-center justify-center gap-5 overflow-y-auto bg-[#120c09]/55 px-4 py-8 backdrop-blur-[2px] [animation:proto-sobe_.45s_ease-out] min-[700px]:gap-8">
-      <Image src={restaurante.logo} alt={`${restaurante.nome} — ${restaurante.subtitulo}`} width={128} height={128} className="h-28 w-28 shrink-0 object-contain" priority />
-    <h1 className="text-center font-hand text-[38px] leading-none text-[#fff8e7] [text-shadow:0_2px_14px_rgba(0,0,0,.85)] min-[700px]:text-[52px]">Qual vai montar hoje?</h1>
+  return <div className="proto-anim absolute inset-0 z-[8] flex flex-col items-center justify-center gap-4 overflow-y-auto bg-[#120c09]/65 px-4 pb-8 pt-20 [animation:proto-sobe_.45s_ease-out] min-[700px]:gap-7 min-[700px]:pt-20">
+      <MarcaLogo size={112} selo className="h-24 w-24 shrink-0 min-[700px]:h-28 min-[700px]:w-28" priority />
+    <h1 className="text-center font-hand text-[36px] leading-none text-[#fff8e7] [text-shadow:0_2px_14px_rgba(0,0,0,.85)] min-[700px]:text-[52px]">Qual vai montar hoje?</h1>
     <ul className="grid w-full max-w-[380px] grid-cols-2 gap-3 min-[700px]:max-w-[1040px] min-[700px]:grid-cols-4 min-[700px]:gap-5">
       {ORDEM_LANCHES.map((id) => {
         const l = LANCHES[id];
         return <li key={id}>
           <button type="button" data-testid={`lanche-${id}`} onClick={() => aoEscolher(id)}
-            className="group flex w-full flex-col overflow-hidden rounded-2xl border border-[#fff8e7]/12 bg-[#120c09]/70 text-left shadow-[0_14px_36px_rgba(0,0,0,.45)] backdrop-blur-md transition-[transform,border-color] duration-200 hover:-translate-y-0.5 hover:border-[#ff9a4a]/60 focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#e8b84a]">
+            className="group flex w-full flex-col overflow-hidden rounded-2xl border border-[#fff8e7]/14 bg-[#1b120d]/92 text-left shadow-[0_14px_36px_rgba(0,0,0,.45)] transition-[transform,border-color] duration-200 hover:-translate-y-0.5 hover:border-[#ff9a4a]/60 focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#e8b84a]">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={l.foto} alt="" draggable={false} className="aspect-square w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
-            <span className="px-3 py-2.5 font-hand text-[24px] leading-none text-[#fff8e7] min-[700px]:px-4 min-[700px]:py-3 min-[700px]:text-[28px]">{l.nome}</span>
+            <span className="px-3 py-2.5 font-hand text-[22px] leading-none text-[#fff8e7] min-[700px]:px-4 min-[700px]:py-3 min-[700px]:text-[28px]">{l.nome}</span>
           </button>
         </li>;
       })}

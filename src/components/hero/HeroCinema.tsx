@@ -113,7 +113,7 @@ export default function HeroCinema() {
     barProgress.set((index + fraction) / finalIndex);
   }, [barProgress, flashControls, reduceMotion, shakeControls]);
 
-  const enterFinal = useCallback((seek = true) => {
+  const enterFinal = useCallback((seek = true, reposition = true) => {
     if (stageRef.current === finalIndex) return; // One terminal transition, even if ended and a gesture arrive together.
     stopPlayback();
     stageRef.current = finalIndex;
@@ -121,7 +121,7 @@ export default function HeroCinema() {
     setCueCount(0);
     setStageIndex(finalIndex);
     barProgress.set(1);
-    positionStage(finalIndex);
+    if (reposition) positionStage(finalIndex);
     if (seek && videoRef.current) {
       try { videoRef.current.currentTime = stages[finalIndex].start; } catch { fail(); }
     }
@@ -378,8 +378,8 @@ export default function HeroCinema() {
     const onScroll = () => {
       const section = sectionRef.current;
       if (!section || stageRef.current === finalIndex || suppressScrollRef.current) return;
-      // Anchor/history jumps past the sticky area must not leave a trapped unfinished hero.
-      if (section.getBoundingClientRect().bottom < window.innerHeight - 2) enterFinal();
+      // Anchor/history jumps past the sticky area must not leave a trapped unfinished hero or hijack scroll back up.
+      if (section.getBoundingClientRect().bottom < window.innerHeight - 2) enterFinal(true, false);
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
@@ -405,7 +405,7 @@ export default function HeroCinema() {
           {staticHero && <img src={heroSandwich.posters.final} alt="" className={`${mediaClass} opacity-75`} />}
         </motion.div>
         {!reduceMotion && <motion.div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-macarico" initial={{ opacity: 0 }} animate={flashControls} />}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-carvao/50 via-transparent to-carvao/70" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-carvao/50 via-transparent to-carvao/85" />
         {visible && !staticHero && stageIndex < finalIndex && <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 z-20 h-[3px] bg-osso/15 md:hidden"><motion.div className="h-full origin-left bg-macarico" style={{ scaleX: barScale }} /></div>}
         {visible && !staticHero && stageIndex < finalIndex && <div aria-hidden="true" className="pointer-events-none absolute right-6 top-1/2 z-20 hidden -translate-y-1/2 flex-col items-center gap-5 md:flex">
           <div className="absolute bottom-1 top-1 w-px bg-osso/30" />
@@ -418,7 +418,7 @@ export default function HeroCinema() {
               <motion.div key={stage.id} className="absolute inset-0 flex flex-col items-start justify-start md:justify-center" initial={staticHero ? false : initial} animate={enter} exit={{ ...exit, transition: heroMotion.exit }} transition={heroMotion.enter}>
                 {stage.id === "abertura" && <>
                   <h1 className={headlineClass}><RevelarPalavras texto="LANCHES NO PÃO DE ALHO" visivel atraso={0} /></h1>
-                  <p className={`mt-3 ${supportClass}`}><RevelarPalavras texto="O resto é pão." visivel atraso={0.3} apoio /></p>
+                  <p className={`mt-3 ${supportClass}`}><RevelarPalavras texto="O resto é pão." visivel atraso={0.18} apoio /></p>
                   <motion.button type="button" onClick={nextStage} whileTap={{ scale: 0.98 }} className="mt-6 min-h-12 rounded bg-macarico px-5 py-3 font-bold text-carvao transition-colors duration-160 hover:bg-queijo focus-visible:outline focus-visible:outline-2 focus-visible:outline-ouro">Ver como é feito</motion.button>
                 </>}
                 {stage.id === "macarico" && <div className="mt-4 max-w-full">
@@ -426,15 +426,15 @@ export default function HeroCinema() {
                 </div>}
                 {stage.id === "recheio" && <>
                   <h2 className={headlineClass}><RevelarPalavras texto="RECHEIO DE ALTÍSSIMA QUALIDADE." visivel={show("recheio")} /></h2>
-                  <p className={`mt-3 ${supportClass}`}><RevelarPalavras texto="Costela desfiada, 6 horas no fogo." visivel={show("recheio")} atraso={0.3} apoio /></p>
+                  <p className={`mt-3 ${supportClass}`}><RevelarPalavras texto="Costela desfiada, 6 horas no fogo." visivel={show("recheio")} atraso={0.18} apoio /></p>
                 </>}
                 {stage.id === "explosao" && <>
                   <h2 className={headlineClass}><RevelarPalavras texto="NÃO É SÓ PÃO DE ALHO." visivel={show("beat1") && !show("clear")} /></h2>
-                  <p className={`mt-3 ${supportClass}`}><RevelarPalavras texto="É lanche recheado de verdade." visivel={show("beat1") && !show("clear")} atraso={0.36} apoio /></p>
+                  <p className={`mt-3 ${supportClass}`}><RevelarPalavras texto="É lanche recheado de verdade." visivel={show("beat1") && !show("clear")} atraso={0.2} apoio /></p>
                 </>}
                 {stage.id === "final" && <>
                   <h1 className={headlineClass}><RevelarPalavras texto={restaurante.nome} visivel /></h1>
-                  <p className={`mt-3 ${supportClass}`}><RevelarPalavras texto="Lanches no pão de alho recheado." visivel atraso={0.3} /></p>
+                  <p className={`mt-3 ${supportClass}`}><RevelarPalavras texto="Lanches no pão de alho recheado." visivel atraso={0.08} apoio /></p>
                   <motion.div initial={staticHero ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ ...heroMotion.enter, delay: staticHero ? 0 : 0.1 }} className="mt-8 flex flex-wrap gap-4">
                     <motion.a whileTap={{ scale: 0.98 }} href={PEDIDO_URL}  aria-label="Escolher como pedir" className="inline-flex min-h-12 items-center rounded bg-macarico px-6 font-bold text-carvao transition-colors duration-160 hover:bg-queijo focus-visible:outline focus-visible:outline-2 focus-visible:outline-ouro">Peça agora</motion.a>
                     <motion.div whileTap={{ scale: 0.98 }} className="inline-flex"><Link href="/bancada" prefetch={false} data-testid="home-monte-hero" className="inline-flex min-h-12 items-center rounded border-2 border-macarico px-6 font-bold text-osso transition-colors duration-160 hover:bg-macarico hover:text-carvao focus-visible:outline focus-visible:outline-2 focus-visible:outline-ouro">Monte o seu</Link></motion.div>
@@ -445,13 +445,13 @@ export default function HeroCinema() {
             </AnimatePresence>
           </div>
         </div>}
-        <AnimatePresence>{visible && !staticHero && stageIndex < finalIndex && !playing && <motion.button key="scroll" type="button" onClick={() => { resetIdle(); nextStage(); }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="absolute bottom-14 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center rounded px-3 py-2 text-center text-osso focus-visible:outline focus-visible:outline-2 focus-visible:outline-ouro md:bottom-8" aria-label="Deslize para baixo: avançar uma etapa">
-          <motion.span className="whitespace-nowrap font-display uppercase tracking-[0.13em]" style={{ fontSize: "clamp(18px, 2.2vw, 44px)" }} animate={{ opacity: [0.55, 0.85, 0.55] }} transition={{ duration: 2.4, ease: "easeInOut", repeat: Infinity }}>{coarse ? "Deslize" : "Role para baixo"}</motion.span>
+        <AnimatePresence>{visible && !staticHero && stageIndex < finalIndex && !playing && <motion.button key="scroll" type="button" onClick={() => { resetIdle(); nextStage(); }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="absolute bottom-8 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center rounded-full bg-carvao/55 px-4 py-2 text-center text-osso backdrop-blur-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-ouro md:bottom-8 md:bg-transparent md:backdrop-blur-none" aria-label="Deslize para baixo: avançar uma etapa">
+          <motion.span className="whitespace-nowrap font-display uppercase tracking-[0.13em]" style={{ fontSize: "clamp(18px, 2.2vw, 44px)" }} animate={{ opacity: [0.65, 0.95, 0.65] }} transition={{ duration: 2.4, ease: "easeInOut", repeat: Infinity }}>{coarse ? "Deslize" : "Role para baixo"}</motion.span>
           <motion.span aria-hidden="true" className="text-3xl leading-none text-osso" animate={{ y: [0, 7, 0] }} transition={{ duration: 1.4, ease: "easeInOut", repeat: Infinity }}>↓</motion.span>
         </motion.button>}</AnimatePresence>
         {!staticHero && stageIndex < finalIndex && <button type="button" onClick={skip} className="absolute right-3 top-3 z-40 hidden min-h-11 min-w-11 items-center justify-center rounded px-3 py-2 text-sm text-osso underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ouro md:bottom-5 md:right-5 md:top-auto md:inline-flex">Pular animação</button>}
         <AnimatePresence>{!staticHero && status === "loading" && <motion.div key="loader" initial={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.35 }} aria-hidden="true" className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-carvao">
-          <motion.img src={restaurante.logo} alt="" className="h-24 w-24 object-contain" animate={{ scale: [1, 1.06, 1] }} transition={{ duration: 1.5, repeat: Infinity }} />
+          <motion.img src={restaurante.logo} alt="" className="h-24 w-24 object-contain mix-blend-lighten contrast-[1.2] brightness-[0.94]" animate={{ scale: [1, 1.06, 1] }} transition={{ duration: 1.5, repeat: Infinity }} />
           <div className="mt-6 h-1 w-32 overflow-hidden rounded-full bg-osso/30"><div className="h-full origin-left bg-macarico transition-transform duration-300" style={{ transform: `scaleX(${progress})` }} /></div>
         </motion.div>}</AnimatePresence>
         {!staticHero && status === "loading" && <span className="sr-only" role="status">Carregando</span>}

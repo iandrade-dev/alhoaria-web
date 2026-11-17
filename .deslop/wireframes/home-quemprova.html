@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wireframe — Quem prova (Home)</title>
+<style>
+  body { margin:0; font-family:system-ui,sans-serif; background:#e8e8e8; color:#1f1f1f; padding:24px; }
+  .wrap { max-width:1040px; margin:auto; display:grid; gap:32px; }
+  .box { background:#f5f5f5; border:1px solid #c8c8c8; padding:24px; }
+  h2,h3,p { margin:0 0 8px; }
+  .muted { color:#666; font-size:14px; }
+  .layout { display:grid; gap:20px; grid-template-columns:1.25fr 1fr; align-items:start; margin-top:16px; }
+  .stage { background:#d4d4d4; border:1px solid #aaa; aspect-ratio:9/12; display:flex; flex-direction:column; justify-content:space-between; padding:16px; }
+  .list { display:grid; gap:10px; }
+  .item { background:#e2e2e2; border:1px solid #bcbcbc; padding:14px; display:flex; justify-content:space-between; align-items:center; gap:12px; }
+  .item.active { background:#c9c9c9; border-color:#555; font-weight:700; }
+  .pill { border:1px solid #666; padding:6px 12px; font-size:13px; background:#fff; }
+  @media(max-width:720px){ .layout { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="box">
+    <p class="muted">Wireframe em cinza · Seção Quem prova, volta</p>
+    <h2>Organização escolhida: destaque único + fila de 3 vídeos (sem 3 caixas repetidas)</h2>
+    <p class="muted">No desktop: prévia/player ativo à esquerda, lista dos 3 momentos reais à direita e link único para o Instagram abaixo. No mobile: 1 cartão visível com controle explícito "1 de 3 · Anterior / Próximo".</p>
+    <div class="layout">
+      <div class="stage">
+        <span class="muted">01 / 03 · Maçarico no queijo</span>
+        <div>
+          <h3>Ver reel deste momento</h3>
+          <p class="muted">Carrega o vídeo do Instagram somente ao tocar.</p>
+          <p style="margin-top:12px"><span class="pill">▶ Reproduzir vídeo</span></p>
+        </div>
+      </div>
+      <div class="list">
+        <div class="item active"><span>01 · Queijo gratinado no maçarico</span><span>Ativo</span></div>
+        <div class="item"><span>02 · Costela desfiada na chapa</span><span>Selecionar</span></div>
+        <div class="item"><span>03 · Salão Pedra Branca</span><span>Selecionar</span></div>
+        <p class="muted" style="margin-top:8px">Ver mais no Instagram →</p>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

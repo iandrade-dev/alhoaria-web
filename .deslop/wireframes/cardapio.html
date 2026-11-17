@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wireframe — Cardápio (/cardapio)</title>
+<style>
+  body { margin:0; font-family:system-ui,sans-serif; background:#e8e8e8; color:#1f1f1f; padding:24px; }
+  .wrap { max-width:1040px; margin:auto; display:grid; gap:24px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; }
+  .input { flex:1; min-width:220px; height:44px; background:#fff; border:1px solid #999; padding:0 12px; display:flex; align-items:center; }
+  .chip { padding:8px 14px; border:1px solid #888; border-radius:999px; background:#f5f5f5; }
+  .chip.on { background:#333; color:#fff; }
+  .cards { display:grid; gap:16px; grid-template-columns:repeat(3,1fr); }
+  .card { background:#f5f5f5; border:1px solid #bbb; overflow:hidden; display:flex; flex-direction:column; }
+  .photo { background:#ccc; aspect-ratio:16/10; }
+  .body { padding:14px; display:grid; gap:8px; }
+  .list { background:#f5f5f5; border:1px solid #bbb; }
+  .list-row { padding:14px 16px; border-top:1px solid #ddd; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  .list-row:first-child { border-top:0; }
+  .btn { padding:9px 14px; background:#333; color:#fff; font-weight:700; }
+  .btn.sec { background:#fff; color:#222; border:1px solid #777; }
+  @media(max-width:720px){ .cards { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>Cardápio</h1><p>Lanches no pão de alho, bebidas e porções.</p></header>
+  <div class="input">Buscar lanche, bebida ou porção</div>
+  <div class="row"><span class="chip on">Tudo</span><span class="chip">Lanches</span><span class="chip">Bebidas</span><span class="chip">Porções</span></div>
+  <section>
+    <h2>Lanches</h2>
+    <div class="cards">
+      <div class="card"><div class="photo"></div><div class="body"><strong>Pulled Pork!</strong><span>Descrição curta</span><strong>R$ 35,90</strong><div class="row"><span class="btn">Adicionar</span><span class="btn sec">Personalizar</span></div></div></div>
+      <div class="card"><div class="photo"></div><div class="body"><strong>Brócolis & Queijo!</strong><span>Descrição curta</span><strong>R$ 33,90</strong><div class="row"><span class="btn">Adicionar</span><span class="btn sec">Personalizar</span></div></div></div>
+      <div class="card"><div class="photo"></div><div class="body"><strong>Dogalho</strong><span>Descrição curta</span><strong>R$ 26,90</strong><div class="row"><span class="btn">Adicionar</span><span class="btn sec">Personalizar</span></div></div></div>
+    </div>
+  </section>
+  <section>
+    <h2>Bebidas</h2>
+    <div class="list">
+      <div class="list-row">
+        <div><strong>Refrigerante lata</strong><div class="row" style="margin-top:6px"><span class="chip on">Coca-Cola · R$ 7</span><span class="chip">Zero</span><span class="chip">Guaraná</span><span class="chip">Pureza · R$ 6</span></div></div>
+        <span class="btn sec">+ Adicionar</span>
+      </div>
+      <div class="list-row"><div><strong>Chopp Pilsen Lohn 500 ml</strong> · R$ 9,90</div><span class="btn sec">+ Adicionar</span></div>
+      <div class="list-row"><div><strong>Soda italiana</strong> · R$ 14,90 <span class="chip on">Maçã verde</span> <span class="chip">Frutas vermelhas</span></div><span class="btn sec">+ Adicionar</span></div>
+    </div>
+  </section>
+</div>
+</body>
+</html>

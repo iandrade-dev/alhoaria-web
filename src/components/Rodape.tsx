@@ -1,14 +1,14 @@
-import Image from "next/image";
 import { INSTAGRAM_URL, PEDIDO_URL } from "@/lib/links";
 import { restaurante } from "@/data/restaurante";
 import Link from "next/link";
+import MarcaLogo from "./MarcaLogo";
 
 export default function Rodape() {
   return (
     <footer className="border-t border-carvao-borda bg-carvao px-5 py-8 text-osso sm:px-10">
       <div className="mx-auto flex max-w-7xl flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <Image src={restaurante.logo} alt={`Logo ${restaurante.nome}`} width={48} height={48} className="h-10 w-10 object-contain" />
+          <MarcaLogo size={48} className="h-10 w-10" />
           <p className="text-sm text-osso-muted">{restaurante.assinatura}</p>
         </div>
         <nav className="flex flex-wrap gap-5 text-sm font-semibold">

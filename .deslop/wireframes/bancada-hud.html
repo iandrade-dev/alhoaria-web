@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wireframe — HUD da Bancada (/bancada)</title>
+<style>
+  body { margin:0; font-family:system-ui,sans-serif; background:#e8e8e8; color:#1f1f1f; padding:24px; }
+  .grid { display:grid; gap:24px; grid-template-columns:1fr 390px; max-width:1280px; margin:auto; align-items:start; }
+  .frame { background:#d8d8d8; border:2px solid #888; min-height:520px; position:relative; padding:12px; display:flex; flex-direction:column; justify-content:space-between; }
+  .topbar { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+  .pill { background:#f5f5f5; border:1px solid #777; border-radius:999px; padding:6px 12px; font-size:12px; }
+  .mobile-rows { display:grid; gap:8px; }
+  .row { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+  .bottom { text-align:center; padding:10px; background:#ececec; border:1px solid #999; }
+  @media(max-width:960px){ .grid { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div class="grid">
+  <div class="frame">
+    <div class="topbar">
+      <div class="row"><span class="pill">Modo simples</span><span class="pill">Trilha 1..7</span></div>
+      <div class="row"><span class="pill">Monta pra mim</span><span class="pill">Leve</span><span class="pill">Sacola</span></div>
+    </div>
+    <p style="text-align:center;color:#555">Desktop: barra única no topo (zero sobreposição na prateleira)</p>
+    <div class="bottom">Dica da etapa + saída opcional ("Sem ...")</div>
+  </div>
+  <div class="frame">
+    <div class="mobile-rows">
+      <div class="row"><span class="pill">Modo simples</span><div class="row"><span class="pill">Leve</span><span class="pill">Sacola</span></div></div>
+      <div class="row"><span class="pill">Trilha 1..7</span><span class="pill">Monta pra mim</span></div>
+    </div>
+    <p style="text-align:center;color:#555">Mobile 390px: 2 linhas fixas em fluxo, sem colisão com logo nem entre botões</p>
+    <div class="bottom">Dica da etapa + saída opcional</div>
+  </div>
+</div>
+</body>
+</html>
