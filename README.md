@@ -56,6 +56,46 @@ hit-test (ou com resposta tardia), ajustes absolutos e limitados, pose inválida
 perda de rastreamento, saída durante carregamento, escolhas/URLs e descarte de recursos.
 A câmera, o tamanho percebido e o rastreamento em uma mesa real ainda exigem validação em aparelho físico.
 
+## Modo garçom (equipe)
+
+O pedido do cliente continua igual: sacola no site e finalização no Anota AI. `/garcom` é só da equipe:
+não aparece na navegação pública nem no sitemap e tem `noindex`/`nofollow`. O cabeçalho público e a sacola
+do cliente ficam ocultos nessa rota.
+
+Fluxo no celular: entrar com a conta do painel (e-mail e senha), escolher a loja quando houver mais de uma,
+informar a mesa, adicionar itens do mesmo catálogo do cardápio (lanche padrão com “+”, ou “Opções” para
+ingredientes, adicionais, potinhos, combo, bebida e porção junto), revisar a comanda, escrever uma observação
+opcional e tocar em **Enviar para a cozinha**. A confirmação mostra o número do pedido; a aba **Pedidos de hoje**
+atualiza o status a cada 5 s (pausa com a aba oculta) e permite cancelar pedidos ainda na fila.
+A cozinha fica no painel da plataforma: o link **Abrir cozinha no painel** abre `/painel`.
+
+- A sessão é o cookie `HttpOnly` da plataforma (login `client: "web"`); ao recarregar, `GET /v1/identity/session`
+  restaura a sessão e o token CSRF das mutações (`x-csrf-token`), como o cliente do painel.
+- A comanda em andamento fica guardada no aparelho (`localStorage`): queda de rede, plataforma fora do ar ou
+  sessão expirada não apagam nada. Cada envio usa um `idempotency-key` gerado uma vez e guardado com a comanda;
+  “Tentar enviar de novo” repete a mesma chave e não duplica o pedido. Mudar a comanda gera chave nova.
+- Contas com papel `kitchen` só acompanham a lista; `admin` e `waiter` enviam e cancelam.
+- Contrato da API num só lugar: `src/lib/garcom-api.ts`. Montagem do corpo, totais e chave: `src/lib/garcom-pedido.ts`.
+  Cada linha da comanda vira itens da cozinha: o lanche (ingredientes, adicionais e potinhos nos `details`
+  e no `unitPriceCents`) e, separados, a bebida e a porção que vieram junto dele.
+
+### Proxy da plataforma
+
+`next.config.mjs` reescreve `/v1/:path*`, `/painel` e `/painel/:path*` para a plataforma, na mesma origem
+do site (o cookie de sessão é host-only, então o navegador precisa falar com o próprio site):
+
+| Variável | Padrão | Efeito |
+| --- | --- | --- |
+| `PLATFORM_ORIGIN` | `https://vps-16302377.tail7dc411.ts.net:10000` | Origem da API e do painel. Vazia (`PLATFORM_ORIGIN=`) ou inválida desliga o proxy; o build continua. |
+
+A origem pública deste site (por exemplo `https://alhoaria-web.vercel.app` e `http://localhost:3000` no
+desenvolvimento) precisa estar em `ALLOWED_ORIGINS` da plataforma: o login web é recusado sem uma origem
+permitida.
+
+Verificação: `npm run test:garcom` cobre a conversão da sacola em itens da cozinha, totais, validação de mesa e
+observação, rascunho guardado, filtro de pedidos do dia, reaproveitamento da chave de idempotência, CSRF e
+classificação de erros (401, 403, 409, rede/5xx, validação). Capturas em 390×844 com a API simulada: `qa/garcom/`.
+
 ## Pendências do cliente
 
 - Confirmar o WhatsApp oficial para pedidos.

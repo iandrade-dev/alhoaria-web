@@ -1,0 +1,87 @@
+/* Modo garçom: mesma paleta do cardápio (creme, carvão, maçarico), pensado para uma mão no celular. */
+.app{min-height:100vh;min-height:100dvh;background:var(--creme,#fff8e7);color:#241812;padding-bottom:calc(112px + env(safe-area-inset-bottom))}
+.topo{position:sticky;top:0;z-index:40;background:var(--carvao,#0a0a0a);color:var(--osso,#f5f5f0);border-bottom:1px solid #262626}
+.topoLinha{max-width:720px;margin:auto;display:flex;align-items:center;gap:10px;padding:10px 14px}
+.logo{width:36px;height:36px;object-fit:contain;flex-shrink:0}
+.topoTexto{min-width:0;flex:1;line-height:1.15}
+.topoTexto strong{display:block;font-size:15px;font-weight:800}
+.topoTexto span,.topoTexto button{font-size:12px;color:#a8a8a0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;display:block;text-align:left}
+.topoTexto button{background:none;border:0;padding:0;text-decoration:underline;color:#e8b84a;min-height:0}
+.sair{min-height:40px;padding:8px 14px;border-radius:999px;border:1px solid #3a3a3a;background:transparent;color:inherit;font-weight:700;font-size:13px}
+.abas{max-width:720px;margin:auto;display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:0 14px 10px}
+.aba{min-height:44px;border-radius:12px;border:1px solid #3a3a3a;background:transparent;color:#d8d8d0;font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px}
+.aba[aria-selected=true]{background:var(--macarico,#ff6a1a);border-color:transparent;color:#241812}
+.contador{min-width:22px;height:22px;padding:0 6px;border-radius:999px;background:#241812;color:#fff8e7;font-size:12px;display:inline-grid;place-items:center}
+.corpo{max-width:720px;margin:auto;padding:16px 14px}
+.mesa{display:flex;align-items:center;gap:12px;background:#fffdf8;border:1px solid #e1d3bd;border-radius:18px;padding:12px 14px;margin-bottom:14px}
+.mesa label{font-weight:800;font-size:15px;flex-shrink:0}
+.mesaInput{flex:1;min-width:0;min-height:52px;border:1px solid #bca88d;border-radius:12px;padding:8px 12px;font-size:26px;font-weight:850;text-align:center;background:#fff;color:#241812;letter-spacing:.02em}
+.mesaInput:focus-visible{outline:3px solid #a44115;outline-offset:2px}
+.mesaVazia{border-color:#c54c12}
+.secao{font-size:13px;font-weight:850;text-transform:uppercase;letter-spacing:.12em;color:#8b3b19;margin:22px 0 8px}
+.lista{display:flex;flex-direction:column;background:#fffdf8;border:1px solid #e1d3bd;border-radius:18px;overflow:hidden}
+.produto{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid #eee2cf;min-height:64px}
+.produto:last-child{border-bottom:0}
+.produtoTexto{flex:1;min-width:0}
+.produtoTexto h3{font-size:16px;font-weight:800;line-height:1.2}
+.produtoTexto p{font-size:13px;color:#715647;margin-top:2px}
+.naComanda{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;background:#241812;color:#fff8e7;font-size:11px;font-weight:800;vertical-align:2px}
+.opcoes{min-height:44px;padding:8px 12px;border-radius:12px;border:1px solid #cbbb9f;background:transparent;font-weight:800;font-size:13px;color:#241812}
+.mais{width:48px;height:48px;min-width:48px;border-radius:14px;border:0;background:var(--macarico,#ff6a1a);color:#241812;font-size:26px;font-weight:850;line-height:1;display:grid;place-items:center}
+.mais:disabled,.opcoes:disabled{opacity:.5}
+.barra{position:fixed;left:0;right:0;bottom:0;z-index:45;background:#241812;color:#fff8e7;padding:10px 14px;padding-bottom:max(10px,env(safe-area-inset-bottom));box-shadow:0 -10px 30px #0003}
+.barraLinha{max-width:720px;margin:auto;display:flex;align-items:center;gap:12px}
+.barraTexto{flex:1;min-width:0;line-height:1.2}
+.barraTexto strong{display:block;font-size:18px}
+.barraTexto span{font-size:12px;color:#d9c7ad}
+.barraBotao{min-height:52px;padding:10px 18px;border-radius:14px;border:0;background:var(--macarico,#ff6a1a);color:#241812;font-weight:850;font-size:15px}
+.barraBotao:disabled{opacity:.5}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(88px + env(safe-area-inset-bottom));z-index:46;background:#fff8e7;color:#241812;border:1px solid #d3b378;border-radius:999px;padding:8px 16px;font-size:14px;font-weight:700;box-shadow:0 8px 24px #0003;max-width:calc(100% - 28px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.alerta{padding:12px 14px;border-radius:12px;border:1px solid #e4a38b;background:#fde9e1;color:#7c1d12;font-size:14px;line-height:1.45;margin:12px 0}
+.alerta strong{display:block;margin-bottom:2px}
+.alertaAcoes{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.info{padding:12px 14px;border-radius:12px;border:1px solid #d3b378;background:#fff0cc;font-size:14px;line-height:1.45;margin:12px 0}
+.linhaComanda{padding:12px 0;border-bottom:1px solid #decdb3}
+.linhaComanda h3{font-size:16px;font-weight:800}
+.detalhes{margin:4px 0 0;padding:0;list-style:none;font-size:13px;color:#715647;line-height:1.45}
+.linhaRodape{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px;flex-wrap:wrap}
+.confirmacao{text-align:center;padding:12px 0 4px}
+.numero{font-family:Anton,sans-serif;font-size:72px;line-height:1;color:#c54c12;margin:6px 0}
+.pedido{background:#fffdf8;border:1px solid #e1d3bd;border-radius:18px;padding:14px;margin-bottom:12px}
+.pedidoTopo{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.pedidoTopo h3{font-size:19px;font-weight:850}
+.pedidoMeta{font-size:12px;color:#715647;margin-top:2px}
+.status{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:850;white-space:nowrap}
+.status::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
+.queued{background:#fff0cc;color:#7a5200}
+.preparing{background:#ffe2cf;color:#a33c00}
+.ready{background:#dcf3dc;color:#1d6b2a}
+.delivered{background:#ebe5dc;color:#5c4d40}
+.canceled{background:#f3dede;color:#8f2a22;text-decoration:line-through}
+.pedidoItens{margin:10px 0 0;padding:0;list-style:none;font-size:14px;line-height:1.45}
+.pedidoItens li+li{margin-top:4px}
+.pedidoRodape{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;padding-top:10px;border-top:1px dashed #decdb3;flex-wrap:wrap}
+.cancelar{min-height:44px;padding:8px 14px;border-radius:12px;border:1px solid #c98f84;background:transparent;color:#8f2a22;font-weight:800;font-size:13px}
+.atualizado{font-size:12px;color:#715647;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+.ponto{width:8px;height:8px;border-radius:50%;background:#2f9a44;flex-shrink:0}
+.pontoOff{background:#c54c12}
+.vazio{text-align:center;color:#715647;padding:36px 12px;font-size:15px}
+.painelLink{display:inline-flex;min-height:44px;align-items:center;font-weight:800;color:#8b3b19;text-decoration:underline}
+/* Entrada (login e escolha da loja), no carvão como a escolha do pedido */
+.entrada{min-height:100vh;min-height:100dvh;background:var(--carvao,#0a0a0a);color:var(--osso,#f5f5f0);display:flex;align-items:center;justify-content:center;padding:32px 16px}
+.entradaCaixa{width:100%;max-width:400px}
+.entradaLogo{width:88px;height:88px;object-fit:contain;margin:0 auto}
+.entradaTitulo{font-family:"Caveat Brush",cursive;font-size:44px;text-align:center;margin-top:8px;line-height:1.05}
+.entradaSub{text-align:center;color:#a8a8a0;font-size:14px;line-height:1.5;margin:6px 0 22px}
+.campo{display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:700;margin-bottom:14px}
+.campo input{min-height:52px;border-radius:14px;border:1px solid #3a3a3a;background:#141414;color:#f5f5f0;padding:12px 14px;font-size:16px}
+.campo input:focus-visible{outline:2px solid #e8b84a;outline-offset:2px}
+.entrar{width:100%;min-height:54px;border:0;border-radius:14px;background:var(--macarico,#ff6a1a);color:#241812;font-weight:850;font-size:16px;margin-top:6px}
+.entrar:disabled{opacity:.6}
+.erroEntrada{background:#3a1410;border:1px solid #7c2a20;color:#ffd6cc;border-radius:12px;padding:10px 12px;font-size:14px;line-height:1.45;margin-bottom:14px}
+.local{width:100%;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:64px;padding:12px 16px;border-radius:16px;border:1px solid #3a3a3a;background:#141414;color:inherit;margin-bottom:10px}
+.local strong{font-size:16px}
+.local span{font-size:12px;color:#a8a8a0}
+.linkClaro{display:block;margin:16px auto 0;min-height:44px;background:none;border:0;color:#a8a8a0;text-decoration:underline;font-size:14px}
+.app :is(button,a,input,textarea):focus-visible{outline:3px solid #a44115;outline-offset:2px}
+@media (min-width:720px){.produto{padding:12px 16px}}

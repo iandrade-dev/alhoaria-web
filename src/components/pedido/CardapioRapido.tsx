@@ -15,12 +15,12 @@ import { nomeDoConteudo, usePainelModal } from "./Sacola";
 import styles from "./pedido.module.css";
 
 type LancheId = Pedido["lanche"];
-type Edicao = { id?: string; quantidade: number; conteudo: ConteudoSacola };
+export type Edicao = { id?: string; quantidade: number; conteudo: ConteudoSacola };
 const AcoesContext = createContext<{ adicionarPadrao: (id: LancheId) => void; personalizar: (id: LancheId) => void; pronta: boolean } | null>(null);
-const padrao = (id: LancheId): Pedido => ({ ...novoPedido(id), opcoes: id === "dogalho" ? null : { ...OPCOES_PADRAO } });
-const normalizarBusca = (v: string) => v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-const bebidas: Bebida[] = [...ORDEM_SABORES_LATA.map((sabor): Bebida => ({ id: "lata", sabor })), { id: "chopp" }, ...ORDEM_SABORES_SODA.map((sabor): Bebida => ({ id: "soda", sabor }))];
-const valorBebida = (b: Bebida | null) => b ? `${b.id}${"sabor" in b ? `:${b.sabor}` : ""}` : "";
+export const padrao = (id: LancheId): Pedido => ({ ...novoPedido(id), opcoes: id === "dogalho" ? null : { ...OPCOES_PADRAO } });
+export const normalizarBusca = (v: string) => v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+export const bebidas: Bebida[] = [...ORDEM_SABORES_LATA.map((sabor): Bebida => ({ id: "lata", sabor })), { id: "chopp" }, ...ORDEM_SABORES_SODA.map((sabor): Bebida => ({ id: "soda", sabor }))];
+export const valorBebida = (b: Bebida | null) => b ? `${b.id}${"sabor" in b ? `:${b.sabor}` : ""}` : "";
 const bebidaDoValor = (valor: string): Bebida | null => bebidas.find((b) => valorBebida(b) === valor) ?? null;
 const GRUPOS: Record<GrupoOpcao, string> = { pao: "Pão", pasta: "Pasta de alho", creme: "Creme de queijo", queijo: "Queijo gratinado" };
 
@@ -76,11 +76,12 @@ export default function CardapioRapido({ children, consulta = "" }: { children: 
   </AcoesContext.Provider>;
 }
 
-function Quantidade({ valor, min = 0, max = 99, aoMudar, nome = "Quantidade" }: { valor: number; min?: number; max?: number; aoMudar: (n: number) => void; nome?: string }) {
+export function Quantidade({ valor, min = 0, max = 99, aoMudar, nome = "Quantidade" }: { valor: number; min?: number; max?: number; aoMudar: (n: number) => void; nome?: string }) {
   return <div className={styles.stepper} role="group" aria-label={nome}><button type="button" disabled={valor <= min} onClick={() => aoMudar(valor - 1)} aria-label={`Diminuir ${nome.toLowerCase()}`}>−</button><output>{valor}</output><button type="button" disabled={valor >= max} onClick={() => aoMudar(valor + 1)} aria-label={`Aumentar ${nome.toLowerCase()}`}>+</button></div>;
 }
 
-function Editor({ inicial, aoFechar, aoSalvar }: { inicial: Edicao; aoFechar: () => void; aoSalvar: (conteudo: ConteudoSacola, quantidade: number) => boolean }) {
+/** Também usado pelo modo garçom, com `destino` próprio (a comanda da mesa em vez da sacola). */
+export function Editor({ inicial, aoFechar, aoSalvar, destino }: { inicial: Edicao; aoFechar: () => void; aoSalvar: (conteudo: ConteudoSacola, quantidade: number) => boolean; destino?: { adicionar: string; aviso: string; erro: string } }) {
   const [conteudo, setConteudo] = useState(inicial.conteudo);
   const [quantidade, setQuantidade] = useState(inicial.quantidade);
   const [erro, setErro] = useState("");
@@ -94,10 +95,10 @@ function Editor({ inicial, aoFechar, aoSalvar }: { inicial: Edicao; aoFechar: ()
       setErro(`Escolha ${GRUPOS[grupo].toLowerCase()} antes de adicionar.`); painel.current?.querySelector<HTMLSelectElement>(`#editor-${grupo}`)?.focus(); return;
     }
     if (pedido?.combo && !saborDaLataDoCombo(pedido)) { setErro("Escolha o sabor da lata incluída no combo."); painel.current?.querySelector<HTMLSelectElement>("#editor-lata-combo")?.focus(); return; }
-    if (!aoSalvar(conteudo, quantidade)) setErro("Não foi possível salvar este item. Ele pode ter sido removido; confira a sacola.");
+    if (!aoSalvar(conteudo, quantidade)) setErro(destino?.erro ?? "Não foi possível salvar este item. Ele pode ter sido removido; confira a sacola.");
   }
   return <div className={styles.overlay}><div className={styles.panel} ref={painel} role="dialog" aria-modal="true" aria-labelledby="titulo-editor" aria-describedby="aviso-rascunho" tabIndex={-1}>
-    <header className={styles.panelHeader}><div><h2 id="titulo-editor">{inicial.id ? "Editar" : "Personalizar"} {nomeDoConteudo(conteudo)}</h2><p className={styles.smallNote} id="aviso-rascunho">As alterações só entram na sacola ao salvar. Fechar descarta este rascunho.</p></div><button type="button" className={styles.close} onClick={aoFechar} aria-label="Cancelar edição">×</button></header>
+    <header className={styles.panelHeader}><div><h2 id="titulo-editor">{inicial.id ? "Editar" : "Personalizar"} {nomeDoConteudo(conteudo)}</h2><p className={styles.smallNote} id="aviso-rascunho">{destino?.aviso ?? "As alterações só entram na sacola ao salvar. Fechar descarta este rascunho."}</p></div><button type="button" className={styles.close} onClick={aoFechar} aria-label="Cancelar edição">×</button></header>
     <div className={styles.panelBody}>
       {pedido && <>
         {pedido.opcoes && <fieldset className={styles.fieldset}><legend className={styles.legend}>Ingredientes do lanche</legend><p className={styles.smallNote}>As escolhas abaixo não alteram o preço base.</p>{ORDEM_GRUPOS.map((grupo) => <label className={styles.field} key={grupo} htmlFor={`editor-${grupo}`}>{GRUPOS[grupo]}<select id={`editor-${grupo}`} className={styles.select} value={pedido.opcoes?.[grupo] ?? ""} onChange={(e) => { const valor = e.target.value; mudarPedido((p) => ({ ...p, opcoes: { ...p.opcoes!, [grupo]: valor || null } })); setErro(""); }}><option value="">Escolha uma opção</option>{OPCOES[grupo].map((o) => <option key={o.id} value={o.id}>{o.nome}</option>)}{grupo !== "pao" && <option value="sem">{SEM_OPCAO[grupo].nome}</option>}</select></label>)}</fieldset>}
@@ -111,6 +112,6 @@ function Editor({ inicial, aoFechar, aoSalvar }: { inicial: Edicao; aoFechar: ()
       {conteudo.tipo === "porcao" && <label className={styles.field}>Porção avulsa<select className={styles.select} value={conteudo.porcao} onChange={(e) => setConteudo({ tipo: "porcao", porcao: e.target.value as PorcaoId })}>{ORDEM_PORCOES.map((p) => <option key={p} value={p}>{PORCOES[p].nome} · a partir de {brl(PORCOES[p].preco)}</option>)}</select></label>}
       <div className={styles.optionRow}><div><strong>Quantidade</strong><p className={styles.smallNote}>Multiplica este item com todos os adicionais, bebida e porção selecionados.</p></div><Quantidade valor={quantidade} min={1} nome="Quantidade do item" aoMudar={setQuantidade} /></div>
       {erro && <p role="alert" className={styles.error}>{erro}</p>}
-    </div><footer className={styles.panelFooter}><div><p className={styles.smallNote}>Total · {quantidade} {quantidade === 1 ? "unidade" : "unidades"}</p><strong className={styles.price}>{brl(preco * quantidade)}</strong></div><button type="button" className={styles.primary} onClick={salvar}>{inicial.id ? "Salvar alterações" : "Adicionar à sacola"}</button><button type="button" className={styles.textButton} onClick={aoFechar}>Cancelar</button></footer>
+    </div><footer className={styles.panelFooter}><div><p className={styles.smallNote}>Total · {quantidade} {quantidade === 1 ? "unidade" : "unidades"}</p><strong className={styles.price}>{brl(preco * quantidade)}</strong></div><button type="button" className={styles.primary} onClick={salvar}>{inicial.id ? "Salvar alterações" : destino?.adicionar ?? "Adicionar à sacola"}</button><button type="button" className={styles.textButton} onClick={aoFechar}>Cancelar</button></footer>
   </div></div>;
 }
