@@ -55,21 +55,21 @@ export default function MesaXR({ modo, children }: { modo: ModoMesa; children: R
   const entrada = useRef<Group>(null);
   const anim = useRef({ t: 1 });
   const fase = modo.estado.fase;
-  const posta = fase === "ajustando" || fase === "colocado";
-  const postaAntes = useRef(posta);
-  useEffect(() => {
-    if (posta && !postaAntes.current) {
-      const reduzido = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-      anim.current.t = reduzido ? 1 : 0;
-    }
-    postaAntes.current = posta;
-  }, [posta]);
+  // A sessão mostra o conjunto (origem.visible) antes do React saber da nova fase: a entrada recomeça no
+  // próprio quadro em que ele aparece, para nunca piscar um quadro em tamanho cheio.
+  const visivelAntes = useRef(false);
   const sombra = useMemo(() => sombraNaMesa(), []);
   useEffect(() => () => sombra.descartar(), [sombra]);
   useFrame((_, delta) => {
     const g = entrada.current;
     if (!g) return;
     const a = anim.current;
+    const visivel = !!origem.current?.visible;
+    if (visivel && !visivelAntes.current) {
+      const reduzido = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      a.t = reduzido ? 1 : 0;
+    }
+    visivelAntes.current = visivel;
     if (!emAR) { if (a.t < 1 || g.scale.x !== 1) { a.t = 1; g.scale.setScalar(1); g.position.y = 0; } return; }
     if (a.t < 1) a.t = Math.min(1, a.t + Math.min(delta, 0.05) / ENTRADA_S);
     const k = a.t;
