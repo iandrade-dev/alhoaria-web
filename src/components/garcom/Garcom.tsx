@@ -9,10 +9,10 @@ import { CATALOGO } from "@/data/catalogo";
 import { restaurante } from "@/data/restaurante";
 import { criarClienteGarcom, ErroGarcom, podeEnviar, type LocalDeTrabalho, type Pedido, type Usuario } from "@/lib/garcom-api";
 import {
-  assinaturaDoEnvio, chaveDoEnvio, itensDaLinha, lerRascunho, MAX_MESA, MAX_OBSERVACAO, montarPedido, novaChave, pedidosDeHoje, rascunhoVazio, STATUS, totalDaComanda,
+  assinaturaDoEnvio, chaveDoEnvio, itensDaLinha, lerRascunho, MAX_MESA, MAX_OBSERVACAO, MAX_QUANTIDADE_ITEM, montarPedido, novaChave, pedidosDeHoje, rascunhoVazio, STATUS, totalDaComanda,
   type Rascunho,
 } from "@/lib/garcom-pedido";
-import { atualizarItem, MAX_QUANTIDADE, normalizarConteudo, removerItem, type ConteudoSacola, type ItemSacola } from "@/lib/sacola";
+import { atualizarItem, normalizarConteudo, removerItem, type ConteudoSacola, type ItemSacola } from "@/lib/sacola";
 import styles from "./garcom.module.css";
 
 const cliente = criarClienteGarcom();
@@ -165,7 +165,7 @@ function Mesa({ usuario, local, trocarLocal, aoSair, sessaoExpirou }: { usuario:
     const c = normalizarConteudo(conteudo);
     if (!c) return false;
     atualizar((r) => {
-      const igual = r.itens.find((i) => mesmoConteudo(i.conteudo, c) && i.quantidade + quantidade <= MAX_QUANTIDADE);
+      const igual = r.itens.find((i) => mesmoConteudo(i.conteudo, c) && i.quantidade + quantidade <= MAX_QUANTIDADE_ITEM);
       const itens = igual ? r.itens.map((i) => i === igual ? { ...i, quantidade: i.quantidade + quantidade } : i) : [...r.itens, { id: novaChave(), quantidade, conteudo: c }];
       return { ...r, itens };
     });
@@ -305,7 +305,7 @@ function Comanda({ rascunho, enviando, erroEnvio, erroLocal, confirmado, aoMudar
       {rascunho.itens.map((item) => <article className={styles.linhaComanda} key={item.id}>
         {itensDaLinha(item).map((linha, n) => <div key={n}><h3>{linha.quantity}x {linha.name}</h3>{linha.details && <ul className={styles.detalhes}>{linha.details.map((d) => <li key={d}>{d}</li>)}</ul>}</div>)}
         <div className={styles.linhaRodape}>
-          <Quantidade valor={item.quantidade} min={1} max={MAX_QUANTIDADE} nome={`Quantidade de ${nomeDoConteudo(item.conteudo)}`} aoMudar={(quantidade) => aoMudar((r) => ({ ...r, itens: r.itens.map((i) => i.id === item.id ? { ...i, quantidade } : i) }))} />
+          <Quantidade valor={item.quantidade} min={1} max={MAX_QUANTIDADE_ITEM} nome={`Quantidade de ${nomeDoConteudo(item.conteudo)}`} aoMudar={(quantidade) => aoMudar((r) => ({ ...r, itens: r.itens.map((i) => i.id === item.id ? { ...i, quantidade } : i) }))} />
           <strong>{brl(itensDaLinha(item).reduce((s, l) => s + l.quantity * l.unitPriceCents, 0))}</strong>
         </div>
         <div className={pedidoStyles.actions}>
@@ -366,6 +366,5 @@ function ListaPedidos({ pedidos, estado, local, aoAtualizar, aoMudar, sessaoExpi
         </div>
       </article>;
     })}
-    <p style={{ textAlign: "center", marginTop: 8 }}><a className={styles.painelLink} href="/painel" target="_blank" rel="noopener">Abrir cozinha no painel</a></p>
   </>;
 }

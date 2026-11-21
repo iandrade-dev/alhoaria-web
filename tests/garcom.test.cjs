@@ -122,7 +122,7 @@ test('cliente: classifica 401, 403, 409, 5xx e validação', async () => {
   const tipos = [];
   for (let i = 0; i < 5; i++) tipos.push(await cliente.pedidos('e1').catch((e) => [e.tipo, e.status, e.message]));
   assert.deepEqual(tipos.map((t) => t[0]), ['sessao', 'permissao', 'conflito', 'indisponivel', 'invalido']);
-  assert.match(tipos[4][2], /table: obrigatória/);
+  assert.match(tipos[4][2], /Mesa inválida/);
   const login = await cliente.entrar('x', 'y').catch((e) => e);
   assert.equal(login.tipo, 'invalido'); assert.match(login.message, /senha/);
 });

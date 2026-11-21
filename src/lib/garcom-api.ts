@@ -32,6 +32,16 @@ export class ErroGarcom extends Error {
   get repetivel() { return this.tipo === "indisponivel"; }
 }
 
+/** Nome do campo recusado pela plataforma, em português, para a mensagem ao garçom. */
+function campoLegivel(caminho?: string) {
+  if (!caminho) return "";
+  if (caminho.startsWith("note")) return `Observação longa demais (máximo ${280} caracteres)`;
+  if (caminho.startsWith("table")) return "Mesa inválida";
+  if (/quantity/.test(caminho)) return "Quantidade acima do limite (máximo 50 por item)";
+  if (caminho.startsWith("items")) return "Algum item da comanda foi recusado";
+  return "Revise a comanda";
+}
+
 type CorpoDeErro = { error?: { message?: string; code?: string; details?: { path?: string; message?: string }[] } };
 
 export function erroDaResposta(status: number, corpo: CorpoDeErro | null): ErroGarcom {
@@ -41,7 +51,7 @@ export function erroDaResposta(status: number, corpo: CorpoDeErro | null): ErroG
   if (status === 403) return new ErroGarcom("permissao", "Sua conta não tem permissão para isso nesta loja.", status, codigo);
   if (status === 409) return new ErroGarcom("conflito", msg ?? "O pedido mudou de status. A lista foi atualizada.", status, codigo);
   if (status === 408 || status === 429 || status >= 500) return new ErroGarcom("indisponivel", "A plataforma não respondeu. O pedido continua aqui; tente de novo.", status, codigo);
-  const detalhes = corpo?.error?.details?.map((d) => d.path ? `${d.path}: ${d.message ?? ""}` : d.message ?? "").filter(Boolean).join(" · ");
+  const detalhes = corpo?.error?.details?.map((d) => campoLegivel(d.path)).filter(Boolean).join(" · ");
   return new ErroGarcom("invalido", detalhes || msg || "Não foi possível concluir. Confira os dados e tente novamente.", status, codigo);
 }
 

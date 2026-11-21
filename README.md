@@ -67,7 +67,7 @@ informar a mesa, adicionar itens do mesmo catálogo do cardápio (lanche padrão
 ingredientes, adicionais, potinhos, combo, bebida e porção junto), revisar a comanda, escrever uma observação
 opcional e tocar em **Enviar para a cozinha**. A confirmação mostra o número do pedido; a aba **Pedidos de hoje**
 atualiza o status a cada 5 s (pausa com a aba oculta) e permite cancelar pedidos ainda na fila.
-A cozinha fica no painel da plataforma: o link **Abrir cozinha no painel** abre `/painel`.
+A cozinha fica no painel da plataforma, aberto no endereço próprio do painel (não por este site).
 
 - A sessão é o cookie `HttpOnly` da plataforma (login `client: "web"`); ao recarregar, `GET /v1/identity/session`
   restaura a sessão e o token CSRF das mutações (`x-csrf-token`), como o cliente do painel.
@@ -81,8 +81,10 @@ A cozinha fica no painel da plataforma: o link **Abrir cozinha no painel** abre 
 
 ### Proxy da plataforma
 
-`next.config.mjs` reescreve `/v1/:path*`, `/painel` e `/painel/:path*` para a plataforma, na mesma origem
-do site (o cookie de sessão é host-only, então o navegador precisa falar com o próprio site):
+`next.config.mjs` reescreve para a plataforma só as rotas do garçom (`/v1/identity/sessions`, `/v1/identity/session`,
+`/v1/me/workplaces` e `/v1/companies/:id/orders[/:orderId/cancel]`), na mesma origem. O painel e as demais rotas
+da API não passam por este site.
+(o cookie de sessão é host-only, então o navegador precisa falar com o próprio site):
 
 | Variável | Padrão | Efeito |
 | --- | --- | --- |

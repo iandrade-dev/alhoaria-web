@@ -18,7 +18,9 @@ export const STATUS: Record<StatusPedido, { nome: string; aberto: boolean }> = {
 };
 
 export const MAX_MESA = 12;
-export const MAX_OBSERVACAO = 500;
+export const MAX_OBSERVACAO = 280;
+/** Limite da plataforma por item da comanda. */
+export const MAX_QUANTIDADE_ITEM = 50;
 
 const semQuantidade = (texto: string) => texto.replace(/^\d+x /, "").replace(/ \(a partir de\)$/, "");
 
