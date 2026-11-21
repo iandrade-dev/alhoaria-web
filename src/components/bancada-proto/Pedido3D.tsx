@@ -617,7 +617,11 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rod
   // ------------------------------------------------ quadro a quadro
   const ultimo = useRef<string>("");
   const tempoProj = useRef(0);
-  const arraste = useMemo(() => ({ raio: new Raycaster(), ndc: new Vector2(), plano: new Plane(), ponto: new Vector3(), alvo: new Vector3(), movidos: new Set<AdicionalId>() }), []);
+  const arraste = useMemo(() => ({ raio: new Raycaster(), ndc: new Vector2(), plano: new Plane(), ponto: new Vector3(), alvo: new Vector3(),
+    /** Potinhos fora de casa: null enquanto arrastados; depois de soltos, de onde voltam e o andamento (0..1). */
+    movidos: new Map<AdicionalId, { de: Vector3; t: number } | null>(),
+    /** Potinhos que acabaram de pousar em casa: tempo do achatamento (s). */
+    pousos: new Map<AdicionalId, number>() }), []);
   useFrame((_, delta) => {
     if (pausado) return;
     const pausa = (window as unknown as { __pedidoPausa?: boolean }).__pedidoPausa;
@@ -662,15 +666,31 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rod
           arraste.ponto.x = Math.max(-0.8, Math.min(0.8, arraste.ponto.x));
           arraste.ponto.z = Math.max(-0.7, Math.min(0.7, arraste.ponto.z));
           p.g.position.lerp(arraste.ponto, 1 - Math.exp(-dt * 28));
-          arraste.movidos.add(p.id);
+          arraste.movidos.set(p.id, null); arraste.pousos.delete(p.id);
         }
       } else if (arraste.movidos.has(p.id)) {
+        // solto: volta para casa num arco curto (sobe um pouco e desce), em vez de deslizar reto
+        let volta = arraste.movidos.get(p.id);
+        if (!volta) { volta = { de: p.g.position.clone(), t: 0 }; arraste.movidos.set(p.id, volta); }
+        volta.t = Math.min(1, volta.t + dt / (red ? 0.2 : 0.42));
         arraste.alvo.set(x, MESA, z);
-        p.g.position.lerp(arraste.alvo, 1 - Math.exp(-dt * 16));
-        if (p.g.position.distanceToSquared(arraste.alvo) < 1e-6) { p.g.position.copy(arraste.alvo); arraste.movidos.delete(p.id); }
+        p.g.position.lerpVectors(volta.de, arraste.alvo, eIO3(volta.t));
+        if (!red) p.g.position.y += 0.035 * Math.sin(Math.PI * volta.t);
+        if (volta.t >= 1) { p.g.position.copy(arraste.alvo); arraste.movidos.delete(p.id); if (!red) arraste.pousos.set(p.id, 0); }
       } else p.g.position.set(x, MESA, z);
       const k = c01(s.fade.potes * 1.25 - i * 0.05);
       p.g.visible = k > 0.01; p.g.scale.setScalar(esc(k, alvo.potes === 1));
+      // pousou em casa: achata e volta com uma mola curta (a base do potinho fica na bancada)
+      const pouso = arraste.pousos.get(p.id);
+      if (pouso !== undefined) {
+        const g = (pouso + dt) / 0.34;
+        if (g >= 1) arraste.pousos.delete(p.id);
+        else {
+          arraste.pousos.set(p.id, pouso + dt);
+          const amassa = 0.16 * Math.exp(-4.5 * g) * Math.cos(2.6 * Math.PI * g), e = p.g.scale.y;
+          p.g.scale.set(e * (1 + amassa * 0.5), e * (1 - amassa), e * (1 + amassa * 0.5));
+        }
+      }
     });
     const prateleira = (pr: { bandeja: Mesh; itens: Item[] }, f: number, cresce: boolean) => {
       const xs = pr.itens.length === 3 ? lu.prat : [lu.prat[0], lu.prat[2]].map(([x, z]) => [x * 0.75, z] as XZ);

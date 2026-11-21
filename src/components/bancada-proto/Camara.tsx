@@ -8,7 +8,7 @@ import { useEffect, useLayoutEffect, useRef, type MutableRefObject } from "react
 import { useFrame, useThree } from "@react-three/fiber";
 import { MathUtils, PerspectiveCamera, Vector3 } from "three";
 import type { Medidas } from "./acoes";
-import { CAMERAS, ORBITA, enquadrar, type Arranjo } from "./layout";
+import { CAMERAS, CAMERAS_PRONTO, ORBITA, enquadrar, type Arranjo } from "./layout";
 
 export type ApiCamara = {
   /** Volta para a câmera padrão. */
@@ -30,8 +30,10 @@ function camDaUrl(): { az?: number; pol?: number; zoom?: number } | null {
   return { az: Number.isFinite(az) ? az : undefined, pol: Number.isFinite(pol) ? pol : undefined, zoom: Number.isFinite(z) ? z : undefined };
 }
 
-export default function Camara({ arranjo, M, travada, reduzido, api, aoFora, segurando }: {
+export default function Camara({ arranjo, M, travada, reduzido, api, aoFora, segurando, destaque = false }: {
   arranjo: Arranjo; M: Medidas;
+  /** Lanche pronto: a câmera desliza para perto e mais baixa (CAMERAS_PRONTO) e balança devagar enquanto ninguém mexe. */
+  destaque?: boolean;
   /** Uma ferramenta está sendo arrastada (conta como mexer: a câmera não volta no meio do arraste). */
   segurando: () => boolean;
   /** QA (`?congelar=`): câmera padrão fixa. */
@@ -48,29 +50,40 @@ export default function Camara({ arranjo, M, travada, reduzido, api, aoFora, seg
     volta: null as null | { t: number; de: Orb },
     ultimo: 0, ptrs: new Map<number, { x: number; y: number }>(), pinca: 0, zoomPinca: 1,
     fora: false, forcada: null as ReturnType<typeof camDaUrl>,
+    // Enquadramento para onde a câmera vai; ela chega lá deslizando (em vez de cortar) quando muda o destaque.
+    quadro: null as null | { alvo: Vector3; pol0: number; dist0: number; fov: number; desce: number },
+    desce: 0, chave: "",
+    // balanço lento do destaque: peso (0..1, amortecido) e fase (s)
+    balanco: 0, faseBalanco: 0,
   });
-  const opts = useRef({ travada, reduzido }); opts.current = { travada, reduzido };
+  const opts = useRef({ travada, reduzido, destaque }); opts.current = { travada, reduzido, destaque };
   const fora = useRef(aoFora); fora.current = aoFora;
   const seg = useRef(segurando); seg.current = segurando;
 
   // enquadramento padrão (por arranjo e tamanho da tela); o giro do usuário fica
   useLayoutEffect(() => {
-    const c = CAMERAS[arranjo];
+    const padrao = CAMERAS[arranjo];
+    const c = destaque ? CAMERAS_PRONTO[arranjo] : padrao;
     const s = S.current;
     const { fov, dist } = enquadrar(c, size.width, size.height);
-    s.alvo.set(...c.alvo);
-    const dir = new Vector3(...c.pos).sub(s.alvo).normalize();
-    s.pol0 = Math.acos(dir.y);
-    s.dist0 = dist;
-    cam.fov = fov; cam.near = 0.05; cam.far = 12;
+    const alvo = new Vector3(...c.alvo);
+    s.quadro = { alvo, pol0: Math.acos(new Vector3(...c.pos).sub(alvo).normalize().y), dist0: dist, fov, desce: c.desce };
+    cam.near = 0.05; cam.far = 12;
     cam.layers.enable(1);
-    cam.setViewOffset(size.width, size.height, 0, -c.desce * size.height, size.width, size.height);
-    cam.updateProjectionMatrix();
-    // a mão entra e sai pela direita, fora do quadro padrão
-    const meia = dist * Math.tan((fov * Math.PI) / 360) * (size.width / size.height);
+    // Primeira vez, tela que mudou de tamanho/arranjo ou movimento reduzido: vale na hora. Destaque: desliza.
+    const chave = `${size.width}x${size.height}:${arranjo}`;
+    if (s.chave !== chave || reduzido) {
+      s.chave = chave;
+      s.alvo.copy(alvo); s.pol0 = s.quadro.pol0; s.dist0 = dist; s.desce = c.desce; cam.fov = fov;
+      cam.setViewOffset(size.width, size.height, 0, -s.desce * size.height, size.width, size.height);
+      cam.updateProjectionMatrix();
+    }
+    // a mão entra e sai pela direita, fora do quadro padrão (o destaque não muda o caminho da mão)
+    const p = destaque ? enquadrar(padrao, size.width, size.height) : { fov, dist };
+    const meia = p.dist * Math.tan((p.fov * Math.PI) / 360) * (size.width / size.height);
     M.fora.set(meia + 0.38, 0.16, 0.1);
     s.forcada = camDaUrl();
-  }, [cam, size, arranjo, M]);
+  }, [cam, size, arranjo, M, destaque, reduzido]);
 
   const limitar = (o: Orb) => {
     const az = ORBITA.azimute * RAD;
@@ -183,6 +196,19 @@ export default function Camara({ arranjo, M, travada, reduzido, api, aoFora, seg
   useFrame((_, delta) => {
     const s = S.current;
     const dt = Math.min(delta, 0.1);
+    // desliza o enquadramento (alvo, inclinação, distância, fov e deslocamento do quadro) até o pedido
+    const q = s.quadro;
+    if (q) {
+      const kq = opts.current.reduzido ? 1 : 1 - Math.exp(-Math.min(dt, 0.05) * 3.2);
+      s.alvo.lerp(q.alvo, kq); s.pol0 += (q.pol0 - s.pol0) * kq; s.dist0 += (q.dist0 - s.dist0) * kq;
+      let mudou = false;
+      if (Math.abs(q.fov - cam.fov) > 0.01) { cam.fov += (q.fov - cam.fov) * kq; mudou = true; }
+      if (Math.abs(q.desce - s.desce) > 0.0004) { s.desce += (q.desce - s.desce) * kq; mudou = true; }
+      if (mudou) {
+        cam.setViewOffset(size.width, size.height, 0, -s.desce * size.height, size.width, size.height);
+        cam.updateProjectionMatrix();
+      }
+    }
     const agora = performance.now() / 1000;
     if (seg.current()) s.ultimo = agora;
     const zero: Orb = { az: 0, pol: 0, zoom: 1 };
@@ -207,8 +233,14 @@ export default function Camara({ arranjo, M, travada, reduzido, api, aoFora, seg
       s.orb.zoom += (s.alvoOrb.zoom - s.orb.zoom) * k;
       if (s.ptrs.size === 0 && agora - s.ultimo > ORBITA.ocioso && !igual(s.alvoOrb, zero)) centralizar();
     }
+    // destaque: balanço lento de ±7° em volta do lanche, só parado (sem toque recente) e sem movimento reduzido
+    const balancar = opts.current.destaque && !opts.current.reduzido && !opts.current.travada && !s.forcada
+      && s.ptrs.size === 0 && agora - s.ultimo > 1.5;
+    s.balanco += ((balancar ? 1 : 0) - s.balanco) * (1 - Math.exp(-dt * 1.4));
+    if (s.balanco > 0.001) s.faseBalanco += dt; else s.faseBalanco = 0;
+    const az = s.orb.az + s.balanco * 7 * RAD * Math.sin((s.faseBalanco * 2 * Math.PI) / 9);
     const pol = s.pol0 + s.orb.pol, dist = s.dist0 * s.orb.zoom;
-    dir.current.setFromSphericalCoords(dist, pol, s.orb.az);
+    dir.current.setFromSphericalCoords(dist, pol, az);
     cam.position.copy(s.alvo).add(dir.current);
     cam.lookAt(s.alvo);
     const f = !igual(s.orb, zero) || !igual(s.alvoOrb, zero);
