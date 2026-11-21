@@ -15,6 +15,7 @@ import {
 } from "./kit";
 import { MESA, estacoesDaOpcao, opcaoDaEstacao, passoDe, type LancheDef } from "./layout";
 import type { Opcoes } from "./cardapio";
+import { ACABAMENTO, brasa, suculento } from "./frescor";
 
 type Recheio = NonNullable<LancheDef["recheio"]>;
 /** Punhado do recheio (o que a mão leva e o que cai no pão). */
@@ -95,7 +96,10 @@ export function kitPao(def: LancheDef, A: Record<string, Object3D>, M: Medidas):
     const bm = caixa(muss);
     M.muss = bm.max.y - 0.006;
     mussPiv.position.set(0, bm.min.y + 0.03, 0); muss.position.set(0, -(bm.min.y + 0.03), 0);
-    return { raiz, lanche, tampa, pasta, creme, partes, mussPiv, muss, gratinado, clip, tinta };
+    // cara de recém-feito: camadas derretidas brilham (só material; os tons das opções continuam pelas tintas)
+    suculento(creme, ACABAMENTO.creme); suculento(muss, ACABAMENTO.queijo); suculento(gratinado, ACABAMENTO.gratinado);
+    partes.forEach((pt) => suculento(pt, ACABAMENTO.recheio));
+    return { raiz, lanche, tampa, pasta, creme, partes, mussPiv, muss, gratinado, clip, tinta, brasa: brasa(gratinado) };
   })();
   const tingir = (ts: Tinta[], cor: string | null, forca: number, ponto: string | null = null, pontos = 0) => ts.forEach((t) => pintarTinta(t, cor, forca, ponto, pontos));
 
@@ -273,6 +277,8 @@ export function kitPao(def: LancheDef, A: Record<string, Object3D>, M: Medidas):
     return () => devolverAsRaizes(lista, w);
   };
 
+  // brasa do gratinado: acende com a chama e esfria devagar depois do maçarico (Kit.quadro)
+  const calor = { v: 0, esfriando: false };
   const final = (id: string) => {
     const p = passoDe(id);
     FX.fio.visible = false; FX.brilho.visible = false; FX.luz.intensity = 0; FX.ralada.visible = false; FX.quedas.forEach((q2) => { q2.visible = false; });
@@ -282,9 +288,10 @@ export function kitPao(def: LancheDef, A: Record<string, Object3D>, M: Medidas):
     if (p === idRecheio) L.partes.forEach((pt) => { pt.visible = true; pt.scale.set(1, 1, 1); });
     if (p === "tampa") L.tampa.rotation.x = 0;
     if (p === "mussarela") { L.mussPiv.visible = true; L.mussPiv.scale.set(1, 1, 1); L.clip.muss.constant = 1; }
-    if (p === "macarico") { L.gratinado.visible = true; L.clip.grat.constant = 1; }
+    if (p === "macarico") { L.gratinado.visible = true; L.clip.grat.constant = 1; calor.esfriando = true; }
   };
   const zerar = () => {
+    calor.v = 0; calor.esfriando = false; L.brasa(0);
     L.pasta.visible = false; L.creme.visible = false; L.mussPiv.visible = false; L.gratinado.visible = false;
     L.partes.forEach((p) => { p.visible = false; p.scale.set(1, 0.001, 1); });
     L.tampa.rotation.x = OPEN;
@@ -419,6 +426,8 @@ export function kitPao(def: LancheDef, A: Record<string, Object3D>, M: Medidas):
       FX.brilho.scale.setScalar(0.1 + 0.015 * Math.sin(t * 17));
       FX.luz.position.set(hit.x, M.muss + 0.03, hit.z + 0.01);
       FX.luz.intensity = brilhoK * (0.9 + (red ? 0 : 0.3 * Math.sin(t * 29)));
+      // o gratinado esquenta conforme a chama passa
+      calor.v = Math.max(calor.v, 0.75 * seg(t, a, b)); calor.esfriando = false; L.brasa(calor.v);
     }
   };
 
@@ -449,6 +458,12 @@ export function kitPao(def: LancheDef, A: Record<string, Object3D>, M: Medidas):
     naTabua: new Vector3(0.15, 0, 0.1),
     anel: [0.5, 0.26],
     layout, zerar, final,
+    quadro: (dt) => {
+      if (!calor.esfriando || calor.v <= 0) return;
+      // esfria em ~2,5 s, mais rápido no começo (exponencial), e apaga de vez
+      calor.v = calor.v < 0.01 ? 0 : calor.v * Math.exp(-dt * 1.6);
+      L.brasa(calor.v);
+    },
     reiniciar: () => {
       Object.values(E.lista).forEach((st) => {
         const f = st.ferramenta;

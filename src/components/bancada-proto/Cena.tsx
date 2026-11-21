@@ -4,12 +4,12 @@ import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, type MutableRefO
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { ContactShadows, useGLTF, useProgress } from "@react-three/drei";
 import {
-  AdditiveBlending, CylinderGeometry, Euler, Group, Material, MathUtils, Matrix4, Mesh, MeshBasicMaterial, Object3D,
+  AdditiveBlending, Box3, CylinderGeometry, Euler, Group, Material, MathUtils, Matrix4, Mesh, MeshBasicMaterial, Object3D,
   Plane, PlaneGeometry, PMREMGenerator, Quaternion, Raycaster, SpotLight, Vector2, Vector3,
 } from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { CHAMA_DIR, POSES, anelTextura, qBase, type Kit, type Volta } from "./kit";
-import { c01, duracao, eIO3, eIOs, eOut3, mola, pegadaDe, seg, tempoTrabalho, type Medidas, type Pegada } from "./acoes";
+import { c01, duracao, eIO3, eIOs, eOut3, pegadaDe, seg, tempoTrabalho, type Medidas, type Pegada } from "./acoes";
 import { kitPao } from "./kitPao";
 import { kitDog } from "./kitDog";
 import { MESA, arranjoDe, passoDe, type Arranjo, type EstacaoId, type LancheDef, type Passo } from "./layout";
@@ -18,6 +18,7 @@ import Pedido3D, { type EstadoSacola, type FasePedido, type ProjPedido } from ".
 import type { Opcoes, Pedido } from "./cardapio";
 import { liberarMontagem } from "../ar/recursos";
 import MesaXR, { type ModoMesa } from "../ar/MesaXR";
+import { vaporQuente } from "./frescor";
 
 const ROOT = "/assets/models/bancada/";
 // Arquivos em public/assets/models/bancada/ (contrato no blender/bancada3d/README.md). A mão é o mao-luva.glb.
@@ -54,6 +55,8 @@ export type Props = {
   /** Mantém a geometria local e pausa a montagem durante o posicionamento AR. */
   apresentacao?: { pronto: boolean; pausado: boolean; interativo?: boolean; estacao?: string };
   modoMesa?: ModoMesa;
+  /** Lanche pronto (card final): a câmera vai para o destaque e o vapor sobe do lanche. */
+  destaque?: boolean;
   /** Escolhas do pedido que mudam o lanche na tábua (pão parmesão ou roseta). */
   opcoes?: Opcoes | null;
   /** Pedido: potinhos do Turbinar (durante a montagem), bebida, acompanhamento e sacola (depois do lanche pronto). */
@@ -64,6 +67,41 @@ export type Props = {
     ensacar: boolean; aoSacolaEstado: (e: EstadoSacola) => void;
   };
 };
+
+/**
+ * Peça que volta para a estação: cai de um pouco acima (crescendo de 55% a 100% no ar), achata ao tocar e assenta
+ * com uma mola curta, em vez de surgir do nada. `base` = altura da origem acima do fundo da peça (o fundo fica no
+ * lugar enquanto ela achata). Devolve o deslocamento em y e a escala (lados, altura).
+ */
+const VOLTA_S = 0.62;
+function assentar(k: number, red: boolean, base: number): [number, number, number] {
+  const x = c01(k);
+  if (red) { const e = Math.max(0.001, x); return [0, e, e]; }
+  const CAI = 0.42;
+  if (x < CAI) {
+    const f = x / CAI;
+    const e = 0.55 + 0.45 * eOut3(f);
+    return [0.05 * (1 - f * f), e, e];
+  }
+  const g = (x - CAI) / (1 - CAI);
+  const amassa = x >= 1 ? 0 : 0.13 * Math.exp(-4.2 * g) * Math.cos(2.4 * Math.PI * g);
+  return [-base * amassa, 1 + amassa * 0.5, 1 - amassa];
+}
+/** Altura da origem acima do fundo de cada peça (na pose de casa), medida uma vez. */
+const baseDaPeca = new WeakMap<Object3D, number>();
+function alturaBase(o: Object3D) {
+  let b = baseDaPeca.get(o);
+  if (b === undefined) {
+    o.updateWorldMatrix(true, true);
+    const caixa = new Box3().setFromObject(o);
+    const origem = new Vector3().setFromMatrixPosition(o.matrixWorld);
+    // em AR a bancada pode estar escalada (zoom): volta para metros da cena
+    const escala = o.parent ? o.parent.getWorldScale(new Vector3()).y : 1;
+    b = Number.isFinite(caixa.min.y) ? Math.max(0, origem.y - caixa.min.y) / Math.max(1e-3, escala) : 0;
+    baseDaPeca.set(o, b);
+  }
+  return b;
+}
 
 const cubica = (out: Vector3, a: Vector3, b: Vector3, c: Vector3, d: Vector3, k: number) => {
   const u = 1 - k;
@@ -101,7 +139,7 @@ type Ativo = {
 type Mola = { p: Vector3; v: Vector3; alvo: Vector3; k: number; c: number; solta: boolean };
 type Pop = Volta & { t: number };
 
-export function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, congelar, arranjo, M, pedido, opcoes, camApi, apresentacao }: Props & { def: LancheDef; arranjo: Arranjo; M: Medidas }) {
+export function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPronto, congelar, arranjo, M, pedido, opcoes, camApi, apresentacao, destaque, leve }: Props & { def: LancheDef; arranjo: Arranjo; M: Medidas }) {
   const assets = useGLTF(def.arquivos.map(glb));
   const { gl, camera, size } = useThree();
   const A = useMemo(() => Object.fromEntries(def.arquivos.map((n, i) => [n, assets[i].scene])) as Record<string, Object3D>, [assets, def]);
@@ -159,6 +197,13 @@ export function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPro
     });
     return () => restaurar.forEach((f) => f());
   }, [K, !!apresentacao]);
+
+  // ------------------------------------------------ vapor do lanche pronto (poucos sprites; menos no modo leve)
+  const vapor = useMemo(() => vaporQuente(leve ? 4 : 7), [leve]);
+  useEffect(() => () => vapor.descartar(), [vapor]);
+  const tempoPronto = useRef(-1);
+  const topoVapor = useRef(0);
+  const destaqueRef = useRef(destaque); destaqueRef.current = destaque;
 
   // ------------------------------------------------ mão
   const H = useMemo(() => {
@@ -393,6 +438,20 @@ export function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPro
       bp.v += ((vezTampa && !at.current ? 1 : 0) - bp.v) * Math.min(1, dt * 6);
       (bp.m.material as MeshBasicMaterial).opacity = bp.v * (red ? 0.8 : 0.72 + 0.28 * Math.sin(T * 3.4));
     }
+    // lanche pronto: vapor subindo por alguns segundos (sem movimento reduzido)
+    if (destaqueRef.current && !red) {
+      if (tempoPronto.current < 0) {
+        // nasce rente ao topo real do lanche pronto (medido uma vez, no espaço da bancada)
+        const caixaL = new Box3().setFromObject(K.lanche), topo = caixaL.getCenter(tmp.a);
+        topo.y = caixaL.max.y;
+        raizLocal.current!.worldToLocal(topo);
+        topoVapor.current = Number.isFinite(topo.y) ? topo.y - 0.006 : K.caixa.y[1];
+        tempoPronto.current = 0;
+      } else tempoPronto.current += dt;
+      const cx = K.caixa;
+      vapor.animar(tempoPronto.current, (cx.x[1] - cx.x[0]) / 2, (cx.z[1] - cx.z[0]) / 2, topoVapor.current);
+    } else if (tempoPronto.current >= 0) { tempoPronto.current = -1; vapor.animar(-1, 0, 0, 0); }
+
     // arraste: a ferramenta segue o dedo num plano acima da bancada
     const d = bus.current.drag;
     if (d.ativo && d.id && !at.current && lista[d.id]) {
@@ -429,21 +488,27 @@ export function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPro
       if (m.solta && m.p.distanceTo(m.alvo) < 0.0008 && m.v.length() < 0.01) { f.position.copy(st.casa.p); f.quaternion.copy(st.casa.q); delete molas.current[id]; }
     });
 
-    // ferramentas que voltam para a estação depois da ação: aparecem com mola
+    // ferramentas que voltam para a estação depois da ação
+    // (caem de leve na casa, achatam ao tocar e assentam: ver `assentar`)
     (Object.keys(pops.current) as EstacaoId[]).forEach((id) => {
       const st = lista[id]; const f = st.ferramenta!;
       pops.current[id]! += dt;
-      const k = pops.current[id]! / 0.5;
-      f.visible = true; f.position.copy(st.casa.p); f.quaternion.copy(st.casa.q);
-      f.scale.setScalar(Math.max(0.001, red ? c01(k) : mola(k, 0.8)));
-      if (k >= 1) { f.scale.setScalar(1); delete pops.current[id]; }
+      const k = pops.current[id]! / (red ? 0.5 : VOLTA_S);
+      f.visible = true; f.quaternion.copy(st.casa.q);
+      if (k >= 1) { f.position.copy(st.casa.p); f.scale.setScalar(1); delete pops.current[id]; return; }
+      f.position.copy(st.casa.p); f.scale.setScalar(1);
+      const [dy, lados, altura] = assentar(k, red, alturaBase(f));
+      f.position.y += dy; f.scale.set(lados, altura, lados);
     });
     voltas.current = voltas.current.filter((v) => {
       v.t += dt;
-      const k = v.t / 0.5;
+      const k = v.t / (red ? 0.5 : VOLTA_S);
       v.obj.visible = true; v.obj.position.copy(v.p); v.obj.quaternion.copy(v.q);
-      v.obj.scale.setScalar(k >= 1 ? 1 : Math.max(0.001, red ? c01(k) : mola(k, 0.8)));
-      return k < 1;
+      if (k >= 1) { v.obj.scale.setScalar(1); return false; }
+      v.obj.scale.setScalar(1);
+      const [dy, lados, altura] = assentar(k, red, alturaBase(v.obj));
+      v.obj.position.y += dy; v.obj.scale.set(lados, altura, lados);
+      return true;
     });
 
     // ação em andamento
@@ -548,6 +613,7 @@ export function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPro
     <primitive object={anelPao.m} />
     <primitive object={H.raiz} />
     {K.extras.map((o, i) => <primitive key={`x-${i}`} object={o} />)}
+    {vapor.fumacas.map((o, i) => <primitive key={`v-${i}`} object={o} />)}
     {pedido?.atual && <Suspense fallback={null}>
       <Pedido3D K={K} H={H} M={M} arranjo={arranjo} fase={pedido.fase} pedido={pedido.atual} rodada={pedido.rodada} reduzido={reduzido}
         bus={bus}
@@ -592,7 +658,7 @@ function Interno(props: Props) {
       apresentacao={props.modoMesa ? { pronto: false, pausado, interativo: true } : undefined} />
   </Suspense>;
   return <>
-    {!emAR && <Camara arranjo={arranjo} M={M} travada={!!props.congelar} reduzido={props.reduzido} api={props.camApi} aoFora={props.aoCamFora} segurando={() => props.bus.current.drag.ativo} />}
+    {!emAR && <Camara arranjo={arranjo} M={M} travada={!!props.congelar} reduzido={props.reduzido} api={props.camApi} aoFora={props.aoCamFora} segurando={() => props.bus.current.drag.ativo} destaque={!!props.destaque && !!def} />}
     {/* luzes do README (as mesmas dos renders da cozinha) e uma poça quente da luminária sobre a tábua */}
     <hemisphereLight args={["#ffe6c8", "#1a0f0a", 0.55]} />
     <ambientLight intensity={0.25} color="#ffe2c0" />

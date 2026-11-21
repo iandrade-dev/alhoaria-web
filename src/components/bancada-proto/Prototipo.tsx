@@ -385,7 +385,7 @@ export default function Prototipo() {
     `}</style>
     <LimiteCena aoFalhar={aoFalhar}>{lanche !== undefined && !semGl && <Cena aoFalhar={aoFalhar} def={def} ativo={animando || escolhendoPao ? null : ativo} reduzido={reduzido} bus={bus} api={api} aoFim={aoFim} aoProjetar={setProj} aoPronto={aoPronto} congelar={congelar}
       leve={leve} suspenso={oculto || sacola.aberta} aoProgresso={aoProgresso}
-      opcoes={pedido?.opcoes ?? null} camApi={camApi} aoCamFora={setCamFora}
+      opcoes={pedido?.opcoes ?? null} camApi={camApi} aoCamFora={setCamFora} destaque={fim && !animando && fase === "montagem"}
       modoMesa={{ estado: ar, overlay, gestos: gestosAR, sessao: sessaoAR, aoEstado: aoEstadoAR, aoDisponivel: aoXrPronto, zoom: zoomAR, giro: giroAR, aoZoom: mudarZoomAR }}
       pedido={{ fase: fase3d, atual: pedido, rodada, aoProjetar: setProjPed, aoSacola, aoOcupado, ensacar, aoSacolaEstado: setSacolaEstado }} />}</LimiteCena>
 

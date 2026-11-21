@@ -12,6 +12,7 @@ import {
   qBase, separar, soltarNoMundo, tigela, type Estacao, type Kit, type Volta,
 } from "./kit";
 import { MESA, type LancheDef } from "./layout";
+import { ACABAMENTO, suculento } from "./frescor";
 
 const KETCHUP = "#c8221a", MOSTARDA = "#f4c232";
 const PALHA_CORES = ["#e09a2c", "#eab04a", "#d4881f", "#f2c05a", "#b8741c"];
@@ -70,6 +71,9 @@ export function kitDog(def: LancheDef, A: Record<string, Object3D>, M: Medidas):
     const palhaPiv = new Group(); palhaPiv.position.y = bp.min.y; palha.position.y = -bp.min.y; palhaPiv.add(palha);
     lanche.add(brioche, pasta, salsA, salsB, ketchup, mostarda, fonduePiv, mussPiv, palhaPiv);
     raiz.add(tabua, cesta, lanche);
+    // cara de recém-feito: fundue, mussarela e molhos brilham (só material)
+    suculento(fondue, ACABAMENTO.creme); suculento(muss, ACABAMENTO.queijo);
+    suculento(ketchup, ACABAMENTO.creme); suculento(mostarda, ACABAMENTO.creme);
     // medidas
     M.h.pasta = caixa(pasta).max.y;
     M.h.molhos = caixa(mostarda).max.y;

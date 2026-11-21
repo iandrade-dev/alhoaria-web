@@ -27,6 +27,15 @@ export const CAMERAS: Record<Arranjo, Camera> = {
   paisagem: { pos: [0, 0.55, 0.85], alvo: [0, 0.1, -0.1], largura: 1.62, fov: [40, 56], desce: 0.02 },
 };
 
+/**
+ * Destaque do lanche pronto: a câmera desce e chega perto para mostrar o lanche de perfil, acima do card final
+ * (`desce` negativo sobe o lanche no quadro). A troca entre o padrão e o destaque desliza (Camara).
+ */
+export const CAMERAS_PRONTO: Record<Arranjo, Camera> = {
+  retrato: { pos: [0, 0.27, 0.62], alvo: [0, 0.05, 0.0], largura: 0.46, fov: [40, 56], desce: -0.14 },
+  paisagem: { pos: [0, 0.24, 0.62], alvo: [0, 0.05, 0.0], largura: 0.8, fov: [36, 50], desce: -0.21 },
+};
+
 /** Órbita em volta do alvo, relativa à câmera padrão: giro (azimute), inclinação e zoom (fator da distância). */
 export const ORBITA = {
   azimute: 35, // ± graus
