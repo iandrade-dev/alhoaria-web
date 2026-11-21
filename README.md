@@ -91,7 +91,7 @@ da API não passam por este site.
 | `PLATFORM_ORIGIN` | `https://vps-16302377.tail7dc411.ts.net:10000` | Origem da API e do painel. Vazia (`PLATFORM_ORIGIN=`) ou inválida desliga o proxy; o build continua. |
 
 A origem pública deste site (por exemplo `https://alhoaria-web.vercel.app` e `http://localhost:3000` no
-desenvolvimento) precisa estar em `ALLOWED_ORIGINS` da plataforma: o login web é recusado sem uma origem
+desenvolvimento) precisa estar em `WAITER_SITE_ORIGINS` da plataforma (e não em `ALLOWED_ORIGINS`): o login web é recusado sem uma origem
 permitida.
 
 Verificação: `npm run test:garcom` cobre a conversão da sacola em itens da cozinha, totais, validação de mesa e

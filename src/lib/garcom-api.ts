@@ -87,6 +87,7 @@ export function criarClienteGarcom(fetcher: Fetch = (input, init) => fetch(input
     async entrar(email: string, password: string) {
       const r = await chamar<{ user: Usuario; csrfToken?: string }>(ROTAS.login, { method: "POST", body: { email, password, client: "web" } }).catch((e: unknown) => {
         if (e instanceof ErroGarcom && e.status === 401) throw new ErroGarcom("invalido", "E-mail ou senha incorretos.", 401, e.codigo);
+        if (e instanceof ErroGarcom && e.status === 403) throw new ErroGarcom("permissao", "Esta conta não tem acesso ao modo garçom. Use uma conta da equipe cadastrada no painel.", 403, e.codigo);
         throw e;
       });
       csrf = r.csrfToken; return r.user;

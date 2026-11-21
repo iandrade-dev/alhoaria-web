@@ -3,7 +3,7 @@
  * que o garçom precisa (sessão, locais de trabalho e pedidos): o painel e as demais
  * rotas da API nunca passam por este site.
  * `PLATFORM_ORIGIN=` (vazio) desliga o proxy. A origem deste site precisa estar
- * em ALLOWED_ORIGINS da plataforma para o login web funcionar.
+ * em WAITER_SITE_ORIGINS da plataforma para o login web funcionar.
  */
 const PADRAO = "https://vps-16302377.tail7dc411.ts.net:10000";
 
