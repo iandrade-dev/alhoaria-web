@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type MutableRefObject, type PointerEvent a
 import type { Bus } from "./Cena";
 import {
   ADICIONAIS, AVISO, BEBIDAS, LANCHES_PRECO, ORDEM_BEBIDAS, ORDEM_PORCOES, ORDEM_SABORES_LATA, ORDEM_SABORES_SODA, POTINHOS,
-  ORDEM_SEPARADOS, PORCOES, SABORES_LATA, SABORES_SODA, SEPARADOS, brl, economiaDoTrio, linhasDoPedido, saborDaLataDoCombo, textoDoPedido,
+  ORDEM_SEPARADOS, PORCOES, SABORES_LATA, SABORES_SODA, SEPARADOS, brl, economiaDoTrio, precoDoTrio, linhasDoPedido, saborDaLataDoCombo, textoDoPedido,
   totalDoPedido, trioDe, type AdicionalId, type BebidaId, type Pedido, type PorcaoId, type SaborLata, type SaborSoda, type SeparadoId,
 } from "./cardapio";
 import type { EstadoSacola, FasePedido, ProjPedido } from "./Pedido3D";
@@ -302,7 +302,7 @@ export default function PedidoHud(props: Props) {
         {trio && <div data-testid="combo" className={`mt-2.5 rounded-xl border p-2.5 ${pedido.combo ? "border-[#e8b84a] bg-[#e8b84a]/12" : "border-[#ff9a4a]/50 bg-[#ff6a1a]/10"}`}>
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
             <p className="text-[13px] font-bold text-[#fff8e7]">{trio.nome}</p>
-            <p className="text-[12px] tabular-nums text-[#fff8e7]/80">de <s>{brl(trio.de)}</s> por <b className="text-[15px] text-[#ffcf8a]">{brl(trio.preco)}</b></p>
+            <p className="text-[12px] tabular-nums text-[#fff8e7]/80">{trio.acrescimo[pedido.lanche] ? <>com {LANCHES_PRECO[pedido.lanche].nome} · </> : <>de <s>{brl(trio.de)}</s> por </>}<b className="text-[15px] text-[#ffcf8a]">{brl(precoDoTrio(trio, pedido.lanche))}</b></p>
           </div>
           <p className="mt-0.5 text-[12px] leading-snug text-[#fff8e7]/75">{LANCHES_PRECO[pedido.lanche].nome} + {trio.batata} + refri lata. Você economiza <b className="text-[#ffcf8a]">{brl(economia)}</b> em relação aos itens soltos.</p>
           <div className="mt-2 flex gap-1.5">
@@ -311,7 +311,7 @@ export default function PedidoHud(props: Props) {
           </div>
           {pedido.combo && pedido.bebida?.id !== "lata" && <div className="mt-2.5">
             <p className="mb-1.5 text-[12px] font-semibold text-[#fff8e7]/85">{sabor ? "Lata do trio:" : "Qual o sabor da lata do trio?"}</p>
-            <ChipsSabor titulo="Sabor da lata do trio" ordem={ORDEM_SABORES_LATA} nomes={SABORES_LATA} atual={sabor} aoEscolher={saborLata} />
+            <ChipsSabor titulo="Sabor da lata do trio" ordem={trio.latas} nomes={SABORES_LATA} atual={sabor} aoEscolher={saborLata} />
           </div>}
         </div>}
         <div className="mt-2.5 flex flex-wrap gap-1.5">

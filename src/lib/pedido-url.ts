@@ -1,4 +1,4 @@
-import { ADICIONAIS, SEPARADOS, OPCOES, PORCOES, SABORES_LATA, SABORES_SODA, novoPedido, type GrupoOpcao, type Pedido, type PorcaoId, type SaborLata, type SaborSoda, type AdicionalId, type SeparadoId } from "../components/bancada-proto/cardapio";
+import { ADICIONAIS, SEPARADOS, OPCOES, PORCOES, SABORES_LATA, novoPedido, type GrupoOpcao, type Pedido, type PorcaoId, type SaborLata, type AdicionalId, type SeparadoId } from "../components/bancada-proto/cardapio";
 import type { LancheId } from "../components/bancada-proto/layout";
 
 /** Parâmetros públicos validados; valores desconhecidos mantêm o fluxo normal da bancada. */
@@ -9,9 +9,8 @@ export function pedidoDaURL(q: URLSearchParams, id: LancheId): Pedido {
     if (OPCOES[grupo].some((o) => o.id === v) || (grupo !== "pao" && v === "sem")) pedido.opcoes[grupo] = v;
   }
   const bebida = q.get("bebida"), sabor = q.get("sabor");
-  if (bebida === "chopp") pedido.bebida = { id: "chopp" };
+  // Chopp e soda saíram do cardápio (Anota AI, 21/11/2026): links antigos com eles abrem sem bebida.
   if (bebida === "lata" && sabor && Object.prototype.hasOwnProperty.call(SABORES_LATA, sabor)) pedido.bebida = { id: "lata", sabor: sabor as SaborLata };
-  if (bebida === "soda" && sabor && Object.prototype.hasOwnProperty.call(SABORES_SODA, sabor)) pedido.bebida = { id: "soda", sabor: sabor as SaborSoda };
   const porcao = q.get("porcao");
   if (porcao && Object.prototype.hasOwnProperty.call(PORCOES, porcao)) pedido.porcao = porcao as PorcaoId;
   for (const id of Object.keys(ADICIONAIS) as AdicionalId[]) {

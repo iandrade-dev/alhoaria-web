@@ -16,7 +16,7 @@ import { POSES, caixa, clonar, qBase, type Kit } from "./kit";
 import { c01, eIn2, eIO3, eIOs, eOut3, mola, seg, type Medidas, type Pose } from "./acoes";
 import { MESA, type Arranjo } from "./layout";
 import {
-  ORDEM_ADICIONAIS, ORDEM_BEBIDAS, ORDEM_PORCOES, ORDEM_SEPARADOS, POTINHOS, SABORES_LATA, SABORES_SODA, type AdicionalId, type Pedido,
+  ORDEM_ADICIONAIS, ORDEM_BEBIDAS, lataContaNoTrio, ORDEM_PORCOES, ORDEM_SEPARADOS, POTINHOS, SABORES_LATA, SABORES_SODA, type AdicionalId, type Pedido,
 } from "./cardapio";
 import { dose, potinho, potinhoSeparado, punhadoNaMao, type Altura } from "./adicionais3d";
 import type { ApiCamara } from "./Camara";
@@ -535,7 +535,7 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rod
     if (!p) return { b1: null, b2: null, p1: null, p2: null };
     const b = p.bebida;
     const corB = b?.id === "lata" ? SABORES_LATA[b.sabor].cor : b?.id === "soda" ? SABORES_SODA[b.sabor].cor : "";
-    const lataCombo = p.combo && b?.id !== "lata" && p.lataCombo ? { chave: "lata" as const, cor: SABORES_LATA[p.lataCombo].cor } : null;
+    const lataCombo = p.combo && !lataContaNoTrio(p) && p.lataCombo ? { chave: "lata" as const, cor: SABORES_LATA[p.lataCombo].cor } : null;
     return {
       b1: b ? { chave: b.id, cor: corB } : null,
       b2: lataCombo,

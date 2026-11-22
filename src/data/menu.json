@@ -37,10 +37,9 @@
     },
     {
       "id": "praia-de-fora",
-      "name": "Praia de Fora",
-      "address": "Em breve nova unidade!",
-      "is_coming_soon": true,
-      "teaser": "Em breve na Praia de Fora — o melhor pão de alho recheado mais perto de você."
+      "name": "Praia de Fora (Palhoça)",
+      "address": "R. Arcanjo Cândido da Silva, 3813 — Praia de Fora, Palhoça/SC",
+      "maps_url": "https://www.google.com/maps/search/?api=1&query=Rua%20Arcanjo%20C%C3%A2ndido%20da%20Silva%2C%203813%2C%20Praia%20de%20Fora%2C%20Palho%C3%A7a%20SC"
     }
   ],
   "items": [

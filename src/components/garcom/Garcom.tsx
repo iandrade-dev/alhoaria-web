@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { brl, nomeBebida, ORDEM_PORCOES, PORCOES, precoBebida, totalDoPedido, type Pedido as PedidoLanche } from "@/components/bancada-proto/cardapio";
+import { brl, nomeBebida, ORDEM_PORCOES, PORCOES, precoBebidaAvulsa, totalDoPedido, type Pedido as PedidoLanche } from "@/components/bancada-proto/cardapio";
 import { Editor, Quantidade, bebidas, normalizarBusca, padrao, valorBebida, type Edicao } from "@/components/pedido/CardapioRapido";
 import { nomeDoConteudo, usePainelModal } from "@/components/pedido/Sacola";
 import pedidoStyles from "@/components/pedido/pedido.module.css";
@@ -271,7 +271,7 @@ function Catalogo({ busca, setBusca, itens, aoAdicionar, aoPersonalizar }: { bus
       </div>;
     })}</div></>}
     {listaBebidas.length > 0 && <><h2 className={styles.secao}>Bebidas</h2><div className={styles.lista}>{listaBebidas.map((b) => <div className={styles.produto} key={valorBebida(b)}>
-      <div className={styles.produtoTexto}><h3>{nomeBebida(b)}<Selo n={naComanda((c) => c.tipo === "bebida" && valorBebida(c.bebida) === valorBebida(b))} /></h3><p>{brl(precoBebida(b))}</p></div>
+      <div className={styles.produtoTexto}><h3>{nomeBebida(b)}<Selo n={naComanda((c) => c.tipo === "bebida" && valorBebida(c.bebida) === valorBebida(b))} /></h3><p>{brl(precoBebidaAvulsa(b))}</p></div>
       <button type="button" className={styles.mais} onClick={() => aoAdicionar({ tipo: "bebida", bebida: b })} aria-label={`Adicionar ${nomeBebida(b)}`}>+</button>
     </div>)}</div></>}
     {porcoes.length > 0 && <><h2 className={styles.secao}>Porções</h2><div className={styles.lista}>{porcoes.map((id) => <div className={styles.produto} key={id}>

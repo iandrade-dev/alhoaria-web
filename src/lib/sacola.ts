@@ -1,4 +1,4 @@
-import { ADICIONAIS, SEPARADOS, OPCOES, ORDEM_GRUPOS, SABORES_LATA, SABORES_SODA, PORCOES, LANCHES_PRECO, linhasDoPedido, nomeBebida, precoBebida, brl, type Bebida, type Pedido, type PorcaoId, type Linha } from "../components/bancada-proto/cardapio";
+import { ADICIONAIS, SEPARADOS, OPCOES, ORDEM_GRUPOS, SABORES_LATA, SABORES_SODA, PORCOES, LANCHES_PRECO, linhasDoPedido, nomeBebida, precoBebida, precoBebidaAvulsa, brl, type Bebida, type Pedido, type PorcaoId, type Linha } from "../components/bancada-proto/cardapio";
 import { restaurante } from "../data/restaurante";
 
 export type ConteudoSacola = { tipo: "lanche"; pedido: Pedido } | { tipo: "bebida"; bebida: Bebida } | { tipo: "porcao"; porcao: PorcaoId };
@@ -68,7 +68,7 @@ export function lerSacola(raw: string | null): { itens: ItemSacola[]; aviso: str
 }
 export function linhasDoItem(item: ItemSacola): Linha[] {
   const c = item.conteudo;
-  const linhas: Linha[] = c.tipo === "lanche" ? linhasDoPedido(c.pedido) : c.tipo === "bebida" ? [{ texto: `1x ${nomeBebida(c.bebida)}`, valor: precoBebida(c.bebida), nivel: 0 }] : [{ texto: `1x ${PORCOES[c.porcao].nome} (a partir de)`, detalhe: PORCOES[c.porcao].molho, valor: PORCOES[c.porcao].preco, nivel: 0 }];
+  const linhas: Linha[] = c.tipo === "lanche" ? linhasDoPedido(c.pedido) : c.tipo === "bebida" ? [{ texto: `1x ${nomeBebida(c.bebida)}`, valor: precoBebidaAvulsa(c.bebida), nivel: 0 }] : [{ texto: `1x ${PORCOES[c.porcao].nome} (a partir de)`, detalhe: PORCOES[c.porcao].molho, valor: PORCOES[c.porcao].preco, nivel: 0 }];
   return linhas.map((l) => ({ ...l, texto: l.texto.startsWith("1x ") ? l.texto.replace(/^1x /, `${item.quantidade}x `) : item.quantidade > 1 ? `${l.texto} em cada unidade (valor total)` : l.texto, valor: l.valor * item.quantidade }));
 }
 export const totalDoItem = (item: ItemSacola) => linhasDoItem(item).reduce((s, l) => s + l.valor, 0);

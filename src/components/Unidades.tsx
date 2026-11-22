@@ -1,8 +1,10 @@
 import { restaurante } from "@/data/restaurante";
 
 export default function Unidades() {
-  const locations = restaurante.unidades.filter((unit) => !unit.is_coming_soon);
-  const comingSoon = restaurante.unidades.find((unit) => unit.is_coming_soon);
+  // "em breve" é opcional no menu.json: hoje as três unidades estão abertas.
+  const breve = (unit: (typeof restaurante.unidades)[number]) => "is_coming_soon" in unit && !!unit.is_coming_soon;
+  const locations = restaurante.unidades.filter((unit) => !breve(unit));
+  const comingSoon = restaurante.unidades.find(breve);
   return (
     <section id="unidades" className="scroll-mt-[var(--header-height)] bg-carvao px-5 py-16 text-osso sm:px-10 sm:py-24">
       <div className="mx-auto max-w-7xl">

@@ -109,13 +109,24 @@ export const ORDEM_SABORES_SODA = Object.keys(SABORES_SODA) as SaborSoda[];
 
 export const BEBIDAS: Record<BebidaId, { nome: string; curto: string; preco: number }> = {
   lata: { nome: "Refri lata", curto: "Refri lata", preco: 700 },
+  // Chopp e soda italiana saíram do cardápio do Anota AI (conferido em 21/11/2026). Ficam só para ler sacolas antigas.
   chopp: { nome: "Caneca de chopp Pilsen Lohn 500 ml", curto: "Chopp 500 ml", preco: 990 },
   soda: { nome: "Soda italiana", curto: "Soda italiana", preco: 1490 },
 };
-export const ORDEM_BEBIDAS: BebidaId[] = ["lata", "chopp", "soda"];
+/** Bebidas oferecidas junto do lanche (Anota AI, 21/11/2026): só a lata. */
+export const ORDEM_BEBIDAS: BebidaId[] = ["lata"];
 
+/** Preço da bebida pedida junto do lanche (lata R$ 7,00; Pureza R$ 6,00). */
 export function precoBebida(b: Bebida) {
   return b.id === "lata" ? SABORES_LATA[b.sabor].preco : BEBIDAS[b.id].preco;
+}
+
+/** Lata avulsa no Anota AI (categoria Refrigerantes, 21/11/2026): R$ 8,00 e só estes sabores. */
+export const PRECO_LATA_AVULSA = 800;
+export const SABORES_LATA_AVULSA: SaborLata[] = ["coca", "coca-zero", "pureza", "guarana"];
+/** Preço da bebida pedida sozinha, fora do lanche. */
+export function precoBebidaAvulsa(b: Bebida) {
+  return b.id === "lata" ? PRECO_LATA_AVULSA : precoBebida(b);
 }
 export function nomeBebida(b: Bebida) {
   if (b.id === "lata") return b.sabor === "pureza" ? "Pureza lata" : `Refri lata ${SABORES_LATA[b.sabor].nome}`;
@@ -132,18 +143,25 @@ export const PORCOES: Record<PorcaoId, { nome: string; curto: string; preco: num
 export const ORDEM_PORCOES: PorcaoId[] = ["batata", "dadinho"];
 
 // ---------------------------------------------------------------- Combos
-export type Trio = { id: "alhoaria" | "dogalho"; nome: string; preco: number; de: number; batata: string; lanches: LancheId[] };
+/**
+ * Trios do Anota AI (conferidos em 21/11/2026). No Trio Alhoaria a proteína soma ao preço do combo (A Costela + R$ 11,00,
+ * Pulled Pork + R$ 2,00, Brócolis & Queijo sem acréscimo) e a batata é a frita pequena. Cada trio tem os próprios sabores
+ * de lata. O "de" é o preço riscado que o Anota AI mostra para o combo base.
+ */
+export type Trio = { id: "alhoaria" | "dogalho"; nome: string; preco: number; de: number; batata: string; lanches: LancheId[]; acrescimo: Partial<Record<LancheId, number>>; latas: SaborLata[] };
 export const TRIOS: Trio[] = [
-  { id: "alhoaria", nome: "Trio Alhoaria Delícia Completa", preco: 5590, de: 6090, batata: "batata ondulada", lanches: ["costela", "pulled", "brocolis"] },
-  { id: "dogalho", nome: "Trio Dogalho!", preco: 3690, de: 5680, batata: "batata frita", lanches: ["dogalho"] },
+  { id: "alhoaria", nome: "Trio Alhoaria Delícia Completa", preco: 5590, de: 6090, batata: "batata frita pequena", lanches: ["costela", "pulled", "brocolis"], acrescimo: { costela: 1100, pulled: 200 }, latas: ["coca", "coca-zero", "pureza"] },
+  { id: "dogalho", nome: "Trio Dogalho!", preco: 3690, de: 5680, batata: "batata frita", lanches: ["dogalho"], acrescimo: {}, latas: ["coca", "coca-zero", "guarana"] },
 ];
 export const trioDe = (l: LancheId) => TRIOS.find((t) => t.lanches.includes(l)) ?? null;
+/** Preço do trio com este lanche: o combo mais o acréscimo da proteína. */
+export const precoDoTrio = (t: Trio, l: LancheId) => t.preco + (t.acrescimo[l] ?? 0);
 /** Quanto o trio economiza em relação aos itens soltos (lanche + batata rústica + lata). */
 export function economiaDoTrio(l: LancheId, sabor: SaborLata | null) {
   const t = trioDe(l);
   if (!t) return 0;
   const lata = sabor ? SABORES_LATA[sabor].preco : BEBIDAS.lata.preco;
-  return LANCHES_PRECO[l].preco + PORCOES.batata.preco + lata - t.preco;
+  return LANCHES_PRECO[l].preco + PORCOES.batata.preco + lata - precoDoTrio(t, l);
 }
 
 // ---------------------------------------------------------------- Pedido
@@ -164,8 +182,17 @@ export const novoPedido = (lanche: LancheId): Pedido => ({
   lanche, opcoes: lanche === "dogalho" ? null : opcoesVazias(), adicionais: {}, separados: {}, bebida: null, porcao: null, combo: false, lataCombo: null,
 });
 
+/** A lata escolhida como bebida conta como a lata do trio quando o sabor é um dos do trio; senão é cobrada à parte. */
+export function lataContaNoTrio(p: Pedido) {
+  const t = p.combo ? trioDe(p.lanche) : null;
+  return !!t && p.bebida?.id === "lata" && t.latas.includes(p.bebida.sabor);
+}
 /** Sabor da lata que entra no trio (null = ainda falta escolher). */
-export const saborDaLataDoCombo = (p: Pedido): SaborLata | null => (p.bebida?.id === "lata" ? p.bebida.sabor : p.lataCombo);
+export function saborDaLataDoCombo(p: Pedido): SaborLata | null {
+  if (lataContaNoTrio(p) && p.bebida?.id === "lata") return p.bebida.sabor;
+  const t = trioDe(p.lanche);
+  return p.lataCombo && (!t || t.latas.includes(p.lataCombo)) ? p.lataCombo : null;
+}
 
 /** `obs` = as escolhas do lanche, numa linha (sem preço). */
 export type Linha = { texto: string; valor: number; detalhe?: string; obs?: string; nivel: 0 | 1 };
@@ -181,7 +208,7 @@ export function linhasDoPedido(p: Pedido): Linha[] {
   if (trio) {
     const sabor = saborDaLataDoCombo(p);
     const lata = sabor ? (sabor === "pureza" ? "Pureza lata" : `${SABORES_LATA[sabor].nome} lata`) : "refri lata (falta o sabor)";
-    out.push({ texto: `1x ${trio.nome}`, valor: trio.preco, detalhe: `${lanche.nome} + ${trio.batata} + ${lata}`, obs, nivel: 0 });
+    out.push({ texto: `1x ${trio.nome}`, valor: precoDoTrio(trio, p.lanche), detalhe: `${lanche.nome} + ${trio.batata} + ${lata}`, obs, nivel: 0 });
   } else {
     out.push({ texto: `1x ${lanche.nome}`, valor: lanche.preco, obs, nivel: 0 });
   }
@@ -193,7 +220,7 @@ export function linhasDoPedido(p: Pedido): Linha[] {
     const s = SEPARADOS[id]; const n = qtd(p.separados[id], s.max);
     if (n) out.push({ texto: `+ ${s.nome} (separado)${n > 1 ? ` x${n}` : ""}`, valor: n * s.preco, nivel: 1 });
   }
-  if (p.bebida && !(trio && p.bebida.id === "lata")) out.push({ texto: `1x ${nomeBebida(p.bebida)}`, valor: precoBebida(p.bebida), nivel: 0 });
+  if (p.bebida && !lataContaNoTrio(p)) out.push({ texto: `1x ${nomeBebida(p.bebida)}`, valor: precoBebida(p.bebida), nivel: 0 });
   if (p.porcao) {
     const po = PORCOES[p.porcao];
     out.push({ texto: `1x ${po.nome} (a partir de)`, valor: po.preco, detalhe: po.molho, nivel: 0 });

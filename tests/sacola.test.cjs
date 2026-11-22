@@ -16,10 +16,11 @@ test('rejeita escolhas pendentes e preserva escolhas sem', () => {
 });
 test('composição completa, combo e multiplicador sobrevivem ao armazenamento', () => {
   const p = c.novoPedido('costela');
-  Object.assign(p, { opcoes: { pao: 'roseta', pasta: 'sem', creme: '4-queijos', queijo: 'colonial' }, adicionais: { bacon: 2 }, separados: { 'creme-cheddar': 1 }, bebida: { id: 'chopp' }, porcao: 'dadinho', combo: true, lataCombo: 'pureza' });
+  Object.assign(p, { opcoes: { pao: 'roseta', pasta: 'sem', creme: '4-queijos', queijo: 'colonial' }, adicionais: { bacon: 2 }, separados: { 'creme-cheddar': 1 }, bebida: { id: 'lata', sabor: 'fanta' }, porcao: 'dadinho', combo: true, lataCombo: 'pureza' });
   const x = item('a', p, 3), salvo = s.lerSacola(envelope([x]));
   assert.deepEqual(salvo.itens, [x]);
-  assert.equal(s.totalDoItem(x), (5590 + 1200 + 400 + 990 + 2990) * 3);
+  // Anota AI, 21/11/2026: trio com A Costela soma R$ 11,00; a Fanta não é lata do trio e é cobrada à parte (R$ 7,00).
+  assert.equal(s.totalDoItem(x), (5590 + 1100 + 1200 + 400 + 700 + 2990) * 3);
   assert.match(s.textoDaSacola([x]), /Total estimado: R\$/);
 });
 test('linhas separadas, edição imutável e remoção preservam identidade', () => {
@@ -43,7 +44,8 @@ test('rejeita dados inválidos, versões e chaves herdadas', () => {
 test('avulsos usam preços atuais e porção informa valor inicial', () => {
   const bebida = { id:'b', quantidade:2, conteudo:{tipo:'bebida', bebida:{id:'lata', sabor:'pureza'}} };
   const porcao = { id:'p', quantidade:1, conteudo:{tipo:'porcao', porcao:'batata'} };
-  assert.equal(s.totalDoItem(bebida), 1200); assert.equal(s.totalDoItem(porcao), 2490);
+  // Lata avulsa no Anota AI (21/11/2026): R$ 8,00, inclusive a Pureza.
+  assert.equal(s.totalDoItem(bebida), 1600); assert.equal(s.totalDoItem(porcao), 2490);
   assert.match(s.textoDaSacola([bebida,porcao]), /a partir de/);
 });
 test('combo exige sabor e não cobra novamente a lata incluída', () => {
@@ -53,4 +55,18 @@ test('combo exige sabor e não cobra novamente a lata incluída', () => {
   const conteudo = s.normalizarConteudo({tipo:'lanche', pedido:p});
   assert.equal(s.totalDoItem({ id:'combo', quantidade:2, conteudo }), 3690 * 2);
   assert.match(s.linhasDoItem({ id:'combo', quantidade:2, conteudo })[0].texto, /^2x /);
+});
+
+test('trio cobra a proteína e só aceita as latas do próprio trio (Anota AI, 21/11/2026)', () => {
+  const p = c.novoPedido('pulled');
+  Object.assign(p, { opcoes: { pao: 'parmesao', pasta: 'ervas', creme: 'cheddar', queijo: 'mucarela' }, combo: true, bebida: { id: 'lata', sabor: 'coca' } });
+  assert.equal(c.totalDoPedido(p), 5790);
+  p.bebida = { id: 'lata', sabor: 'guarana' };
+  assert.equal(c.saborDaLataDoCombo(p), null);
+  assert.equal(c.totalDoPedido(p), 5790 + 700);
+  p.lataCombo = 'pureza';
+  assert.equal(c.saborDaLataDoCombo(p), 'pureza');
+  const dog = c.novoPedido('dogalho'); dog.combo = true; dog.lataCombo = 'pureza';
+  assert.equal(c.saborDaLataDoCombo(dog), null);
+  assert.deepEqual(c.ORDEM_BEBIDAS, ['lata']);
 });
