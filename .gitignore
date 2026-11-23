@@ -1,6 +1,8 @@
 # dependencies
 /node_modules
-/packages/bancada-3d/dist/
+/public/assets/models/bancada/
+/public/assets/bancada/
+/public/draco/
 /.pnp
 .pnp.js
 .yarn/cache

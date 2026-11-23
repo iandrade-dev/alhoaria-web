@@ -2,17 +2,21 @@
   "name": "alhoaria-web",
   "version": "0.1.0",
   "private": true,
-  "workspaces": ["packages/bancada-3d"],
   "scripts": {
+    "bancada:assets": "bancada-3d-assets",
+    "predev": "npm run bancada:assets",
     "dev": "next dev",
+    "prebuild": "npm run bancada:assets",
     "build": "next build",
+    "prestart": "npm run bancada:assets",
     "start": "next start",
     "test:ar": "tsc src/components/ar/sessao.ts src/components/ar/sequencia.ts src/components/ar/recursos.ts src/lib/pedido-url.ts --outDir .ar-tests --module commonjs --target es2022 --skipLibCheck --esModuleInterop --moduleResolution node --resolveJsonModule && node --test tests/ar.test.cjs",
     "test:sacola": "tsc src/lib/sacola.ts --outDir .ar-tests/sacola --module commonjs --target es2022 --skipLibCheck --esModuleInterop --moduleResolution node --resolveJsonModule && node --test tests/sacola.test.cjs",
     "test:garcom": "tsc src/lib/garcom-pedido.ts src/lib/garcom-api.ts --outDir .ar-tests/garcom --module commonjs --target es2022 --skipLibCheck --esModuleInterop --moduleResolution node --resolveJsonModule && node --test tests/garcom.test.cjs"
   },
   "dependencies": {
-    "@cardapios/bancada-3d": "0.2.0",
+    "@cardapios/bancada-3d": "https://github.com/iandrade-dev/alhoaria-web/releases/download/bancada-3d-v0.3.0/cardapios-bancada-3d-0.3.0.tgz",
+    "@cardapios/bancada-assets": "https://github.com/iandrade-dev/alhoaria-web/releases/download/bancada-3d-v0.3.0/cardapios-bancada-assets-0.1.0.tgz",
     "@fontsource-variable/inter": "^5.3.0",
     "@fontsource/anton": "^5.3.0",
     "@fontsource/caveat-brush": "^5.3.0",

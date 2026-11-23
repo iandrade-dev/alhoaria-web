@@ -12,10 +12,11 @@ O modo simples não monta um canvas 3D. Falhas de WebGL ou de carregamento ofere
 Identidade, cores, domínio, unidades e destino do checkout ficam em `src/data/restaurante.ts`;
 o catálogo compartilhado em `src/data/catalogo.ts`. O checkout externo pode ser trocado por WhatsApp
 em `src/lib/checkout.ts`. No Anota AI, a pessoa precisa refazer o pedido: não há transferência automática.
-As bancadas da Alhoaria e da Strawberry importam ingredientes procedurais, movimentos,
-controles de órbita e a sessão WebXR de `@cardapios/bancada-3d`. Cada site fornece sua
-cena, os dados da receita e os modelos usados no pedido.
-O [código e a publicação do pacote](packages/bancada-3d/README.md) ficam neste repositório.
+As rotas importam `Bancada` de `@cardapios/bancada-3d/react` e fornecem as receitas,
+o cardápio e as ações da sacola. A renderização, as animações e os modelos vêm do
+[repositório compartilhado da bancada](https://github.com/iandrade-dev/bancada-3d).
+O desenvolvimento e o build materializam as versões instaladas dos modelos em `public/`.
+O GitHub Releases deste site distribui os pacotes da Alhoaria.
 
 A home começa com foto e conteúdo renderizado no servidor. O vídeo principal só carrega ao tocar
 em “Ver a história do lanche”. A faixa de montagem usa imagem em economia de dados/aparelhos modestos;

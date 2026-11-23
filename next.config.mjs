@@ -25,6 +25,7 @@ const plataforma = origemDaPlataforma();
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  transpilePackages: ["@cardapios/bancada-3d"],
   images: {
     unoptimized: true,
   },
