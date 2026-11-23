@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, type MutableRefObject } from "react";
+import { assentarPeca, curvaCubica } from "@cardapios/bancada-3d";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { ContactShadows, useGLTF, useProgress } from "@react-three/drei";
 import {
@@ -68,25 +69,7 @@ export type Props = {
   };
 };
 
-/**
- * Peça que volta para a estação: cai de um pouco acima (crescendo de 55% a 100% no ar), achata ao tocar e assenta
- * com uma mola curta, em vez de surgir do nada. `base` = altura da origem acima do fundo da peça (o fundo fica no
- * lugar enquanto ela achata). Devolve o deslocamento em y e a escala (lados, altura).
- */
 const VOLTA_S = 0.62;
-function assentar(k: number, red: boolean, base: number): [number, number, number] {
-  const x = c01(k);
-  if (red) { const e = Math.max(0.001, x); return [0, e, e]; }
-  const CAI = 0.42;
-  if (x < CAI) {
-    const f = x / CAI;
-    const e = 0.55 + 0.45 * eOut3(f);
-    return [0.05 * (1 - f * f), e, e];
-  }
-  const g = (x - CAI) / (1 - CAI);
-  const amassa = x >= 1 ? 0 : 0.13 * Math.exp(-4.2 * g) * Math.cos(2.4 * Math.PI * g);
-  return [-base * amassa, 1 + amassa * 0.5, 1 - amassa];
-}
 /** Altura da origem acima do fundo de cada peça (na pose de casa), medida uma vez. */
 const baseDaPeca = new WeakMap<Object3D, number>();
 function alturaBase(o: Object3D) {
@@ -102,11 +85,6 @@ function alturaBase(o: Object3D) {
   }
   return b;
 }
-
-const cubica = (out: Vector3, a: Vector3, b: Vector3, c: Vector3, d: Vector3, k: number) => {
-  const u = 1 - k;
-  return out.set(0, 0, 0).addScaledVector(a, u * u * u).addScaledVector(b, 3 * u * u * k).addScaledVector(c, 3 * u * k * k).addScaledVector(d, k * k * k);
-};
 
 // ---------------------------------------------------------------- cozinha
 /** O cenário: parado na origem, na camada 1 (a câmera vê; as sombras de contato não renderizam a cozinha). */
@@ -290,7 +268,7 @@ export function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPro
       const k = t / g.chega, e = eOut3(k);
       const c1 = pgTmp.b.lerpVectors(a.pS, sobre, 0.45); c1.y += 0.1;
       const c2 = pgTmp.c.copy(sobre); c2.y += 0.08;
-      cubica(outPos, a.pS, c1, c2, sobre, e);
+      curvaCubica(outPos, a.pS, c1, c2, sobre, e);
       outQ.slerpQuaternions(a.qS, a.qG, e);
     } else if (t < g.fecha) {
       // assenta na ferramenta (ou desce no pote) e fica parada um instante: aí fecha
@@ -301,7 +279,7 @@ export function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPro
       const k = seg(t, g.fecha, g.leva);
       const c1 = pgTmp.b.copy(a.pG); c1.y += g.ergue;
       const c2 = pgTmp.c.copy(a.pW); c2.y += 0.06;
-      cubica(outPos, a.pG, c1, c2, a.pW, eIO3(k));
+      curvaCubica(outPos, a.pG, c1, c2, a.pW, eIO3(k));
       outQ.slerpQuaternions(a.qG, a.qW, eIOs(seg(k, 0.06, 0.94)));
     }
   };
@@ -489,7 +467,7 @@ export function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPro
     });
 
     // ferramentas que voltam para a estação depois da ação
-    // (caem de leve na casa, achatam ao tocar e assentam: ver `assentar`)
+    // (caem de leve na casa, achatam ao tocar e assentam)
     (Object.keys(pops.current) as EstacaoId[]).forEach((id) => {
       const st = lista[id]; const f = st.ferramenta!;
       pops.current[id]! += dt;
@@ -497,7 +475,7 @@ export function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPro
       f.visible = true; f.quaternion.copy(st.casa.q);
       if (k >= 1) { f.position.copy(st.casa.p); f.scale.setScalar(1); delete pops.current[id]; return; }
       f.position.copy(st.casa.p); f.scale.setScalar(1);
-      const [dy, lados, altura] = assentar(k, red, alturaBase(f));
+      const [dy, lados, altura] = assentarPeca(k, red, alturaBase(f));
       f.position.y += dy; f.scale.set(lados, altura, lados);
     });
     voltas.current = voltas.current.filter((v) => {
@@ -506,7 +484,7 @@ export function Mundo({ def, ativo, reduzido, bus, api, aoFim, aoProjetar, aoPro
       v.obj.visible = true; v.obj.position.copy(v.p); v.obj.quaternion.copy(v.q);
       if (k >= 1) { v.obj.scale.setScalar(1); return false; }
       v.obj.scale.setScalar(1);
-      const [dy, lados, altura] = assentar(k, red, alturaBase(v.obj));
+      const [dy, lados, altura] = assentarPeca(k, red, alturaBase(v.obj));
       v.obj.position.y += dy; v.obj.scale.set(lados, altura, lados);
       return true;
     });

@@ -7,6 +7,7 @@
 // toca nela; a mão põe o lanche na boca, a bebida e a porção pulam para dentro uma a uma e a sacola dobra e fecha).
 // Tudo é declarativo: a cena compara o pedido com o que está na mesa e anima uma diferença por vez.
 import { useEffect, useMemo, useRef, type MutableRefObject } from "react";
+import { curvaCubica } from "@cardapios/bancada-3d";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import {
@@ -90,11 +91,6 @@ const SACOLA = { escala: 1.3, alto: 0.262 };
 
 const TL = { chega: 0.42, assenta: 0.54, fecha: 0.6, leva: 1.12, desce: 1.3, solta: 1.36, D: 1.7 };
 const TL_FORA = { chega: 0, assenta: 0, fecha: 0, leva: 0.78, desce: 0.95, solta: 1.0, D: 1.34 };
-
-const cubica = (out: Vector3, a: Vector3, b: Vector3, c: Vector3, d: Vector3, k: number) => {
-  const u = 1 - k;
-  return out.set(0, 0, 0).addScaledVector(a, u * u * u).addScaledVector(b, 3 * u * u * k).addScaledVector(c, 3 * u * k * k).addScaledVector(d, k * k * k);
-};
 
 /** Frente da sacola com o logo real: brilho do logo como máscara, impresso em marrom-escuro sobre o kraft. */
 function estampar(sacola: Object3D) {
@@ -380,7 +376,7 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rod
       const sobre = tmp.a.copy(a.pega); sobre.y += 0.05;
       if (t < tl.chega) {
         const c1 = tmp.b.lerpVectors(a.fora, sobre, 0.5); c1.y += 0.08;
-        cubica(out, a.fora, c1, sobre, sobre, eOut3(t / tl.chega));
+        curvaCubica(out, a.fora, c1, sobre, sobre, eOut3(t / tl.chega));
       } else out.lerpVectors(sobre, a.pega, eIOs(seg(t, tl.chega, tl.assenta)));
       return t > tl.fecha - 0.03 ? "mao_punhado" : "mao_aberta";
     }
@@ -388,7 +384,7 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rod
       const de = a.pega ?? a.fora;
       const c1 = tmp.b.copy(de); c1.y += a.pega ? 0.1 : 0.04;
       const c2 = tmp.c.copy(a.sobreSolta); c2.y += 0.06;
-      cubica(out, de, c1, c2, a.sobreSolta, a.pega ? eIO3(seg(t, tl.fecha, tl.leva)) : eOut3(seg(t, 0, tl.leva)));
+      curvaCubica(out, de, c1, c2, a.sobreSolta, a.pega ? eIO3(seg(t, tl.fecha, tl.leva)) : eOut3(seg(t, 0, tl.leva)));
       return "mao_punhado";
     }
     if (t < tl.solta) {

@@ -1,8 +1,9 @@
 {
   "name": "@cardapios/bancada-3d",
-  "version": "0.1.0",
-  "description": "Sessão WebXR, gestos de câmera e curvas de animação compartilhados pelas bancadas.",
+  "version": "0.2.0",
+  "description": "Ingredientes, movimentos, câmera e sessão WebXR compartilhados pelas bancadas.",
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/cjs/index.js",
   "types": "./dist/esm/index.d.ts",
   "exports": {
@@ -20,6 +21,7 @@
   "files": ["dist"],
   "scripts": {
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.json --module CommonJS --moduleResolution node --outDir dist/cjs && node -e \"require('node:fs').writeFileSync('dist/cjs/package.json', JSON.stringify({ type: 'commonjs' }) + '\\n')\"",
+    "test": "node --test test/*.test.mjs",
     "prepare": "npm run build"
   },
   "peerDependencies": {
