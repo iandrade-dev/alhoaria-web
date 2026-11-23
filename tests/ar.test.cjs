@@ -1,11 +1,37 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { Group, Mesh, Matrix4, Vector3, Quaternion } = require('three');
+const { atualizarOrbita, centralizarOrbita, criarOrbita, escutarGestosOrbita, orbitaFora } = require('@cardapios/bancada-3d');
 const { SessaoMesa } = require('../.ar-tests/components/ar/sessao.js');
 const { sequencia, estacao } = require('../.ar-tests/components/ar/sequencia.js');
 const { pedidoDaURL, urlDoPedido } = require('../.ar-tests/lib/pedido-url.js');
 const { LANCHES } = require('../.ar-tests/components/bancada-proto/layout.js');
 const { liberarMontagem } = require('../.ar-tests/components/ar/recursos.js');
+
+test('os controles de órbita respondem a teclado e pinça e são removidos ao desmontar', () => {
+  const canvas = Object.assign(new EventTarget(), {
+    clientWidth: 360, setPointerCapture() {}, setAttribute() {},
+  });
+  const orbita = criarOrbita({ azimute: 35, inclinacao: [-10, 20], zoom: [0.5, 2], ocioso: 7, volta: 0.5 });
+  const remover = escutarGestosOrbita(canvas, orbita, () => false);
+  const disparar = (tipo, dados) => canvas.dispatchEvent(Object.assign(new Event(tipo, { cancelable: true }), dados));
+
+  assert.equal(disparar('keydown', { key: 'ArrowRight' }), false);
+  assert.equal(orbitaFora(orbita), true);
+  atualizarOrbita(orbita, 0, 0.1, orbita.ultimo, { travada: false, reduzido: false }, false);
+  assert.ok(orbita.atual.az > 0);
+
+  const ponteiro = (pointerId, clientX) => ({ pointerId, clientX, clientY: 0, pointerType: 'touch' });
+  disparar('pointerdown', ponteiro(1, 0));
+  disparar('pointerdown', ponteiro(2, 80));
+  disparar('pointermove', ponteiro(2, 120));
+  assert.equal(orbita.alvo.zoom, 80 / 120);
+  remover();
+  assert.equal(orbita.ponteiros.size, 0);
+  centralizarOrbita(orbita, true);
+  assert.equal(disparar('keydown', { key: 'ArrowRight' }), true);
+  assert.equal(orbitaFora(orbita), false);
+});
 
 function ambiente(pedido) {
   const eventos = new EventTarget();
@@ -24,7 +50,7 @@ function ambiente(pedido) {
   const renderer = { xr: { setReferenceSpaceType() {}, setFoveation() {}, setSession: async () => {}, getReferenceSpace: () => referencia, getCamera: () => camera } };
   const origem = new Group(), reticulo = new Mesh(), estados = [];
   let tempo = 0;
-  const controle = new SessaoMesa(renderer, {}, origem, reticulo, (e) => estados.push(e), () => tempo);
+  const controle = new SessaoMesa(renderer, {}, origem, reticulo, (e) => estados.push(e), () => tempo, { ocultarAoIniciar: true });
   const quadro = (matriz, rastreando = true) => ({
     getViewerPose: () => rastreando ? { transform: { matrix: camera.matrixWorld.elements } } : null,
     getHitTestResults: () => (Array.isArray(matriz) ? matriz : matriz ? [matriz] : []).map((m) => ({ getPose: () => m ? { transform: { matrix: m.elements } } : null })),
@@ -147,6 +173,7 @@ test('voltar à bancada enquanto aguarda a câmera libera a tela e encerra a ses
   let resolver, encerramentos = 0;
   const a = ambiente(() => new Promise((r) => { resolver = r; }));
   const inicio = a.controle.iniciar();
+  assert.equal(a.origem.visible, false);
   await a.controle.sair();
   assert.equal(a.estados.at(-1).fase, '3d');
   assert.equal(a.origem.visible, true);

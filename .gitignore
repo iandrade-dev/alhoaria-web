@@ -1,5 +1,6 @@
 # dependencies
 /node_modules
+/packages/bancada-3d/dist/
 /.pnp
 .pnp.js
 .yarn/cache

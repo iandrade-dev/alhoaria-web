@@ -1,0 +1,37 @@
+{
+  "name": "@cardapios/bancada-3d",
+  "version": "0.1.0",
+  "description": "Sessão WebXR, gestos de câmera e curvas de animação compartilhados pelas bancadas.",
+  "type": "module",
+  "main": "./dist/cjs/index.js",
+  "types": "./dist/esm/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.ts",
+        "default": "./dist/cjs/index.js"
+      }
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.json --module CommonJS --moduleResolution node --outDir dist/cjs && node -e \"require('node:fs').writeFileSync('dist/cjs/package.json', JSON.stringify({ type: 'commonjs' }) + '\\n')\"",
+    "prepare": "npm run build"
+  },
+  "peerDependencies": {
+    "three": ">=0.183.2 <0.188.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.187.0",
+    "typescript": "^5.7.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/iandrade-dev/alhoaria-web.git",
+    "directory": "packages/bancada-3d"
+  }
+}

@@ -81,7 +81,10 @@ export default function MesaXR({ modo, children }: { modo: ModoMesa; children: R
   });
   useEffect(() => {
     if (!origem.current || !reticulo.current || !modo.overlay.current) return;
-    const controle = new SessaoMesa(gl, modo.overlay.current, origem.current, reticulo.current, (e) => estado.current.aoEstado(e));
+    const controle = new SessaoMesa(
+      gl, modo.overlay.current, origem.current, reticulo.current,
+      (e) => estado.current.aoEstado(e), undefined, { ocultarAoIniciar: true },
+    );
     modo.sessao.current = controle;
     estado.current.aoDisponivel();
     return () => { modo.sessao.current = null; controle.destruir(); };
