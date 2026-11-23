@@ -208,11 +208,17 @@ export default function Pedido3D({ K, H, M, arranjo, fase, pedido, reduzido, rod
       const it: Item = { chave, obj, alto: caixa(obj).max.y, cor: "" };
       return it;
     };
-    const pratBeb = { bandeja: bandeja(0.5), itens: ORDEM_BEBIDAS.map((c) => novoItem(c)) };
+    const pratBeb = {
+      bandeja: bandeja(0.5),
+      itens: ORDEM_BEBIDAS.map((id) => {
+        const item = novoItem(id);
+        if (id === "lata") tingir(item, SABORES_LATA.coca.cor);
+        if (id === "soda") tingir(item, SABORES_SODA["frutas-vermelhas"].cor);
+        return item;
+      }),
+    };
     const pratPor = { bandeja: bandeja(0.44), itens: ORDEM_PORCOES.map((c) => novoItem(c)) };
     [...pratBeb.itens, ...pratPor.itens].forEach((it) => { it.obj.visible = false; raiz.add(it.obj); });
-    tingir(pratBeb.itens[0], SABORES_LATA.coca.cor);
-    tingir(pratBeb.itens[2], SABORES_SODA["frutas-vermelhas"].cor);
 
     // sacola
     const sacola = clonar(A.sacola);
