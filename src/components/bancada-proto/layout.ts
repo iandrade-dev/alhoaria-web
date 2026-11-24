@@ -91,7 +91,7 @@ const COSTELA: LancheDef = {
     { id: "macarico", tipo: "macarico", icone: "macarico", nome: "Maçarico", dica: "Arraste o maçarico até o lanche", feito: "Gratinado no maçarico" },
   ],
   estacoes: LUGARES_PAO("costela"),
-  arquivos: ["tabua", "pao", "pasta", "costela", "creme", "mussarela", "gratinado", "macarico-mao", "mao-luva", "bisnaga", "pote-creme"],
+  arquivos: ["tabua", "pao", "pasta", "costela", "creme", "mussarela", "gratinado", "macarico-mao", "bisnaga", "pote-creme"],
 };
 
 /** Pulled Pork! e Brócolis & Queijo!: a mesma sequência da Costela; o nome do recheio vem da receita. */
@@ -111,7 +111,7 @@ function lancheDePao(id: "pulled" | "brocolis", fim: string, punhado: string, fe
       { id: "macarico", tipo: "macarico", icone: "macarico", nome: "Maçarico", dica: "Arraste o maçarico até o lanche", feito: "Gratinado no maçarico" },
     ],
     estacoes: LUGARES_PAO(recheio),
-    arquivos: ["tabua", "pao", "pasta", recheio, "creme", "mussarela", "gratinado", "macarico-mao", "mao-luva", "bisnaga", "pote-creme"],
+    arquivos: ["tabua", "pao", "pasta", recheio, "creme", "mussarela", "gratinado", "macarico-mao", "bisnaga", "pote-creme"],
   };
 }
 
@@ -150,7 +150,7 @@ const DOGALHO: LancheDef = {
       "dog-palha": [0.23, -0.27],
     },
   },
-  arquivos: ["tabua", "dog-cesta", "dog-brioche", "dog-pasta", "dog-salsichas", "dog-molhos", "dog-fondue", "dog-mussarela", "dog-palha", "mao-luva", "bisnaga", "pote-creme"],
+  arquivos: ["tabua", "dog-cesta", "dog-brioche", "dog-pasta", "dog-salsichas", "dog-molhos", "dog-fondue", "dog-mussarela", "dog-palha", "bisnaga", "pote-creme"],
 };
 
 export const LANCHES: Record<LancheId, LancheDef> = {
