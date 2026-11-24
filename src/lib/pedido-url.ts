@@ -1,31 +1,5 @@
-import { ADICIONAIS, SEPARADOS, OPCOES, PORCOES, SABORES_LATA, novoPedido, type GrupoOpcao, type Pedido, type PorcaoId, type SaborLata, type AdicionalId, type SeparadoId } from "../components/bancada-proto/cardapio";
-import type { LancheId } from "../components/bancada-proto/layout";
+import type { Pedido } from "../components/bancada-proto/cardapio";
 
-/** Parâmetros públicos validados; valores desconhecidos mantêm o fluxo normal da bancada. */
-export function pedidoDaURL(q: URLSearchParams, id: LancheId): Pedido {
-  const pedido = novoPedido(id);
-  if (pedido.opcoes) for (const grupo of Object.keys(OPCOES) as GrupoOpcao[]) {
-    const v = q.get(grupo);
-    if (OPCOES[grupo].some((o) => o.id === v) || (grupo !== "pao" && v === "sem")) pedido.opcoes[grupo] = v;
-  }
-  const bebida = q.get("bebida"), sabor = q.get("sabor");
-  // Chopp e soda saíram do cardápio (Anota AI, 21/11/2026): links antigos com eles abrem sem bebida.
-  if (bebida === "lata" && sabor && Object.prototype.hasOwnProperty.call(SABORES_LATA, sabor)) pedido.bebida = { id: "lata", sabor: sabor as SaborLata };
-  const porcao = q.get("porcao");
-  if (porcao && Object.prototype.hasOwnProperty.call(PORCOES, porcao)) pedido.porcao = porcao as PorcaoId;
-  for (const id of Object.keys(ADICIONAIS) as AdicionalId[]) {
-    const n = Number(q.get(`adicional.${id}`));
-    if (Number.isInteger(n) && n > 0 && n <= ADICIONAIS[id].max) pedido.adicionais[id] = n;
-  }
-  for (const id of Object.keys(SEPARADOS) as SeparadoId[]) {
-    const n = Number(q.get(`separado.${id}`));
-    if (Number.isInteger(n) && n > 0 && n <= SEPARADOS[id].max) pedido.separados[id] = n;
-  }
-  pedido.combo = q.get("combo") === "1";
-  const lataCombo = q.get("lataCombo");
-  if (lataCombo && Object.prototype.hasOwnProperty.call(SABORES_LATA, lataCombo)) pedido.lataCombo = lataCombo as SaborLata;
-  return pedido;
-}
 export function urlDoPedido(pedido: Pedido, caminho = "/bancada") {
   const q = new URLSearchParams({ lanche: pedido.lanche });
   if (pedido.opcoes) for (const [g, v] of Object.entries(pedido.opcoes)) if (v) q.set(g, v);

@@ -1,10 +1,20 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const s = require('../.ar-tests/sacola/lib/sacola.js');
-const c = require('../.ar-tests/sacola/components/bancada-proto/cardapio.js');
-const { restaurante } = require('../.ar-tests/sacola/data/restaurante.js');
+const sacola = require('../.ar-tests/sacola/lib/sacola.js');
+const { criarCardapio } = require('../.ar-tests/sacola/components/bancada-proto/cardapio.js');
+const { publicacao } = require('./catalogo-fixture.cjs');
+const c = criarCardapio(publicacao);
+const s = {
+  ...sacola,
+  normalizarConteudo: (valor) => sacola.normalizarConteudo(valor, c),
+  lerSacola: (raw) => sacola.lerSacola(raw, c),
+  totalDoItem: (item) => sacola.totalDoItem(item, c),
+  linhasDoItem: (item) => sacola.linhasDoItem(item, c),
+  textoDaSacola: (itens) => sacola.textoDaSacola(itens, c),
+  atualizarItem: (itens, id, conteudo) => sacola.atualizarItem(itens, id, conteudo, undefined, c),
+};
 const item = (id, pedido, quantidade = 1) => ({ id, quantidade, conteudo: { tipo: 'lanche', pedido } });
-const envelope = itens => JSON.stringify({ versao: s.VERSAO_SACOLA, versaoCatalogo: restaurante.versaoCatalogo, itens });
+const envelope = itens => JSON.stringify({ versao: s.VERSAO_SACOLA, versaoCatalogo: '2026-11-21', itens });
 
 test('rejeita escolhas pendentes e preserva escolhas sem', () => {
   const p = c.novoPedido('costela'); p.opcoes.pasta = 'sem';
@@ -35,7 +45,7 @@ test('linhas separadas, edição imutável e remoção preservam identidade', ()
   assert.equal(s.atualizarItem(items, 'ausente', { tipo: 'lanche', pedido: novo }), null);
 });
 test('rejeita dados inválidos, versões e chaves herdadas', () => {
-  for (const raw of ['{', JSON.stringify({versao: 99, versaoCatalogo: restaurante.versaoCatalogo, itens: []}), envelope([{ id: 'x', quantidade: 1, conteudo: { tipo: 'porcao', porcao: '__proto__' } }]), envelope([item('x', c.novoPedido('dogalho'), 0)]), envelope([item('x', c.novoPedido('dogalho'), 100)])]) assert.ok(s.lerSacola(raw).aviso);
+  for (const raw of ['{', JSON.stringify({versao: 99, versaoCatalogo: '2026-11-21', itens: []}), envelope([{ id: 'x', quantidade: 1, conteudo: { tipo: 'porcao', porcao: '__proto__' } }]), envelope([item('x', c.novoPedido('dogalho'), 0)]), envelope([item('x', c.novoPedido('dogalho'), 100)])]) assert.ok(s.lerSacola(raw).aviso);
   const p = c.novoPedido('dogalho'); p.adicionais.bacon = NaN;
   assert.equal(s.normalizarConteudo({tipo:'lanche', pedido:p}), null);
   p.adicionais.bacon = 13; assert.equal(s.normalizarConteudo({tipo:'lanche', pedido:p}), null);
@@ -69,4 +79,21 @@ test('trio cobra a proteína e só aceita as latas do próprio trio (Anota AI, 2
   const dog = c.novoPedido('dogalho'); dog.combo = true; dog.lataCombo = 'pureza';
   assert.equal(c.saborDaLataDoCombo(dog), null);
   assert.deepEqual(c.ORDEM_BEBIDAS, ['lata']);
+});
+
+test('uma publicação nova atualiza os preços de itens já salvos e preserva as outras linhas', () => {
+  const nova = structuredClone(publicacao);
+  nova.publicationId = 'fixture-v2';
+  nova.products.find(p => p.reference === 'costela').priceCents = 4790;
+  nova.products.find(p => p.reference === 'bebida-lata').variants.find(v => v.reference === 'pureza').priceCents = 650;
+  nova.products.find(p => p.reference === 'dadinho').available = false;
+  const vigente = criarCardapio(nova);
+  const p = c.pedidoPadrao('costela');
+  p.bebida = { id: 'lata', sabor: 'pureza' };
+  const raw = JSON.stringify({ versao: sacola.VERSAO_SACOLA, empresa: c.companyId, publicacao: c.publicationId,
+    itens: [item('a', p), { id: 'b', quantidade: 1, conteudo: { tipo: 'porcao', porcao: 'dadinho' } }] });
+  const resultado = sacola.lerSacola(raw, vigente);
+  assert.deepEqual(resultado.itens.map(i => i.id), ['a']);
+  assert.ok(resultado.aviso);
+  assert.equal(sacola.totalDoItem(resultado.itens[0], vigente), 5440);
 });

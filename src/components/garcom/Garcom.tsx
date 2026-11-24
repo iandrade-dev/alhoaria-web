@@ -1,15 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { brl, nomeBebida, ORDEM_PORCOES, PORCOES, precoBebidaAvulsa, totalDoPedido, type Pedido as PedidoLanche } from "@/components/bancada-proto/cardapio";
-import { Editor, Quantidade, bebidas, normalizarBusca, padrao, valorBebida, type Edicao } from "@/components/pedido/CardapioRapido";
+import { useCatalogo } from "@/components/CatalogoProvider";
+import { brl, type CardapioAlhoaria } from "@/components/bancada-proto/cardapio";
+import { Editor, Quantidade, normalizarBusca, valorBebida, type Edicao } from "@/components/pedido/CardapioRapido";
 import { nomeDoConteudo, usePainelModal } from "@/components/pedido/Sacola";
 import pedidoStyles from "@/components/pedido/pedido.module.css";
-import { CATALOGO } from "@/data/catalogo";
 import { restaurante } from "@/data/restaurante";
 import { criarClienteGarcom, ErroGarcom, podeEnviar, type LocalDeTrabalho, type Pedido, type Usuario } from "@/lib/garcom-api";
 import {
-  assinaturaDoEnvio, chaveDoEnvio, itensDaLinha, lerRascunho, MAX_MESA, MAX_OBSERVACAO, MAX_QUANTIDADE_ITEM, montarPedido, novaChave, pedidosDeHoje, rascunhoVazio, STATUS, totalDaComanda,
+  assinaturaDoRascunho, itensDaLinha, lerRascunho, MAX_MESA, MAX_OBSERVACAO, MAX_QUANTIDADE_ITEM, novaChave, pedidosDeHoje, prepararEnvio, rascunhoVazio, STATUS, tentativaDoRascunho, totalDaComanda, totalDosItens,
   type Rascunho,
 } from "@/lib/garcom-pedido";
 import { atualizarItem, normalizarConteudo, removerItem, type ConteudoSacola, type ItemSacola } from "@/lib/sacola";
@@ -29,6 +29,8 @@ const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um :
 type Fase = "verificando" | "login" | "locais" | "pronto";
 
 export default function Garcom() {
+  const cardapio = useCatalogo();
+  const empresaPublicada = cardapio?.companyId;
   const [fase, setFase] = useState<Fase>("verificando");
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [locais, setLocais] = useState<LocalDeTrabalho[]>([]);
@@ -38,8 +40,14 @@ export default function Garcom() {
   const sessaoExpirou = useCallback(() => { setUsuario(null); setFase("login"); setAviso("Sua sessão terminou. Entre novamente; a comanda em andamento continua guardada."); }, []);
 
   const carregarLocais = useCallback(async (signal?: AbortSignal) => {
+    if (!empresaPublicada) {
+      setLocais([]);
+      setAviso("O cardápio publicado está indisponível. Atualize a página para tentar novamente.");
+      setFase("locais");
+      return;
+    }
     try {
-      const lista = await cliente.locais(signal);
+      const lista = (await cliente.locais(signal)).filter((local) => local.companyId === empresaPublicada);
       setLocais(lista);
       const salvo = ler(CHAVE_LOCAL);
       const escolhido = lista.find((l) => l.companyId === salvo) ?? (lista.length === 1 ? lista[0] : null);
@@ -49,7 +57,7 @@ export default function Garcom() {
       if (e instanceof ErroGarcom && e.tipo === "sessao") return sessaoExpirou();
       setAviso(e instanceof ErroGarcom ? e.message : "Não foi possível carregar suas lojas."); setFase("locais");
     }
-  }, [sessaoExpirou]);
+  }, [empresaPublicada, sessaoExpirou]);
 
   useEffect(() => {
     const controle = new AbortController();
@@ -72,8 +80,8 @@ export default function Garcom() {
   if (fase === "verificando") return <div className={styles.entrada} aria-busy="true"><p className={styles.entradaSub}>Abrindo o modo garçom…</p></div>;
   if (fase === "login") return <Login aviso={aviso} aoEntrar={(u) => { setUsuario(u); setAviso(""); void carregarLocais(); }} />;
   const local = locais.find((l) => l.companyId === companyId);
-  if (fase === "locais" || !local) return <EscolhaLocal locais={locais} aviso={aviso} aoEscolher={escolherLocal} aoSair={sair} aoTentar={() => { setAviso(""); void carregarLocais(); }} />;
-  return <Mesa key={local.companyId} usuario={usuario} local={local} trocarLocal={locais.length > 1 ? () => setFase("locais") : undefined} aoSair={sair} sessaoExpirou={sessaoExpirou} />;
+  if (fase === "locais" || !local || !cardapio || !usuario) return <EscolhaLocal locais={locais} aviso={aviso} aoEscolher={escolherLocal} aoSair={sair} aoTentar={() => { if (!cardapio) window.location.reload(); else { setAviso(""); void carregarLocais(); } }} />;
+  return <Mesa key={`${local.companyId}:${usuario.id}`} cardapio={cardapio} usuario={usuario} local={local} trocarLocal={locais.length > 1 ? () => setFase("locais") : undefined} aoSair={sair} sessaoExpirou={sessaoExpirou} />;
 }
 
 function Entrada({ children }: { children: React.ReactNode }) {
@@ -109,7 +117,7 @@ function Login({ aviso, aoEntrar }: { aviso: string; aoEntrar: (u: Usuario) => v
 
 function EscolhaLocal({ locais, aviso, aoEscolher, aoSair, aoTentar }: { locais: LocalDeTrabalho[]; aviso: string; aoEscolher: (id: string) => void; aoSair: () => void; aoTentar: () => void }) {
   return <Entrada>
-    <p className={styles.entradaSub}>{locais.length ? "Onde você está trabalhando agora?" : "Sua conta ainda não está ligada a nenhuma loja."}</p>
+    {(locais.length > 0 || !aviso) && <p className={styles.entradaSub}>{locais.length ? "Onde você está trabalhando agora?" : "Sua conta ainda não está ligada a esta loja."}</p>}
     {aviso && <p className={styles.erroEntrada} role="alert">{aviso} <button type="button" className={styles.topoTexto} onClick={aoTentar} style={{ textDecoration: "underline" }}>Tentar de novo</button></p>}
     {locais.map((l) => <button type="button" key={l.companyId} className={styles.local} onClick={() => aoEscolher(l.companyId)}><div><strong>{l.companyName}</strong><span style={{ display: "block" }}>{PAPEIS[l.role] ?? l.role}</span></div><span aria-hidden="true">→</span></button>)}
     <button type="button" className={styles.linkClaro} onClick={aoSair}>Sair</button>
@@ -118,8 +126,9 @@ function EscolhaLocal({ locais, aviso, aoEscolher, aoSair, aoTentar }: { locais:
 
 type Aba = "novo" | "pedidos";
 
-function Mesa({ usuario, local, trocarLocal, aoSair, sessaoExpirou }: { usuario: Usuario | null; local: LocalDeTrabalho; trocarLocal?: () => void; aoSair: () => void; sessaoExpirou: () => void }) {
+function Mesa({ cardapio, usuario, local, trocarLocal, aoSair, sessaoExpirou }: { cardapio: CardapioAlhoaria; usuario: Usuario; local: LocalDeTrabalho; trocarLocal?: () => void; aoSair: () => void; sessaoExpirou: () => void }) {
   const pode = podeEnviar(local.role);
+  const chaveRascunho = `${CHAVE_RASCUNHO}:${local.companyId}:${usuario.id}`;
   const [aba, setAba] = useState<Aba>(pode ? "novo" : "pedidos");
   const [rascunho, setRascunho] = useState<Rascunho>(rascunhoVazio);
   const [carregado, setCarregado] = useState(false);
@@ -135,11 +144,18 @@ function Mesa({ usuario, local, trocarLocal, aoSair, sessaoExpirou }: { usuario:
   const [busca, setBusca] = useState("");
   const mesaRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { setRascunho(lerRascunho(ler(CHAVE_RASCUNHO))); setCarregado(true); }, []);
-  useEffect(() => { if (carregado) gravar(CHAVE_RASCUNHO, rascunho.itens.length || rascunho.mesa || rascunho.observacao ? JSON.stringify(rascunho) : null); }, [rascunho, carregado]);
+  useEffect(() => { setRascunho(lerRascunho(ler(chaveRascunho), cardapio)); setCarregado(true); }, [chaveRascunho, cardapio]);
+  useEffect(() => { if (carregado) gravar(chaveRascunho, rascunho.itens.length || rascunho.mesa || rascunho.observacao ? JSON.stringify(rascunho) : null); }, [rascunho, carregado, chaveRascunho]);
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(""), 1800); return () => clearTimeout(t); }, [toast]);
 
-  const atualizar = (f: (r: Rascunho) => Rascunho) => { setRascunho(f); setErroLocal(""); setErroEnvio(null); };
+  const atualizar = (f: (r: Rascunho) => Rascunho) => {
+    setRascunho((antes) => {
+      const atual = f(antes);
+      return antes.revisar && assinaturaDoRascunho(antes) !== assinaturaDoRascunho(atual)
+        ? { ...atual, pendente: null, revisar: false } : atual;
+    });
+    setErroLocal(""); setErroEnvio(null);
+  };
 
   const carregarPedidos = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -162,47 +178,47 @@ function Mesa({ usuario, local, trocarLocal, aoSair, sessaoExpirou }: { usuario:
   }, [carregarPedidos]);
 
   function adicionar(conteudo: ConteudoSacola, quantidade = 1) {
-    const c = normalizarConteudo(conteudo);
-    if (!c) return false;
+    const c = normalizarConteudo(conteudo, cardapio);
+    if (!c || !Number.isInteger(quantidade) || quantidade < 1 || quantidade > MAX_QUANTIDADE_ITEM) return false;
     atualizar((r) => {
       const igual = r.itens.find((i) => mesmoConteudo(i.conteudo, c) && i.quantidade + quantidade <= MAX_QUANTIDADE_ITEM);
       const itens = igual ? r.itens.map((i) => i === igual ? { ...i, quantidade: i.quantidade + quantidade } : i) : [...r.itens, { id: novaChave(), quantidade, conteudo: c }];
       return { ...r, itens };
     });
-    setToast(`${nomeDoConteudo(c)} +${quantidade}`); setConfirmado(null);
+    setToast(`${nomeDoConteudo(c, cardapio)} +${quantidade}`); setConfirmado(null);
     return true;
   }
   function salvarEdicao(conteudo: ConteudoSacola, quantidade: number) {
-    if (!edicao) return false;
+    if (!edicao || !Number.isInteger(quantidade) || quantidade < 1 || quantidade > MAX_QUANTIDADE_ITEM) return false;
     if (!edicao.id) { const ok = adicionar(conteudo, quantidade); if (ok) setEdicao(null); return ok; }
-    const itens = atualizarItem(rascunho.itens, edicao.id, conteudo, quantidade);
+    const itens = atualizarItem(rascunho.itens, edicao.id, conteudo, quantidade, cardapio);
     if (!itens) return false;
     atualizar((r) => ({ ...r, itens })); setEdicao(null); return true;
   }
 
   async function enviar() {
-    const montado = montarPedido(rascunho.mesa, rascunho.observacao, rascunho.itens);
-    if (!montado.ok) { setErroLocal(montado.erro); if (!rascunho.mesa.trim()) mesaRef.current?.focus(); setComandaAberta(true); return; }
-    const pendente = chaveDoEnvio(rascunho.pendente, assinaturaDoEnvio(local.companyId, montado.pedido), novaChave);
+    const envio = prepararEnvio(rascunho, cardapio);
+    if (!envio.ok) { setErroLocal(envio.erro); if (!rascunho.mesa.trim()) mesaRef.current?.focus(); setComandaAberta(true); return; }
+    const { pendente } = envio;
     // Grava a chave antes de enviar: se a aba fechar no meio, o reenvio não duplica o pedido.
-    setRascunho((r) => ({ ...r, pendente })); gravar(CHAVE_RASCUNHO, JSON.stringify({ ...rascunho, pendente }));
+    setRascunho((r) => ({ ...r, pendente })); gravar(chaveRascunho, JSON.stringify({ ...rascunho, pendente }));
     setEnviando(true); setErroEnvio(null);
     try {
-      const pedido = await cliente.enviar(local.companyId, montado.pedido, pendente.chave);
+      const pedido = await cliente.enviar(local.companyId, envio.pedido, pendente.chave);
       setConfirmado(pedido); setRascunho(rascunhoVazio());
       setPedidos((lista) => [pedido, ...lista.filter((p) => p.id !== pedido.id)]);
     } catch (e) {
       const erro = e instanceof ErroGarcom ? e : new ErroGarcom("indisponivel", "Não foi possível enviar. O pedido continua aqui; tente de novo.");
       if (erro.tipo === "sessao") { sessaoExpirou(); return; }
-      if (erro.codigo === "idempotency_key_reused") setRascunho((r) => ({ ...r, pendente: null }));
+      if (erro.codigo === "idempotency_key_reused") setRascunho((r) => ({ ...r, revisar: true }));
       setErroEnvio(erro);
     } finally { setEnviando(false); }
   }
 
   const qtd = rascunho.itens.reduce((n, i) => n + i.quantidade, 0);
-  const total = totalDaComanda(rascunho.itens);
+  const total = totalDaComanda(rascunho.itens, cardapio);
   const abertos = pedidos.filter((p) => STATUS[p.status]?.aberto).length;
-  const nome = usuario?.displayName || usuario?.email || "";
+  const nome = usuario.displayName || usuario.email;
 
   return <div className={styles.app}>
     <header className={styles.topo}>
@@ -227,7 +243,8 @@ function Mesa({ usuario, local, trocarLocal, aoSair, sessaoExpirou }: { usuario:
         <input id="mesa" ref={mesaRef} className={`${styles.mesaInput} ${erroLocal && !rascunho.mesa.trim() ? styles.mesaVazia : ""}`} inputMode="numeric" autoComplete="off" enterKeyHint="done" maxLength={MAX_MESA} placeholder="nº" value={rascunho.mesa} onChange={(e) => { const mesa = e.target.value; atualizar((r) => ({ ...r, mesa })); }} />
       </div>
       {confirmado && <p className={styles.info} role="status">Pedido nº {confirmado.number} da mesa {confirmado.table} foi para a cozinha. <button type="button" className={pedidoStyles.textButton} onClick={() => setAba("pedidos")}>Acompanhar</button></p>}
-      <Catalogo busca={busca} setBusca={setBusca} itens={rascunho.itens} aoAdicionar={adicionar} aoPersonalizar={(conteudo) => setEdicao({ quantidade: 1, conteudo })} />
+      {rascunho.revisar && <p className={styles.alerta} role="alert">Confira os pedidos de hoje e revise a comanda antes de enviar novamente.</p>}
+      <Catalogo cardapio={cardapio} busca={busca} setBusca={setBusca} itens={rascunho.itens} aoAdicionar={adicionar} aoPersonalizar={(conteudo) => setEdicao({ quantidade: 1, conteudo })} />
     </main>}
 
     {aba === "pedidos" && <main className={styles.corpo} role="tabpanel" id="painel-pedidos" aria-labelledby="aba-pedidos">
@@ -241,53 +258,71 @@ function Mesa({ usuario, local, trocarLocal, aoSair, sessaoExpirou }: { usuario:
 
     {toast && !comandaAberta && !edicao && <div className={styles.toast} role="status">{toast}</div>}
 
-    {comandaAberta && <Comanda rascunho={rascunho} enviando={enviando} erroEnvio={erroEnvio} erroLocal={erroLocal} confirmado={confirmado}
+    {comandaAberta && <Comanda cardapio={cardapio} rascunho={rascunho} enviando={enviando} erroEnvio={erroEnvio} erroLocal={erroLocal} confirmado={confirmado}
       aoMudar={atualizar} aoEditar={(item) => setEdicao({ id: item.id, quantidade: item.quantidade, conteudo: JSON.parse(JSON.stringify(item.conteudo)) as ConteudoSacola })}
       aoEnviar={enviar} aoFechar={() => { setComandaAberta(false); if (confirmado) setConfirmado(null); }}
       aoNovo={() => { setComandaAberta(false); setConfirmado(null); setTimeout(() => mesaRef.current?.focus(), 0); }}
       aoVerPedidos={() => { setComandaAberta(false); setConfirmado(null); setAba("pedidos"); }} />}
 
-    {edicao && <Editor key={edicao.id ?? "novo"} inicial={edicao} aoFechar={() => setEdicao(null)} aoSalvar={salvarEdicao}
+    {edicao && <Editor key={edicao.id ?? "novo"} cardapio={cardapio} maxQuantidade={MAX_QUANTIDADE_ITEM} inicial={edicao} aoFechar={() => setEdicao(null)} aoSalvar={salvarEdicao}
       destino={{ adicionar: "Adicionar à comanda", aviso: "As escolhas só entram na comanda da mesa ao salvar.", erro: "Não foi possível salvar este item. Confira a comanda." }} />}
   </div>;
 }
 
-function Catalogo({ busca, setBusca, itens, aoAdicionar, aoPersonalizar }: { busca: string; setBusca: (v: string) => void; itens: ItemSacola[]; aoAdicionar: (c: ConteudoSacola) => boolean; aoPersonalizar: (c: ConteudoSacola) => void }) {
+function Selo({ n }: { n: number }) {
+  return n > 0 ? <span className={styles.naComanda} aria-label={`${n} na comanda`}>{n}</span> : null;
+}
+
+function Catalogo({ cardapio, busca, setBusca, itens, aoAdicionar, aoPersonalizar }: { cardapio: CardapioAlhoaria; busca: string; setBusca: (v: string) => void; itens: ItemSacola[]; aoAdicionar: (c: ConteudoSacola) => boolean; aoPersonalizar: (c: ConteudoSacola) => void }) {
+  const { bebidas, nomeBebida, ORDEM_PORCOES, PORCOES, precoBebidaAvulsa } = cardapio;
   const termo = normalizarBusca(busca.trim());
   const naComanda = (f: (c: ConteudoSacola) => boolean) => itens.filter((i) => f(i.conteudo)).reduce((n, i) => n + i.quantidade, 0);
-  const lanches = CATALOGO.filter((p) => normalizarBusca(`${p.nome} ${p.descricao}`).includes(termo));
-  const listaBebidas = bebidas.filter((b) => normalizarBusca(nomeBebida(b)).includes(termo));
+  const lanches = cardapio.lanches.filter((p) => normalizarBusca(`${p.nome} ${p.descricao}`).includes(termo));
+  const listaBebidas = bebidas.filter((b) => normalizarBusca(nomeBebida(b, true)).includes(termo));
   const porcoes = ORDEM_PORCOES.filter((p) => normalizarBusca(`${PORCOES[p].nome} ${PORCOES[p].molho}`).includes(termo));
-  const Selo = ({ n }: { n: number }) => n > 0 ? <span className={styles.naComanda} aria-label={`${n} na comanda`}>{n}</span> : null;
+  const produtos = cardapio.produtos.filter((p) => normalizarBusca(`${p.name} ${p.description} ${p.ingredients.join(" ")}`).includes(termo));
   return <>
     <label className={pedidoStyles.visuallyHidden} htmlFor="busca-garcom">Buscar no cardápio</label>
     <input id="busca-garcom" className={pedidoStyles.search} style={{ width: "100%" }} type="search" placeholder="Buscar lanche, bebida ou porção" value={busca} onChange={(e) => setBusca(e.target.value)} />
     {lanches.length > 0 && <><h2 className={styles.secao}>Lanches</h2><div className={styles.lista}>{lanches.map((p) => {
-      const pedido: PedidoLanche = padrao(p.id);
+      const conteudo: ConteudoSacola = { tipo: "lanche", pedido: cardapio.pedidoPadrao(p.id) };
       return <div className={styles.produto} key={p.id}>
-        <div className={styles.produtoTexto}><h3>{p.nome}<Selo n={naComanda((c) => c.tipo === "lanche" && c.pedido.lanche === p.id)} /></h3><p>{brl(totalDoPedido(pedido))} · padrão da casa</p></div>
-        <button type="button" className={styles.opcoes} onClick={() => aoPersonalizar({ tipo: "lanche", pedido: padrao(p.id) })} aria-label={`Personalizar ${p.nome}`}>Opções</button>
-        <button type="button" className={styles.mais} onClick={() => aoAdicionar({ tipo: "lanche", pedido: padrao(p.id) })} aria-label={`Adicionar ${p.nome} padrão`}>+</button>
+        <div className={styles.produtoTexto}><h3>{p.nome}<Selo n={naComanda((c) => c.tipo === "lanche" && c.pedido.lanche === p.id)} /></h3><p>{brl(cardapio.totalDoPedido(conteudo.pedido))} · padrão da casa</p></div>
+        <button type="button" className={styles.opcoes} onClick={() => aoPersonalizar(conteudo)} aria-label={`Personalizar ${p.nome}`}>Opções</button>
+        <button type="button" className={styles.mais} onClick={() => aoAdicionar(conteudo)} aria-label={`Adicionar ${p.nome} padrão`}>+</button>
       </div>;
     })}</div></>}
     {listaBebidas.length > 0 && <><h2 className={styles.secao}>Bebidas</h2><div className={styles.lista}>{listaBebidas.map((b) => <div className={styles.produto} key={valorBebida(b)}>
-      <div className={styles.produtoTexto}><h3>{nomeBebida(b)}<Selo n={naComanda((c) => c.tipo === "bebida" && valorBebida(c.bebida) === valorBebida(b))} /></h3><p>{brl(precoBebidaAvulsa(b))}</p></div>
-      <button type="button" className={styles.mais} onClick={() => aoAdicionar({ tipo: "bebida", bebida: b })} aria-label={`Adicionar ${nomeBebida(b)}`}>+</button>
+      <div className={styles.produtoTexto}><h3>{nomeBebida(b, true)}<Selo n={naComanda((c) => c.tipo === "bebida" && valorBebida(c.bebida) === valorBebida(b))} /></h3><p>{brl(precoBebidaAvulsa(b))}</p></div>
+      <button type="button" className={styles.mais} onClick={() => aoAdicionar({ tipo: "bebida", bebida: b })} aria-label={`Adicionar ${nomeBebida(b, true)}`}>+</button>
     </div>)}</div></>}
     {porcoes.length > 0 && <><h2 className={styles.secao}>Porções</h2><div className={styles.lista}>{porcoes.map((id) => <div className={styles.produto} key={id}>
       <div className={styles.produtoTexto}><h3>{PORCOES[id].nome}<Selo n={naComanda((c) => c.tipo === "porcao" && c.porcao === id)} /></h3><p>a partir de {brl(PORCOES[id].preco)} · {PORCOES[id].molho}</p></div>
       <button type="button" className={styles.mais} onClick={() => aoAdicionar({ tipo: "porcao", porcao: id })} aria-label={`Adicionar ${PORCOES[id].nome}`}>+</button>
     </div>)}</div></>}
-    {!lanches.length && !listaBebidas.length && !porcoes.length && <p className={styles.vazio}>Nada encontrado para “{busca}”.</p>}
+    {produtos.length > 0 && <><h2 className={styles.secao}>Outros produtos</h2><div className={styles.lista}>{produtos.map((produto) => {
+      const padrao = cardapio.produtoPadrao(produto);
+      const preco = padrao ? cardapio.precoProduto(produto, padrao) : null;
+      return <div className={styles.produto} key={produto.id}>
+        <div className={styles.produtoTexto}><h3>{produto.name}<Selo n={naComanda((c) => c.tipo === "produto" && c.id === produto.id)} /></h3><p>{preco == null ? "Indisponível" : brl(preco)}</p></div>
+        {padrao && preco != null && <>
+          {(produto.variants.length > 0 || produto.optionGroups.length > 0) && <button type="button" className={styles.opcoes} onClick={() => aoPersonalizar(padrao)} aria-label={`Personalizar ${produto.name}`}>Opções</button>}
+          <button type="button" className={styles.mais} onClick={() => aoAdicionar(padrao)} aria-label={`Adicionar ${produto.name}`}>+</button>
+        </>}
+      </div>;
+    })}</div></>}
+    {!lanches.length && !listaBebidas.length && !porcoes.length && !produtos.length && <p className={styles.vazio}>{termo ? `Nada encontrado para “${busca}”.` : "O cardápio publicado está vazio."}</p>}
   </>;
 }
 
-function Comanda({ rascunho, enviando, erroEnvio, erroLocal, confirmado, aoMudar, aoEditar, aoEnviar, aoFechar, aoNovo, aoVerPedidos }: {
-  rascunho: Rascunho; enviando: boolean; erroEnvio: ErroGarcom | null; erroLocal: string; confirmado: Pedido | null;
+function Comanda({ cardapio, rascunho, enviando, erroEnvio, erroLocal, confirmado, aoMudar, aoEditar, aoEnviar, aoFechar, aoNovo, aoVerPedidos }: {
+  cardapio: CardapioAlhoaria; rascunho: Rascunho; enviando: boolean; erroEnvio: ErroGarcom | null; erroLocal: string; confirmado: Pedido | null;
   aoMudar: (f: (r: Rascunho) => Rascunho) => void; aoEditar: (i: ItemSacola) => void; aoEnviar: () => void; aoFechar: () => void; aoNovo: () => void; aoVerPedidos: () => void;
 }) {
   const painel = usePainelModal(true, enviando ? () => {} : aoFechar);
-  const total = useMemo(() => totalDaComanda(rascunho.itens), [rascunho.itens]);
+  const total = useMemo(() => totalDaComanda(rascunho.itens, cardapio), [rascunho.itens, cardapio]);
+  const anterior = tentativaDoRascunho(rascunho, cardapio.companyId);
+  const totalReenvio = anterior ? totalDosItens(anterior.pedido.items) : total;
   if (confirmado) return <div className={pedidoStyles.overlay}><div className={pedidoStyles.panel} ref={painel} role="dialog" aria-modal="true" aria-labelledby="titulo-confirmacao" tabIndex={-1}>
     <div className={pedidoStyles.panelBody}><div className={styles.confirmacao} role="status">
       <p className={pedidoStyles.eyebrow}>Enviado para a cozinha</p>
@@ -303,17 +338,18 @@ function Comanda({ rascunho, enviando, erroEnvio, erroLocal, confirmado, aoMudar
       <label className={pedidoStyles.field} htmlFor="mesa-comanda">Mesa<input id="mesa-comanda" className={pedidoStyles.select} inputMode="numeric" autoComplete="off" maxLength={MAX_MESA} value={rascunho.mesa} data-autofoco={!rascunho.mesa.trim() || undefined} onChange={(e) => { const mesa = e.target.value; aoMudar((r) => ({ ...r, mesa })); }} /></label>
       {rascunho.itens.length === 0 && <p className={styles.vazio}>A comanda está vazia.</p>}
       {rascunho.itens.map((item) => <article className={styles.linhaComanda} key={item.id}>
-        {itensDaLinha(item).map((linha, n) => <div key={n}><h3>{linha.quantity}x {linha.name}</h3>{linha.details && <ul className={styles.detalhes}>{linha.details.map((d) => <li key={d}>{d}</li>)}</ul>}</div>)}
+        {itensDaLinha(item, cardapio).map((linha, n) => <div key={n}><h3>{linha.quantity}x {linha.name}</h3>{linha.details && <ul className={styles.detalhes}>{linha.details.map((d) => <li key={d}>{d}</li>)}</ul>}</div>)}
         <div className={styles.linhaRodape}>
-          <Quantidade valor={item.quantidade} min={1} max={MAX_QUANTIDADE_ITEM} nome={`Quantidade de ${nomeDoConteudo(item.conteudo)}`} aoMudar={(quantidade) => aoMudar((r) => ({ ...r, itens: r.itens.map((i) => i.id === item.id ? { ...i, quantidade } : i) }))} />
-          <strong>{brl(itensDaLinha(item).reduce((s, l) => s + l.quantity * l.unitPriceCents, 0))}</strong>
+          <Quantidade valor={item.quantidade} min={1} max={MAX_QUANTIDADE_ITEM} nome={`Quantidade de ${nomeDoConteudo(item.conteudo, cardapio)}`} aoMudar={(quantidade) => aoMudar((r) => ({ ...r, itens: r.itens.map((i) => i.id === item.id ? { ...i, quantidade } : i) }))} />
+          <strong>{brl(itensDaLinha(item, cardapio).reduce((s, l) => s + l.quantity * l.unitPriceCents, 0))}</strong>
         </div>
         <div className={pedidoStyles.actions}>
           <button type="button" className={pedidoStyles.textButton} onClick={() => aoEditar(item)}>Editar</button>
-          <button type="button" className={pedidoStyles.textButton} onClick={() => aoMudar((r) => ({ ...r, itens: removerItem(r.itens, item.id) }))} aria-label={`Remover ${nomeDoConteudo(item.conteudo)}`}>Remover</button>
+          <button type="button" className={pedidoStyles.textButton} onClick={() => aoMudar((r) => ({ ...r, itens: removerItem(r.itens, item.id) }))} aria-label={`Remover ${nomeDoConteudo(item.conteudo, cardapio)}`}>Remover</button>
         </div>
       </article>)}
       <label className={pedidoStyles.field} style={{ marginTop: 16 }} htmlFor="observacao">Observação para a cozinha (opcional)<textarea id="observacao" className={pedidoStyles.textarea} style={{ minHeight: 84 }} maxLength={MAX_OBSERVACAO} placeholder="Ex.: sem cebola no segundo lanche, servir junto" value={rascunho.observacao} onChange={(e) => { const observacao = e.target.value; aoMudar((r) => ({ ...r, observacao })); }} /></label>
+      {!rascunho.revisar && totalReenvio !== total && <p className={styles.info}>O reenvio mantém o valor da tentativa anterior, {brl(totalReenvio)}.</p>}
       {erroLocal && <p className={pedidoStyles.error} role="alert">{erroLocal}</p>}
       {erroEnvio && <div className={styles.alerta} role="alert">
         <strong>{erroEnvio.tipo === "permissao" ? "Sem permissão" : erroEnvio.tipo === "indisponivel" ? "Não foi enviado (ou não confirmou)" : "Não foi enviado"}</strong>

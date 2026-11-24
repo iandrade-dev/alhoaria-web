@@ -1,24 +1,11 @@
 /**
- * Origem da plataforma, usada só pelo modo garçom. O proxy repassa apenas as rotas de
+ * O servidor consulta a publicação do cardápio na origem da plataforma. O proxy repassa apenas as rotas de
  * que o garçom precisa (sessão, locais de trabalho e pedidos): o painel e as demais
  * rotas da API nunca passam por este site.
  * `PLATFORM_ORIGIN=` (vazio) desliga o proxy. A origem deste site precisa estar
  * em WAITER_SITE_ORIGINS da plataforma para o login web funcionar.
  */
-const PADRAO = "https://vps-16302377.tail7dc411.ts.net:10000";
-
-function origemDaPlataforma() {
-  const valor = (process.env.PLATFORM_ORIGIN ?? PADRAO).trim().replace(/\/+$/, "");
-  if (!valor) return null;
-  try {
-    const url = new URL(valor);
-    if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error();
-    return url.origin;
-  } catch {
-    console.warn(`PLATFORM_ORIGIN inválida (${valor}); proxy do modo garçom desligado.`);
-    return null;
-  }
-}
+import { origemDaPlataforma } from "./src/lib/origem-plataforma.mjs";
 
 const plataforma = origemDaPlataforma();
 

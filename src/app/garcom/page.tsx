@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
+import { CatalogoDaRota } from "@/components/CatalogoProvider";
 import Garcom from "@/components/garcom/Garcom";
 import { restaurante } from "@/data/restaurante";
+import { carregarPublicacao } from "@/lib/catalogo-publicado";
 
 /** Área da equipe: fora da navegação pública, do sitemap e dos buscadores. */
 export const metadata: Metadata = {
@@ -14,6 +16,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: restaurante.cores.fundo, interactiveWidget: "resizes-content" };
 
-export default function PaginaGarcom() {
-  return <Garcom />;
+export default async function PaginaGarcom() {
+  const publicacao = await carregarPublicacao();
+  return <><CatalogoDaRota publicacao={publicacao} /><Garcom /></>;
 }

@@ -1,7 +1,7 @@
 // Receitas da bancada, com as etapas, modelos e posições das estações de cada lanche.
 // Coordenadas three.js: x para a direita, y para cima, z para a câmera; origem no centro do topo da tábua.
 import { ORDEM_LANCHES, RECEITAS, type LancheId } from "../bancada/passos";
-import { OPCOES, type GrupoOpcao } from "./cardapio";
+import { OPCOES_VISUAIS, type GrupoOpcao } from "./cardapio";
 
 export { ORDEM_LANCHES, RECEITAS, type LancheId };
 
@@ -74,7 +74,7 @@ const LUGARES_PAO = (recheio: string): Record<Arranjo, Record<EstacaoId, Lugar>>
   },
 });
 /** Estações de opção de uma etapa do pão de alho (uma por opção do grupo, na ordem do cardápio). */
-export const estacoesDaOpcao = (passo: string, grupo: Exclude<GrupoOpcao, "pao">) => OPCOES[grupo].map((o) => `${passo}:${o.id}`);
+export const estacoesDaOpcao = (passo: string, grupo: Exclude<GrupoOpcao, "pao">) => OPCOES_VISUAIS[grupo].map((id) => `${passo}:${id}`);
 
 const TURBINAR: PassoDef = { id: "turbinar", tipo: "turbinar", icone: "", nome: "Turbinar", dica: "Toque ou arraste um potinho até o lanche", feito: "Lanche turbinado" };
 

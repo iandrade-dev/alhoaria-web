@@ -4,7 +4,10 @@ const { Group, Mesh, Matrix4, Vector3, Quaternion } = require('three');
 const { atualizarOrbita, centralizarOrbita, criarOrbita, escutarGestosOrbita, orbitaFora } = require('@cardapios/bancada-3d');
 const { SessaoMesa } = require('../.ar-tests/components/ar/sessao.js');
 const { sequencia, estacao } = require('../.ar-tests/components/ar/sequencia.js');
-const { pedidoDaURL, urlDoPedido } = require('../.ar-tests/lib/pedido-url.js');
+const { criarCardapio } = require('../.ar-tests/components/bancada-proto/cardapio.js');
+const { publicacao } = require('./catalogo-fixture.cjs');
+const { pedidoDaURL } = criarCardapio(publicacao);
+const { urlDoPedido } = require('../.ar-tests/lib/pedido-url.js');
 const { LANCHES } = require('../.ar-tests/components/bancada-proto/layout.js');
 const { liberarMontagem } = require('../.ar-tests/components/ar/recursos.js');
 
@@ -301,7 +304,7 @@ test('as escolhas vão e voltam entre AR e bancada; parâmetros inválidos não 
 });
 
 test('alternar do 3D ao simples preserva extras, potinhos, combo e bebida do pedido', () => {
-  const p = pedidoDaURL(new URLSearchParams('pao=roseta&pasta=sem&creme=4-queijos&queijo=colonial&bebida=chopp&porcao=dadinho'), 'pulled');
+  const p = pedidoDaURL(new URLSearchParams('pao=roseta&pasta=sem&creme=4-queijos&queijo=colonial&bebida=lata&sabor=fanta&porcao=dadinho'), 'pulled');
   p.adicionais = { bacon: 2, 'tomate-seco': 1 };
   p.separados = { 'pasta-ervas': 3 };
   p.combo = true; p.lataCombo = 'pureza';

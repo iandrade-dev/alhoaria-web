@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
+import { CatalogoDaRota } from "@/components/CatalogoProvider";
 import Prototipo from "@/components/bancada-proto/Prototipo";
+import { criarCardapio } from "@/components/bancada-proto/cardapio";
 import { restaurante } from "@/data/restaurante";
+import { carregarPublicacao } from "@/lib/catalogo-publicado";
 import { metadataDaPagina } from "@/lib/seo";
 import { redirect } from "next/navigation";
 
@@ -9,7 +12,8 @@ export const metadata: Metadata = {
   robots: { index: false, follow: true },
 };
 
-export default function PaginaBancada() {
-  if (!restaurante.experiencias.montagem3D) redirect("/cardapio");
-  return <Prototipo />;
+export default async function PaginaBancada() {
+  const publicacao = await carregarPublicacao();
+  if (!restaurante.experiencias.montagem3D || !publicacao || !criarCardapio(publicacao).lanches.some((produto) => produto.experiencia3D)) redirect("/cardapio");
+  return <><CatalogoDaRota publicacao={publicacao} /><Prototipo /></>;
 }

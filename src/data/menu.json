@@ -41,19 +41,5 @@
       "address": "R. Arcanjo Cândido da Silva, 3813 — Praia de Fora, Palhoça/SC",
       "maps_url": "https://www.google.com/maps/search/?api=1&query=Rua%20Arcanjo%20C%C3%A2ndido%20da%20Silva%2C%203813%2C%20Praia%20de%20Fora%2C%20Palho%C3%A7a%20SC"
     }
-  ],
-  "items": [
-    {
-      "id": "costela",
-      "name": "A Costela!",
-      "description": "Costela bovina cozida lentamente por 6 horas, desfiada na brasa, servida com pasta de alho exclusiva e coberta com queijo gratinado no maçarico.",
-      "ingredients": [
-        "Pão especial artesanal tostado",
-        "Pasta de alho exclusiva da casa",
-        "Costela bovina desfiada (cozimento lento 6h)",
-        "Creme artesanal de queijo",
-        "Mussarela dourada no maçarico"
-      ]
-    }
   ]
 }

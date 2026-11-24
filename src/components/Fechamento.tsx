@@ -1,8 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion } from "framer-motion";
 import { INSTAGRAM_URL } from "@/lib/links";
+import { useMovimentoReduzido } from "@/lib/movimento-reduzido";
 import { restaurante } from "@/data/restaurante";
 
 const words = "PÃO DE ALHO • MAÇARICO • GRATINADO • RECHEADO •";
@@ -14,6 +15,10 @@ const lineVariants = {
     opacity: 1,
     transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] as const, delay: index * 0.08 },
   }),
+};
+const lineVariantsReduced = {
+  hidden: lineVariants.hidden,
+  visible: { y: "0%", opacity: 1, transition: { duration: 0 } },
 };
 
 function MarqueeText({ duplicate = false }: { duplicate?: boolean }) {
@@ -27,26 +32,27 @@ function MarqueeText({ duplicate = false }: { duplicate?: boolean }) {
 }
 
 export default function Fechamento() {
-  const reducedMotion = useReducedMotion();
-  const initial = reducedMotion ? false : "hidden";
+  const reducedMotion = useMovimentoReduzido();
+  const variants = reducedMotion ? lineVariantsReduced : lineVariants;
 
   return (
     <section className="relative overflow-hidden bg-creme px-5 py-16 text-carvao sm:px-10 sm:py-24">
       <div aria-hidden="true" className="absolute inset-x-0 top-0 h-5 bg-carvao [clip-path:polygon(0_0,100%_0,100%_50%,92%_25%,82%_70%,70%_30%,60%_70%,49%_25%,38%_70%,27%_30%,16%_75%,7%_35%,0_65%)]" />
       <motion.div
         className="mx-auto grid max-w-7xl gap-8 pt-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.38fr)] lg:items-center lg:gap-x-12"
-        initial={initial}
+        initial="hidden"
+        animate={reducedMotion ? "visible" : undefined}
         whileInView="visible"
         viewport={{ once: true, amount: 0.4 }}
       >
         <h2 className="font-display text-[clamp(56px,11vw,200px)] uppercase leading-[1.08] tracking-[-0.035em]">
-          <span className="-mt-[0.18em] block overflow-hidden pt-[0.18em] pb-[0.12em]"><motion.span custom={0} variants={reducedMotion ? undefined : lineVariants} className="block">O FOGO</motion.span></span>
+          <span className="-mt-[0.18em] block overflow-hidden pt-[0.18em] pb-[0.12em]"><motion.span custom={0} variants={variants} className="block">O FOGO</motion.span></span>
           <span className="-mt-[0.18em] block overflow-hidden pt-[0.18em] pb-[0.12em]">
-            <motion.span custom={1} variants={reducedMotion ? undefined : lineVariants} className="block">JÁ TÁ <span className="relative inline-block text-macarico">ACESO.<motion.svg aria-hidden="true" viewBox="0 0 420 28" className="absolute -bottom-[0.13em] left-0 h-[0.12em] w-full overflow-visible" preserveAspectRatio="none"><motion.path d="M4 18 C 92 5, 190 24, 416 7" fill="none" stroke="currentColor" strokeWidth="14" strokeLinecap="round" initial={{ pathLength: 0 }} animate={{ pathLength: reducedMotion ? 1 : undefined }} whileInView={reducedMotion ? undefined : { pathLength: 1 }} viewport={{ once: true }} transition={{ duration: 0.55, delay: reducedMotion ? 0 : 0.15, ease: "easeOut" }} /></motion.svg></span></motion.span>
+            <motion.span custom={1} variants={variants} className="block">JÁ TÁ <span className="relative inline-block text-macarico">ACESO.<motion.svg aria-hidden="true" viewBox="0 0 420 28" className="absolute -bottom-[0.13em] left-0 h-[0.12em] w-full overflow-visible" preserveAspectRatio="none"><motion.path d="M4 18 C 92 5, 190 24, 416 7" fill="none" stroke="currentColor" strokeWidth="14" strokeLinecap="round" initial={{ pathLength: 0 }} animate={reducedMotion ? { pathLength: 1 } : undefined} whileInView={reducedMotion ? undefined : { pathLength: 1 }} viewport={{ once: true }} transition={{ duration: reducedMotion ? 0 : 0.55, delay: reducedMotion ? 0 : 0.15, ease: "easeOut" }} /></motion.svg></span></motion.span>
           </span>
         </h2>
 
-        <motion.div custom={1} variants={reducedMotion ? undefined : lineVariants} className="flex flex-col items-start gap-6 lg:items-end">
+        <motion.div custom={1} variants={variants} className="flex flex-col items-start gap-6 lg:items-end">
           <a href="/pedir" className="group relative inline-flex min-h-12 items-center gap-3 overflow-hidden rounded bg-carvao px-6 py-3 font-bold text-creme transition-transform active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-carvao focus-visible:outline-offset-4">
             <span aria-hidden="true" className="absolute inset-0 origin-bottom scale-y-0 bg-macarico transition-transform duration-[220ms] ease-out group-hover:scale-y-100 group-focus-visible:scale-y-100" />
             <span className="relative">Peça agora</span><span aria-hidden="true" className="relative inline-block transition-transform duration-150 group-hover:translate-x-1 group-focus-visible:translate-x-1">→</span>

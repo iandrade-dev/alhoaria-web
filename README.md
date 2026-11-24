@@ -9,8 +9,9 @@ A mesma sacola aceita vários lanches personalizados, bebidas e porções avulsa
 edição, remoção e recuperação local após recarregar. Adicionar um lanche na bancada libera a escolha do próximo.
 O modo simples não monta um canvas 3D. Falhas de WebGL ou de carregamento oferecem recuperação nele.
 
-Identidade, cores, domínio, unidades e destino do checkout ficam em `src/data/restaurante.ts`;
-o catálogo compartilhado em `src/data/catalogo.ts`. O checkout externo pode ser trocado por WhatsApp
+Identidade, cores, domínio, unidades e destino do checkout ficam em `src/data/restaurante.ts`.
+O catálogo simples, o 3D, o AR e o modo garçom usam a publicação ativa da empresa no painel.
+O checkout externo pode ser trocado por WhatsApp
 em `src/lib/checkout.ts`. No Anota AI, a pessoa precisa refazer o pedido: não há transferência automática.
 As rotas importam `Bancada` de `@cardapios/bancada-3d/react` e fornecem as receitas,
 o cardápio e as ações da sacola. A renderização, as animações e os modelos vêm do
@@ -33,6 +34,28 @@ Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS, Framer Motion e fon
 npm ci
 npm run dev
 ```
+
+### Catálogo da plataforma
+
+Configure `PLATFORM_ORIGIN` para a origem da API, `ALHOARIA_PUBLIC_SLUG` para o endereço
+público da empresa e `WAITER_SITE_ORIGINS` na plataforma para a origem do site.
+A API precisa ter a migração de referências de produtos aplicada. O slug padrão é `alhoaria`.
+
+Para a primeira carga, materialize as fotos com `npm run bancada:assets` e use o
+importador com a conta mestre. Forneça o token pela entrada padrão.
+
+```sh
+node scripts/importar-catalogo.mjs ORIGEM_API ID_EMPRESA [SLUG] < arquivo-do-token
+```
+
+O importador cria categorias, fotos e os produtos iniciais no rascunho da empresa
+selecionada. Faça uma importação por vez por empresa. Uma segunda execução preserva
+os produtos já associados a referências e reutiliza fotos da primeira carga.
+Se o rascunho já contém esses produtos, confira também as referências de variantes,
+grupos e opções antes de publicar.
+Confira a prévia e publique o cardápio no painel antes de liberar o site. Depois,
+edite e publique pelo painel para atualizar os três canais do site e a comanda.
+Mantenha as referências dos itens ligados a uma receita 3D ao editar nomes e preços.
 
 ## Cardápio em 3D e realidade aumentada
 
@@ -85,7 +108,7 @@ A cozinha fica no painel da plataforma, aberto no endereço próprio do painel (
 
 ### Proxy da plataforma
 
-`next.config.mjs` reescreve para a plataforma só as rotas do garçom (`/v1/identity/sessions`, `/v1/identity/session`,
+O servidor do site lê `/v1/publishing/public/:slug`. `next.config.mjs` reescreve para a plataforma as rotas do garçom (`/v1/identity/sessions`, `/v1/identity/session`,
 `/v1/me/workplaces` e `/v1/companies/:id/orders[/:orderId/cancel]`), na mesma origem. O painel e as demais rotas
 da API não passam por este site.
 (o cookie de sessão é host-only, então o navegador precisa falar com o próprio site):

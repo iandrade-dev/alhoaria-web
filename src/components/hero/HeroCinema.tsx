@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion, useAnimationControls, useMotionValue, useReducedMotion, useSpring } from "framer-motion";
+import { AnimatePresence, motion, useAnimationControls, useMotionValue, useSpring } from "framer-motion";
 import Link from "next/link";
 import { restaurante } from "@/data/restaurante";
+import { prefereMovimentoReduzido, useMovimentoReduzido } from "@/lib/movimento-reduzido";
 const PEDIDO_URL = "/pedir";
 import { heroSandwich } from "./heroSandwich";
 import { heroMotion } from "./motion";
@@ -19,7 +20,7 @@ const headlineClass = "font-display text-[clamp(32px,6vw,96px)] uppercase leadin
 const supportClass = "font-sans text-[clamp(16px,1.6vw,24px)] leading-snug text-[#F5F0E6]";
 
 export default function HeroCinema() {
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = useMovimentoReduzido();
   const sectionRef = useRef<HTMLElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const frameRef = useRef<number | null>(null);
@@ -50,7 +51,7 @@ export default function HeroCinema() {
   const staticHero = reduceMotion === true || status === "fallback";
 
   useEffect(() => {
-    if (reduceMotion) return;
+    if (reduceMotion || prefereMovimentoReduzido()) return;
     setSource(window.matchMedia("(max-width: 767px)").matches ? heroSandwich.video.mobile : heroSandwich.video.desktop);
     const pointer = window.matchMedia("(pointer: coarse)");
     const update = () => setCoarse(pointer.matches);
@@ -65,21 +66,25 @@ export default function HeroCinema() {
   }, []);
 
   const endedRef = useRef<() => void>(() => {});
-  const stopPlayback = useCallback(() => {
+  const clearPlayback = useCallback(() => {
     clearIdle();
     endedRef.current();
     endedRef.current = () => {};
     shakeControls.stop();
     flashControls.stop();
-    shakeControls.set({ x: 0 });
-    flashControls.set({ opacity: 0 });
     playingRef.current = false;
     pendingRef.current = false;
-    setPlaying(false);
     if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
     frameRef.current = null;
     videoRef.current?.pause();
   }, [clearIdle, flashControls, shakeControls]);
+
+  const stopPlayback = useCallback(() => {
+    clearPlayback();
+    shakeControls.set({ x: 0 });
+    flashControls.set({ opacity: 0 });
+    setPlaying(false);
+  }, [clearPlayback, flashControls, shakeControls]);
 
   const fail = useCallback(() => {
     stopPlayback();
@@ -385,7 +390,10 @@ export default function HeroCinema() {
     return () => window.removeEventListener("scroll", onScroll);
   }, [status, staticHero, enterFinal]);
 
-  useEffect(() => () => stopPlayback(), [stopPlayback]);
+  useEffect(() => clearPlayback, [clearPlayback]);
+  useEffect(() => {
+    if (reduceMotion) stopPlayback();
+  }, [reduceMotion, stopPlayback]);
 
   const skip = () => {
     if (status === "loading") {

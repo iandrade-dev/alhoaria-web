@@ -2,17 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { brl, LANCHES_PRECO, nomeBebida, PORCOES } from "@/components/bancada-proto/cardapio";
+import { brl } from "@/components/bancada-proto/cardapio";
 import { restaurante } from "@/data/restaurante";
 import { destinoDoCheckout } from "@/lib/checkout";
-import { linhasDoItem, textoDaSacola, totalDoItem, type ConteudoSacola } from "@/lib/sacola";
+import { linhasDoItem, nomeDoConteudo, textoDaSacola, totalDoItem } from "@/lib/sacola";
 import { useSacola } from "./SacolaProvider";
 import styles from "./pedido.module.css";
+import { useCatalogo } from "../CatalogoProvider";
 
-export function nomeDoConteudo(conteudo: ConteudoSacola) {
-  if (conteudo.tipo === "lanche") return LANCHES_PRECO[conteudo.pedido.lanche].nome;
-  return conteudo.tipo === "bebida" ? nomeBebida(conteudo.bebida) : PORCOES[conteudo.porcao].nome;
-}
+export { nomeDoConteudo } from "@/lib/sacola";
 
 /** Foco contido, Escape, fundo inerte e restauração do ponto de origem. */
 export function usePainelModal(aberto: boolean, aoFechar: () => void) {
@@ -52,10 +50,11 @@ export function usePainelModal(aberto: boolean, aoFechar: () => void) {
 }
 
 export default function Sacola() {
+  const cardapio = useCatalogo();
   const { itens, total, aberta, aviso, alterarQuantidade, remover, fecharSacola } = useSacola();
   const painel = usePainelModal(aberta, fecharSacola);
   const [copia, setCopia] = useState<"idle" | "ok" | "manual">("idle");
-  const texto = textoDaSacola(itens);
+  const texto = cardapio ? textoDaSacola(itens, cardapio) : "";
   useEffect(() => { setCopia("idle"); }, [itens, aberta]);
   async function copiar() {
     try { await navigator.clipboard.writeText(texto); setCopia("ok"); }
@@ -67,12 +66,12 @@ export default function Sacola() {
       <header className={styles.panelHeader}><div><h2 id="titulo-sacola">Sua sacola</h2><p className={styles.smallNote}>{itens.reduce((n, i) => n + i.quantidade, 0)} item(ns) no pedido</p></div><button type="button" className={styles.close} onClick={fecharSacola} aria-label="Fechar sacola">×</button></header>
       <div className={styles.panelBody}>
         {aviso && <p className={styles.notice}>{aviso}</p>}
-        {itens.length === 0 ? <div className={styles.empty}><p>Sua sacola está esperando seu primeiro pedido.</p><Link href="/cardapio" className={styles.primary} onClick={fecharSacola}>Escolher no cardápio</Link></div> : itens.map((item) => <article className={styles.item} key={item.id}>
-          <h3>{nomeDoConteudo(item.conteudo)}</h3>
-          {linhasDoItem(item).map((linha, n) => <div key={n} className={styles.itemDetail}><span>{linha.texto}</span>{linha.detalhe && <div>{linha.detalhe}</div>}{linha.obs && <div>{linha.obs}</div>}</div>)}
+        {!cardapio || itens.length === 0 ? <div className={styles.empty}><p>Sua sacola está esperando seu primeiro pedido.</p><Link href="/cardapio" className={styles.primary} onClick={fecharSacola}>Escolher no cardápio</Link></div> : itens.map((item) => <article className={styles.item} key={item.id}>
+          <h3>{nomeDoConteudo(item.conteudo, cardapio)}</h3>
+          {linhasDoItem(item, cardapio).map((linha, n) => <div key={n} className={styles.itemDetail}><span>{linha.texto}</span>{linha.detalhe && <div>{linha.detalhe}</div>}{linha.obs && <div>{linha.obs}</div>}</div>)}
           {item.conteudo.tipo === "lanche" && (item.conteudo.pedido.bebida || item.conteudo.pedido.porcao || item.conteudo.pedido.combo) && <p className={styles.smallNote}>A quantidade multiplica o lanche e tudo que está incluído nesta linha.</p>}
-          <div className={styles.itemBottom}><div className={styles.stepper} aria-label={`Quantidade de ${nomeDoConteudo(item.conteudo)}`}><button type="button" onClick={() => alterarQuantidade(item.id, item.quantidade - 1)} disabled={item.quantidade <= 1} aria-label="Diminuir quantidade">−</button><output>{item.quantidade}</output><button type="button" onClick={() => alterarQuantidade(item.id, item.quantidade + 1)} disabled={item.quantidade >= 99} aria-label="Aumentar quantidade">+</button></div><strong>{brl(totalDoItem(item))}</strong></div>
-          <div className={styles.actions}><Link href={`/cardapio?editar=${encodeURIComponent(item.id)}`} className={styles.textButton} onClick={fecharSacola}>Editar</Link><button type="button" className={styles.textButton} onClick={() => remover(item.id)} aria-label={`Remover ${nomeDoConteudo(item.conteudo)}`}>Remover</button></div>
+          <div className={styles.itemBottom}><div className={styles.stepper} aria-label={`Quantidade de ${nomeDoConteudo(item.conteudo, cardapio)}`}><button type="button" onClick={() => alterarQuantidade(item.id, item.quantidade - 1)} disabled={item.quantidade <= 1} aria-label="Diminuir quantidade">−</button><output>{item.quantidade}</output><button type="button" onClick={() => alterarQuantidade(item.id, item.quantidade + 1)} disabled={item.quantidade >= 99} aria-label="Aumentar quantidade">+</button></div><strong>{brl(totalDoItem(item, cardapio))}</strong></div>
+          <div className={styles.actions}><Link href={`/cardapio?editar=${encodeURIComponent(item.id)}`} className={styles.textButton} onClick={fecharSacola}>Editar</Link><button type="button" className={styles.textButton} onClick={() => remover(item.id)} aria-label={`Remover ${nomeDoConteudo(item.conteudo, cardapio)}`}>Remover</button></div>
         </article>)}
         {itens.length > 0 && <><p className={styles.notice}>{restaurante.checkout.aviso}</p><p className={styles.smallNote}>Preços estimados. Entrega, disponibilidade e valor final são confirmados na loja.</p>{copia === "manual" && <label className={styles.field}>Selecione e copie o resumo<textarea className={styles.textarea} readOnly value={texto} onFocus={(e) => e.currentTarget.select()} /></label>}<p role="status" className={styles.smallNote}>{copia === "ok" ? "Resumo copiado. Use-o para conferir seu pedido na loja." : ""}</p></>}
       </div>

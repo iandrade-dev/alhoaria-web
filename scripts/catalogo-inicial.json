@@ -1,0 +1,473 @@
+[
+  {
+    "reference": "pulled",
+    "name": "Pulled Pork!",
+    "description": "Pernil desfiado, assado por 4 horas em fogo baixo, no pão de alho.",
+    "priceCents": 3590,
+    "category": "Lanches",
+    "foto": "assets/bancada/lanche-pulled.webp"
+  },
+  {
+    "reference": "brocolis",
+    "name": "Brócolis & Queijo!",
+    "description": "Pão de alho recheado com brócolis fresquinho e muito queijo gratinado.",
+    "priceCents": 3390,
+    "category": "Lanches",
+    "foto": "assets/bancada/lanche-brocolis.webp"
+  },
+  {
+    "reference": "dogalho",
+    "name": "Dogalho",
+    "description": "Brioche com pasta de alho, duas salsichas, fundue de 4 queijos e batata palha.",
+    "priceCents": 2690,
+    "category": "Lanches",
+    "foto": "assets/bancada/lanche-dogalho.webp"
+  },
+  {
+    "reference": "costela",
+    "name": "A Costela!",
+    "description": "A especial: costela assada 6 horas e desfiada, no pão de alho.",
+    "priceCents": 4490,
+    "category": "Lanches",
+    "foto": "assets/bancada/lanche-costela.webp"
+  },
+  {
+    "reference": "batata",
+    "name": "Batata rústica",
+    "description": "com creme de cheddar defumado",
+    "priceCents": 2490,
+    "category": "Porções"
+  },
+  {
+    "reference": "dadinho",
+    "name": "Dadinho de tapioca",
+    "description": "com creme de cheddar defumado",
+    "priceCents": 2990,
+    "category": "Porções"
+  },
+  {
+    "reference": "bebida-lata",
+    "name": "Refrigerante em lata junto do lanche",
+    "priceCents": 700,
+    "category": "Bebidas",
+    "variants": [
+      {
+        "id": "4e2ebca9-82af-42e3-b580-2c76a70cb2a3",
+        "reference": "coca",
+        "label": "Coca-Cola",
+        "priceCents": 700,
+        "available": true
+      },
+      {
+        "id": "7616adaf-6bb3-4d18-89e9-6d61f605b043",
+        "reference": "coca-zero",
+        "label": "Coca-Cola Zero",
+        "priceCents": 700,
+        "available": true
+      },
+      {
+        "id": "779ac57c-1824-435d-90ee-ca4dd49518b9",
+        "reference": "pepsi-black",
+        "label": "Pepsi Black",
+        "priceCents": 700,
+        "available": true
+      },
+      {
+        "id": "46ce2604-f92e-4742-a3d7-1e424d85cb66",
+        "reference": "guarana",
+        "label": "Guaraná Antarctica",
+        "priceCents": 700,
+        "available": true
+      },
+      {
+        "id": "626066c5-b9e3-466d-97b1-95e62cb84e9e",
+        "reference": "fanta",
+        "label": "Fanta Laranja",
+        "priceCents": 700,
+        "available": true
+      },
+      {
+        "id": "a22cfde5-c626-4127-8c60-e322a30a7f50",
+        "reference": "pureza",
+        "label": "Pureza",
+        "priceCents": 600,
+        "available": true
+      }
+    ]
+  },
+  {
+    "reference": "bebida-lata-avulsa",
+    "name": "Refrigerante em lata avulso",
+    "priceCents": 800,
+    "category": "Bebidas",
+    "optionGroups": [
+      {
+        "id": "8da9b9ca-f5c2-4748-8197-af59661c9acb",
+        "reference": "sabores",
+        "name": "Sabores",
+        "min": 0,
+        "max": 1,
+        "options": [
+          {
+            "id": "55f8282f-4a22-401f-9b6d-453144afd7d4",
+            "reference": "coca",
+            "name": "Coca-Cola",
+            "priceCents": 0,
+            "available": true
+          },
+          {
+            "id": "feaefd69-0a56-4022-9911-3ea74d05d856",
+            "reference": "coca-zero",
+            "name": "Coca-Cola Zero",
+            "priceCents": 0,
+            "available": true
+          },
+          {
+            "id": "a60e29fd-72d7-4dc3-b260-96578714434f",
+            "reference": "pureza",
+            "name": "Pureza",
+            "priceCents": 0,
+            "available": true
+          },
+          {
+            "id": "943bbe8a-2cf4-4e13-9714-58e12b83f90b",
+            "reference": "guarana",
+            "name": "Guaraná Antarctica",
+            "priceCents": 0,
+            "available": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "reference": "personalizacao",
+    "name": "Personalização dos lanches",
+    "priceCents": 0,
+    "category": "Personalização",
+    "optionGroups": [
+      {
+        "id": "ee517c62-9768-4c29-a707-da2a66b04517",
+        "reference": "pao",
+        "name": "Pães",
+        "min": 0,
+        "max": 1,
+        "options": [
+          {
+            "id": "a71794ab-acdb-4799-88f9-fe676837934d",
+            "reference": "parmesao",
+            "name": "Parmesão",
+            "priceCents": 0,
+            "available": true
+          },
+          {
+            "id": "4c378f23-8c68-4ed8-9170-c7c1a51ea8aa",
+            "reference": "roseta",
+            "name": "Roseta",
+            "priceCents": 0,
+            "available": true
+          }
+        ]
+      },
+      {
+        "id": "c7ab5685-fcc9-41be-a06f-eaad97fb4823",
+        "reference": "pasta",
+        "name": "Pastas",
+        "min": 0,
+        "max": 1,
+        "options": [
+          {
+            "id": "5bfeea47-b910-4da1-a494-449af976b990",
+            "reference": "ervas",
+            "name": "Com ervas",
+            "priceCents": 0,
+            "available": true
+          },
+          {
+            "id": "2c84ad21-939d-4bf0-be6b-aa1e492be5ed",
+            "reference": "tradicional",
+            "name": "Tradicional",
+            "priceCents": 0,
+            "available": true
+          }
+        ]
+      },
+      {
+        "id": "c3a63a6c-1d1e-4112-a82f-e758b4003b98",
+        "reference": "creme",
+        "name": "Cremes",
+        "min": 0,
+        "max": 1,
+        "options": [
+          {
+            "id": "7c06cf25-d0f7-4735-acca-8d1588aac905",
+            "reference": "cheddar",
+            "name": "Cheddar defumado",
+            "priceCents": 0,
+            "available": true
+          },
+          {
+            "id": "c195d118-8613-4f7e-8ba7-092ca36bb4b7",
+            "reference": "4-queijos",
+            "name": "4 queijos",
+            "priceCents": 0,
+            "available": true
+          }
+        ]
+      },
+      {
+        "id": "8f32601c-96e7-46db-993b-490856586e5a",
+        "reference": "queijo",
+        "name": "Queijos",
+        "min": 0,
+        "max": 1,
+        "options": [
+          {
+            "id": "1805b19e-f201-4cac-ade8-09b95d4cb7f6",
+            "reference": "mucarela",
+            "name": "Muçarela",
+            "priceCents": 0,
+            "available": true
+          },
+          {
+            "id": "159f67f6-06bc-453e-8ed2-c1b627782e28",
+            "reference": "colonial",
+            "name": "Colonial",
+            "priceCents": 0,
+            "available": true
+          }
+        ]
+      },
+      {
+        "id": "483086d5-3fbe-4aa6-a0a9-129ddbc82054",
+        "reference": "adicionais",
+        "name": "Adicionais",
+        "min": 0,
+        "max": 1,
+        "options": [
+          {
+            "id": "5295c96d-d2c6-4cd5-a775-a90440d671d7",
+            "reference": "bacon",
+            "name": "Bacon em cubos",
+            "priceCents": 600,
+            "available": true
+          },
+          {
+            "id": "262ba441-458f-49df-949b-44a70e93a885",
+            "reference": "tomate-seco",
+            "name": "Tomate seco",
+            "priceCents": 600,
+            "available": true
+          },
+          {
+            "id": "3e18844b-582f-4c98-9e03-7efe48259282",
+            "reference": "cebola-caramelizada",
+            "name": "Cebola caramelizada",
+            "priceCents": 600,
+            "available": true
+          },
+          {
+            "id": "5719daf3-fcc2-4bc1-815f-254a314e0896",
+            "reference": "cebola-crispy",
+            "name": "Cebola crispy",
+            "priceCents": 600,
+            "available": true
+          },
+          {
+            "id": "59f69427-9ebf-4a0c-b6b4-82e861403501",
+            "reference": "farofa",
+            "name": "Farofa de alho",
+            "priceCents": 400,
+            "available": true
+          },
+          {
+            "id": "f1153bef-0c9d-4235-af1e-57bbe464696c",
+            "reference": "queijo-dobro",
+            "name": "Queijo gratinado em dobro",
+            "priceCents": 600,
+            "available": true
+          }
+        ]
+      },
+      {
+        "id": "ac4be6e4-c9f3-44be-8d5e-b0dd1ebd86ce",
+        "reference": "separados",
+        "name": "Potinhos separados",
+        "min": 0,
+        "max": 1,
+        "options": [
+          {
+            "id": "2ff06075-fc6f-410c-9502-15980d66985b",
+            "reference": "pasta-tradicional",
+            "name": "Pasta de alho tradicional",
+            "priceCents": 400,
+            "available": true
+          },
+          {
+            "id": "680bef38-63c7-43b7-9e6d-9b80ed9892c8",
+            "reference": "pasta-ervas",
+            "name": "Pasta de alho com ervas",
+            "priceCents": 400,
+            "available": true
+          },
+          {
+            "id": "e03b10a5-b5fe-4ff8-8ea0-33ef4e5f0b50",
+            "reference": "creme-4-queijos",
+            "name": "Creme 4 queijos",
+            "priceCents": 400,
+            "available": true
+          },
+          {
+            "id": "27118e2b-5e04-4157-9a6d-ba6635283d98",
+            "reference": "creme-cheddar",
+            "name": "Creme cheddar defumado",
+            "priceCents": 400,
+            "available": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "reference": "trio-alhoaria",
+    "name": "Trio Alhoaria Delícia Completa",
+    "description": "batata frita pequena",
+    "priceCents": 5590,
+    "category": "Combos",
+    "variants": [
+      {
+        "id": "5ce8d798-eec8-4eda-bbbe-c78dbdbadbbd",
+        "reference": "preco-anterior",
+        "label": "Preço anterior",
+        "priceCents": 6090,
+        "available": false
+      }
+    ],
+    "optionGroups": [
+      {
+        "id": "1600bb94-3d4a-42fb-a152-bb438ddf7dd5",
+        "reference": "lanches",
+        "name": "Lanches",
+        "min": 0,
+        "max": 1,
+        "options": [
+          {
+            "id": "b1c62f61-a5fa-4b69-9257-ed71aba1fd8e",
+            "reference": "costela",
+            "name": "A Costela!",
+            "priceCents": 1100,
+            "available": true
+          },
+          {
+            "id": "66bd5676-204e-4c18-9bb4-7f492f58e253",
+            "reference": "pulled",
+            "name": "Pulled Pork!",
+            "priceCents": 200,
+            "available": true
+          },
+          {
+            "id": "e69ecff2-8d93-4b7c-9407-1aec610cfa18",
+            "reference": "brocolis",
+            "name": "Brócolis & Queijo!",
+            "priceCents": 0,
+            "available": true
+          }
+        ]
+      },
+      {
+        "id": "8c3b99af-6c49-42b1-89eb-b3656cae2ea8",
+        "reference": "latas",
+        "name": "Latas incluídas",
+        "min": 0,
+        "max": 1,
+        "options": [
+          {
+            "id": "bd20cd8e-8cab-4115-8946-0aea195656f4",
+            "reference": "coca",
+            "name": "Coca-Cola",
+            "priceCents": 0,
+            "available": true
+          },
+          {
+            "id": "42b61774-f163-4ec7-b7fd-82978dfe0ac1",
+            "reference": "coca-zero",
+            "name": "Coca-Cola Zero",
+            "priceCents": 0,
+            "available": true
+          },
+          {
+            "id": "bfde18a1-7e3c-4632-b1c3-b58d44a579d9",
+            "reference": "pureza",
+            "name": "Pureza",
+            "priceCents": 0,
+            "available": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "reference": "trio-dogalho",
+    "name": "Trio Dogalho!",
+    "description": "batata frita",
+    "priceCents": 3690,
+    "category": "Combos",
+    "variants": [
+      {
+        "id": "54a313a1-d516-4b42-bbe7-3ceac3913edb",
+        "reference": "preco-anterior",
+        "label": "Preço anterior",
+        "priceCents": 5680,
+        "available": false
+      }
+    ],
+    "optionGroups": [
+      {
+        "id": "76e18052-5535-4b15-bd32-8caecfdc7251",
+        "reference": "lanches",
+        "name": "Lanches",
+        "min": 0,
+        "max": 1,
+        "options": [
+          {
+            "id": "04acc01d-48c7-43ff-a283-c69129a95fdf",
+            "reference": "dogalho",
+            "name": "Dogalho",
+            "priceCents": 0,
+            "available": true
+          }
+        ]
+      },
+      {
+        "id": "85454d8a-c7b8-449b-b0ca-281b9f4dbae7",
+        "reference": "latas",
+        "name": "Latas incluídas",
+        "min": 0,
+        "max": 1,
+        "options": [
+          {
+            "id": "2d05d06b-4b70-4d7b-9690-86fd127de201",
+            "reference": "coca",
+            "name": "Coca-Cola",
+            "priceCents": 0,
+            "available": true
+          },
+          {
+            "id": "7594d03e-8970-4792-989d-d2cf8bca349c",
+            "reference": "coca-zero",
+            "name": "Coca-Cola Zero",
+            "priceCents": 0,
+            "available": true
+          },
+          {
+            "id": "f7934319-c982-4a1b-bc29-b701c607688b",
+            "reference": "guarana",
+            "name": "Guaraná Antarctica",
+            "priceCents": 0,
+            "available": true
+          }
+        ]
+      }
+    ]
+  }
+]

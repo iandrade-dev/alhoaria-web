@@ -1,253 +1,294 @@
-// Cardápio do pedido do protótipo (turbinar, bebida, acompanhamento e combo). Fonte: a loja da Alhoaria no Anota AI,
-// lida em ATUALIZADO. Valores em centavos. O protótipo não monta o carrinho do Anota AI: o resumo é
-// copiado e a pessoa finaliza o pedido no Anota AI.
 import type { LancheId } from "./layout";
-import { CATALOGO_POR_ID } from "../../data/catalogo";
-import { restaurante } from "../../data/restaurante";
+import type { ProdutoPublicado, PublicacaoAlhoaria } from "../../lib/publicacao-alhoaria";
 
-export const ATUALIZADO = restaurante.versaoCatalogo;
-export const AVISO = restaurante.avisoPrecos;
-
-
-export const LANCHES_PRECO: Record<LancheId, { nome: string; preco: number }> = CATALOGO_POR_ID;
-
-// ---------------------------------------------------------------- Opções do pedido (lanches de pão de alho)
-// Cada grupo do Anota AI pede "Escolha 1 item". O Dogalho não tem grupos de escolha. As opções não mudam o preço.
 export type GrupoOpcao = "pao" | "pasta" | "creme" | "queijo";
-export type Opcao = { id: string; nome: string; sub: string; texto: string };
-/** Na ordem do cardápio: a primeira de cada grupo é a do "Monta pra mim". */
-export const OPCOES: Record<GrupoOpcao, Opcao[]> = {
-  pao: [
-    { id: "parmesao", nome: "Parmesão", sub: "pão especial com parmesão", texto: "Pão parmesão" },
-    { id: "roseta", nome: "Roseta", sub: "pão especial com ervas finas", texto: "Pão roseta" },
-  ],
-  pasta: [
-    { id: "ervas", nome: "Com ervas", sub: "pasta de alho com ervas verdes", texto: "Pasta com ervas" },
-    { id: "tradicional", nome: "Tradicional", sub: "pasta de alho tradicional", texto: "Pasta de alho tradicional" },
-  ],
-  creme: [
-    { id: "cheddar", nome: "Cheddar defumado", sub: "creme de cheddar defumado", texto: "Creme cheddar defumado" },
-    { id: "4-queijos", nome: "4 queijos", sub: "creme 4 queijos", texto: "Creme 4 queijos" },
-  ],
-  queijo: [
-    { id: "mucarela", nome: "Muçarela", sub: "queijo gratinado muçarela", texto: "Muçarela" },
-    { id: "colonial", nome: "Colonial", sub: "queijo gratinado colonial", texto: "Colonial" },
-  ],
-};
-/** O chip "Sem ..." de cada grupo (o pão não tem). */
-export const SEM_OPCAO: Record<Exclude<GrupoOpcao, "pao">, { nome: string; texto: string }> = {
-  pasta: { nome: "Sem pasta", texto: "sem pasta de alho" },
-  creme: { nome: "Sem creme", texto: "sem creme de queijo" },
-  queijo: { nome: "Sem queijo", texto: "sem queijo gratinado" },
-};
-/** Escolha de cada grupo: o id da opção, "sem" ou null (ainda não escolheu). */
+export type Opcao = { id: string; nome: string; sub: string; texto: string; preco: number };
 export type Opcoes = Record<GrupoOpcao, string | null>;
-export const ORDEM_GRUPOS: GrupoOpcao[] = ["pao", "pasta", "creme", "queijo"];
-export const opcoesVazias = (): Opcoes => ({ pao: null, pasta: null, creme: null, queijo: null });
-/** "Monta pra mim": a primeira opção de cada grupo. */
-export const OPCOES_PADRAO: Opcoes = { pao: OPCOES.pao[0].id, pasta: OPCOES.pasta[0].id, creme: OPCOES.creme[0].id, queijo: OPCOES.queijo[0].id };
-export const opcaoDe = (g: GrupoOpcao, id: string | null) => OPCOES[g].find((o) => o.id === id) ?? null;
-/** "Pão roseta · Pasta de alho tradicional · Creme 4 queijos · Colonial" (só os grupos já escolhidos). */
-export function textoDasOpcoes(o: Opcoes) {
-  return ORDEM_GRUPOS.flatMap((g) => {
-    const v = o[g];
-    if (!v) return [];
-    if (v === "sem" && g !== "pao") return [SEM_OPCAO[g].texto];
-    const op = opcaoDe(g, v);
-    return op ? [op.texto] : [];
-  }).join(" · ");
-}
-
-// ---------------------------------------------------------------- Turbine
 export type AdicionalId = "bacon" | "tomate-seco" | "cebola-caramelizada" | "cebola-crispy" | "farofa" | "queijo-dobro";
 export type SeparadoId = "pasta-tradicional" | "pasta-ervas" | "creme-4-queijos" | "creme-cheddar";
-type Item = { nome: string; curto: string; preco: number; max: number };
-
-/** Adicionais que vão no lanche (cada um tem um potinho em volta da tábua). */
-export const ADICIONAIS: Record<AdicionalId, Item> = {
-  bacon: { nome: "Bacon em cubos", curto: "Bacon", preco: 600, max: 12 },
-  "tomate-seco": { nome: "Tomate seco", curto: "Tomate seco", preco: 600, max: 1 },
-  "cebola-caramelizada": { nome: "Cebola caramelizada", curto: "Cebola caramelizada", preco: 600, max: 1 },
-  "cebola-crispy": { nome: "Cebola crispy", curto: "Cebola crispy", preco: 600, max: 12 },
-  farofa: { nome: "Farofa de alho", curto: "Farofa de alho", preco: 400, max: 12 },
-  "queijo-dobro": { nome: "Queijo gratinado em dobro", curto: "Queijo em dobro", preco: 600, max: 12 },
-};
-export const ORDEM_ADICIONAIS = Object.keys(ADICIONAIS) as AdicionalId[];
-/** Os potinhos da etapa Turbinar (o queijo em dobro entra na etapa do queijo). */
-export const POTINHOS: AdicionalId[] = ["bacon", "tomate-seco", "cebola-caramelizada", "cebola-crispy", "farofa"];
-
-/** Adicionais que vão separados (potinho com tampa ao lado do lanche). */
-export const SEPARADOS: Record<SeparadoId, Item> = {
-  "pasta-tradicional": { nome: "Pasta de alho tradicional", curto: "Pasta de alho", preco: 400, max: 12 },
-  "pasta-ervas": { nome: "Pasta de alho com ervas", curto: "Pasta com ervas", preco: 400, max: 12 },
-  "creme-4-queijos": { nome: "Creme 4 queijos", curto: "Creme 4 queijos", preco: 400, max: 12 },
-  "creme-cheddar": { nome: "Creme cheddar defumado", curto: "Cheddar defumado", preco: 400, max: 12 },
-};
-export const ORDEM_SEPARADOS = Object.keys(SEPARADOS) as SeparadoId[];
-
-// ---------------------------------------------------------------- Bebidas
 export type SaborLata = "coca" | "coca-zero" | "pepsi-black" | "guarana" | "fanta" | "pureza";
 export type SaborSoda = "maca-verde" | "frutas-vermelhas";
 export type BebidaId = "lata" | "chopp" | "soda";
 export type Bebida = { id: "lata"; sabor: SaborLata } | { id: "chopp" } | { id: "soda"; sabor: SaborSoda };
-
-/** Sabores da lata: só o nome (a lata 3D fica só tingida, sem logo nem marca). */
-export const SABORES_LATA: Record<SaborLata, { nome: string; preco: number; cor: string }> = {
-  coca: { nome: "Coca-Cola", preco: 700, cor: "#b3121f" },
-  "coca-zero": { nome: "Coca-Cola Zero", preco: 700, cor: "#1b1b1d" },
-  "pepsi-black": { nome: "Pepsi Black", preco: 700, cor: "#141a33" },
-  guarana: { nome: "Guaraná Antarctica", preco: 700, cor: "#1c6b34" },
-  fanta: { nome: "Fanta Laranja", preco: 700, cor: "#e8730f" },
-  pureza: { nome: "Pureza", preco: 600, cor: "#d2a52c" },
-};
-export const ORDEM_SABORES_LATA = Object.keys(SABORES_LATA) as SaborLata[];
-export const SABORES_SODA: Record<SaborSoda, { nome: string; cor: string }> = {
-  "maca-verde": { nome: "maçã verde", cor: "#8fcf3c" },
-  "frutas-vermelhas": { nome: "frutas vermelhas", cor: "#b5193a" },
-};
-export const ORDEM_SABORES_SODA = Object.keys(SABORES_SODA) as SaborSoda[];
-
-export const BEBIDAS: Record<BebidaId, { nome: string; curto: string; preco: number }> = {
-  lata: { nome: "Refri lata", curto: "Refri lata", preco: 700 },
-  // Chopp e soda italiana saíram do cardápio do Anota AI (conferido em 21/11/2026). Ficam só para ler sacolas antigas.
-  chopp: { nome: "Caneca de chopp Pilsen Lohn 500 ml", curto: "Chopp 500 ml", preco: 990 },
-  soda: { nome: "Soda italiana", curto: "Soda italiana", preco: 1490 },
-};
-/** Bebidas oferecidas junto do lanche (Anota AI, 21/11/2026): só a lata. */
-export const ORDEM_BEBIDAS: BebidaId[] = ["lata"];
-
-/** Preço da bebida pedida junto do lanche (lata R$ 7,00; Pureza R$ 6,00). */
-export function precoBebida(b: Bebida) {
-  return b.id === "lata" ? SABORES_LATA[b.sabor].preco : BEBIDAS[b.id].preco;
-}
-
-/** Lata avulsa no Anota AI (categoria Refrigerantes, 21/11/2026): R$ 8,00 e só estes sabores. */
-export const PRECO_LATA_AVULSA = 800;
-export const SABORES_LATA_AVULSA: SaborLata[] = ["coca", "coca-zero", "pureza", "guarana"];
-/** Preço da bebida pedida sozinha, fora do lanche. */
-export function precoBebidaAvulsa(b: Bebida) {
-  return b.id === "lata" ? PRECO_LATA_AVULSA : precoBebida(b);
-}
-export function nomeBebida(b: Bebida) {
-  if (b.id === "lata") return b.sabor === "pureza" ? "Pureza lata" : `Refri lata ${SABORES_LATA[b.sabor].nome}`;
-  if (b.id === "soda") return `Soda italiana ${SABORES_SODA[b.sabor].nome}`;
-  return BEBIDAS.chopp.nome;
-}
-
-// ---------------------------------------------------------------- Porções
 export type PorcaoId = "batata" | "dadinho";
-export const PORCOES: Record<PorcaoId, { nome: string; curto: string; preco: number; aPartir: true; molho: string }> = {
-  batata: { nome: "Batata rústica", curto: "Batata rústica", preco: 2490, aPartir: true, molho: "com creme de cheddar defumado" },
-  dadinho: { nome: "Dadinho de tapioca", curto: "Dadinho de tapioca", preco: 2990, aPartir: true, molho: "com creme de cheddar defumado" },
-};
-export const ORDEM_PORCOES: PorcaoId[] = ["batata", "dadinho"];
-
-// ---------------------------------------------------------------- Combos
-/**
- * Trios do Anota AI (conferidos em 21/11/2026). No Trio Alhoaria a proteína soma ao preço do combo (A Costela + R$ 11,00,
- * Pulled Pork + R$ 2,00, Brócolis & Queijo sem acréscimo) e a batata é a frita pequena. Cada trio tem os próprios sabores
- * de lata. O "de" é o preço riscado que o Anota AI mostra para o combo base.
- */
 export type Trio = { id: "alhoaria" | "dogalho"; nome: string; preco: number; de: number; batata: string; lanches: LancheId[]; acrescimo: Partial<Record<LancheId, number>>; latas: SaborLata[] };
-export const TRIOS: Trio[] = [
-  { id: "alhoaria", nome: "Trio Alhoaria Delícia Completa", preco: 5590, de: 6090, batata: "batata frita pequena", lanches: ["costela", "pulled", "brocolis"], acrescimo: { costela: 1100, pulled: 200 }, latas: ["coca", "coca-zero", "pureza"] },
-  { id: "dogalho", nome: "Trio Dogalho!", preco: 3690, de: 5680, batata: "batata frita", lanches: ["dogalho"], acrescimo: {}, latas: ["coca", "coca-zero", "guarana"] },
-];
-export const trioDe = (l: LancheId) => TRIOS.find((t) => t.lanches.includes(l)) ?? null;
-/** Preço do trio com este lanche: o combo mais o acréscimo da proteína. */
-export const precoDoTrio = (t: Trio, l: LancheId) => t.preco + (t.acrescimo[l] ?? 0);
-/** Quanto o trio economiza em relação aos itens soltos (lanche + batata rústica + lata). */
-export function economiaDoTrio(l: LancheId, sabor: SaborLata | null) {
-  const t = trioDe(l);
-  if (!t) return 0;
-  const lata = sabor ? SABORES_LATA[sabor].preco : BEBIDAS.lata.preco;
-  return LANCHES_PRECO[l].preco + PORCOES.batata.preco + lata - precoDoTrio(t, l);
-}
-
-// ---------------------------------------------------------------- Pedido
+export type Linha = { texto: string; valor: number; detalhe?: string; obs?: string; nivel: 0 | 1 };
 export type Pedido = {
   lanche: LancheId;
-  /** Escolhas da montagem (pão, pasta, creme, queijo); null no Dogalho. */
   opcoes: Opcoes | null;
   adicionais: Partial<Record<AdicionalId, number>>;
   separados: Partial<Record<SeparadoId, number>>;
   bebida: Bebida | null;
-  /** Porção escolhida (com combo, é uma porção a mais, além da batata do trio). */
   porcao: PorcaoId | null;
   combo: boolean;
-  /** Sabor da lata do trio quando a bebida escolhida não é lata (chopp, soda ou nenhuma). */
   lataCombo: SaborLata | null;
 };
+export type CompraProduto = { tipo: "produto"; id: string; variante: string | null; opcoes: string[] };
+
+export const ORDEM_GRUPOS: GrupoOpcao[] = ["pao", "pasta", "creme", "queijo"];
+const SEM_OPCAO = {
+  pasta: { nome: "Sem pasta", texto: "sem pasta de alho" },
+  creme: { nome: "Sem creme", texto: "sem creme de queijo" },
+  queijo: { nome: "Sem queijo", texto: "sem queijo gratinado" },
+};
+export const opcoesVazias = (): Opcoes => ({ pao: null, pasta: null, creme: null, queijo: null });
 export const novoPedido = (lanche: LancheId): Pedido => ({
   lanche, opcoes: lanche === "dogalho" ? null : opcoesVazias(), adicionais: {}, separados: {}, bebida: null, porcao: null, combo: false, lataCombo: null,
 });
 
-/** A lata escolhida como bebida conta como a lata do trio quando o sabor é um dos do trio; senão é cobrada à parte. */
-export function lataContaNoTrio(p: Pedido) {
-  const t = p.combo ? trioDe(p.lanche) : null;
-  return !!t && p.bebida?.id === "lata" && t.latas.includes(p.bebida.sabor);
+// Referências das peças que já têm animação e limites físicos na bancada.
+export const OPCOES_VISUAIS: Record<GrupoOpcao, readonly string[]> = {
+  pao: ["parmesao", "roseta"],
+  pasta: ["ervas", "tradicional"],
+  creme: ["cheddar", "4-queijos"],
+  queijo: ["mucarela", "colonial"],
+};
+const PREFIXOS_OPCAO: Record<GrupoOpcao, string> = { pao: "Pão ", pasta: "Pasta de alho ", creme: "Creme ", queijo: "" };
+const LIMITES_ADICIONAIS: Record<AdicionalId, number> = { bacon: 12, "tomate-seco": 1, "cebola-caramelizada": 1, "cebola-crispy": 12, farofa: 12, "queijo-dobro": 12 };
+const LIMITES_SEPARADOS: Record<SeparadoId, number> = { "pasta-tradicional": 12, "pasta-ervas": 12, "creme-4-queijos": 12, "creme-cheddar": 12 };
+const CORES_LATAS: Record<SaborLata, string> = {
+  coca: "#b3121f", "coca-zero": "#1b1b1d", "pepsi-black": "#141a33", guarana: "#1c6b34", fanta: "#e8730f", pureza: "#d2a52c",
+};
+const PORCOES_3D: readonly PorcaoId[] = ["batata", "dadinho"];
+const LANCHES_3D: readonly LancheId[] = ["pulled", "brocolis", "dogalho", "costela"];
+const TRIOS_3D = ["alhoaria", "dogalho"] as const;
+const REFERENCIAS_DE_MONTAGEM = new Set([
+  ...LANCHES_3D, ...PORCOES_3D, ...TRIOS_3D.map(id => "trio-" + id), "bebida-lata", "bebida-lata-avulsa", "personalizacao",
+]);
+
+function contem<T extends string>(lista: readonly T[], valor: unknown): valor is T {
+  return typeof valor === "string" && (lista as readonly string[]).includes(valor);
 }
-/** Sabor da lata que entra no trio (null = ainda falta escolher). */
-export function saborDaLataDoCombo(p: Pedido): SaborLata | null {
-  if (lataContaNoTrio(p) && p.bebida?.id === "lata") return p.bebida.sabor;
-  const t = trioDe(p.lanche);
-  return p.lataCombo && (!t || t.latas.includes(p.lataCombo)) ? p.lataCombo : null;
+function tabela<T extends string, V>(pares: readonly (readonly [T, V])[]) {
+  return Object.fromEntries(pares) as Record<T, V>;
 }
 
-/** `obs` = as escolhas do lanche, numa linha (sem preço). */
-export type Linha = { texto: string; valor: number; detalhe?: string; obs?: string; nivel: 0 | 1 };
+export function brl(centavos: number) {
+  const valor = Math.round(centavos);
+  return `R$ ${Math.floor(valor / 100)},${String(valor % 100).padStart(2, "0")}`;
+}
 
-const qtd = (n: number | undefined, max: number) => Math.max(0, Math.min(max, n ?? 0));
-
-/** Linhas do resumo (a mesma fonte para a tela, o total e o texto copiado). */
-export function linhasDoPedido(p: Pedido): Linha[] {
-  const out: Linha[] = [];
-  const lanche = LANCHES_PRECO[p.lanche];
-  const trio = p.combo ? trioDe(p.lanche) : null;
-  const obs = p.opcoes ? textoDasOpcoes(p.opcoes) || undefined : undefined;
-  if (trio) {
-    const sabor = saborDaLataDoCombo(p);
-    const lata = sabor ? (sabor === "pureza" ? "Pureza lata" : `${SABORES_LATA[sabor].nome} lata`) : "refri lata (falta o sabor)";
-    out.push({ texto: `1x ${trio.nome}`, valor: precoDoTrio(trio, p.lanche), detalhe: `${lanche.nome} + ${trio.batata} + ${lata}`, obs, nivel: 0 });
-  } else {
-    out.push({ texto: `1x ${lanche.nome}`, valor: lanche.preco, obs, nivel: 0 });
+export function precoProduto(produto: ProdutoPublicado, compra: CompraProduto) {
+  if (compra.id !== produto.id || !produto.available || new Set(compra.opcoes).size !== compra.opcoes.length) return null;
+  const variantes = produto.variants.filter(v => v.available);
+  const variante = variantes.find(v => v.id === compra.variante);
+  if (produto.variants.length ? !variante : compra.variante !== null) return null;
+  let preco = variante?.priceCents ?? produto.priceCents;
+  let escolhas = 0;
+  for (const grupo of produto.optionGroups) {
+    const opcoes = grupo.options.filter(o => o.available && compra.opcoes.includes(o.id));
+    if (opcoes.length < grupo.min || opcoes.length > grupo.max) return null;
+    preco += opcoes.reduce((total, o) => total + o.priceCents, 0);
+    escolhas += opcoes.length;
   }
-  for (const id of ORDEM_ADICIONAIS) {
-    const a = ADICIONAIS[id]; const n = qtd(p.adicionais[id], a.max);
-    if (n) out.push({ texto: `+ ${a.nome}${n > 1 ? ` x${n}` : ""}`, valor: n * a.preco, nivel: 1 });
-  }
-  for (const id of ORDEM_SEPARADOS) {
-    const s = SEPARADOS[id]; const n = qtd(p.separados[id], s.max);
-    if (n) out.push({ texto: `+ ${s.nome} (separado)${n > 1 ? ` x${n}` : ""}`, valor: n * s.preco, nivel: 1 });
-  }
-  if (p.bebida && !lataContaNoTrio(p)) out.push({ texto: `1x ${nomeBebida(p.bebida)}`, valor: precoBebida(p.bebida), nivel: 0 });
-  if (p.porcao) {
-    const po = PORCOES[p.porcao];
-    out.push({ texto: `1x ${po.nome} (a partir de)`, valor: po.preco, detalhe: po.molho, nivel: 0 });
-  }
-  return out;
+  return escolhas === compra.opcoes.length ? preco : null;
 }
 
-/** Total do pedido, em centavos. */
-export function totalDoPedido(p: Pedido) {
-  return linhasDoPedido(p).reduce((s, l) => s + l.valor, 0);
+export function produtoPadrao(produto: ProdutoPublicado): CompraProduto {
+  return {
+    tipo: "produto", id: produto.id,
+    variante: produto.variants.find(v => v.available)?.id ?? null,
+    opcoes: produto.optionGroups.flatMap(g => g.options.filter(o => o.available).slice(0, g.min).map(o => o.id)),
+  };
 }
 
-/** "R$ 54,90" (espaço comum, sem milhar: os pedidos do protótipo não passam de R$ 999). */
-export function brl(c: number) {
-  const r = Math.round(c);
-  return `R$ ${Math.floor(r / 100)},${String(r % 100).padStart(2, "0")}`;
+function escolher(produto: ProdutoPublicado | undefined, referencia: string) {
+  return produto?.optionGroups.find(grupo => grupo.reference === referencia)?.options.filter(opcao => opcao.available) ?? [];
 }
 
-/** Texto do pedido, copiado no "Copiar pedido" e ao tocar em "Pedir no Anota AI". */
-export function textoDoPedido(p: Pedido) {
-  const linhas = linhasDoPedido(p).map((l) => {
-    const recuo = l.nivel ? "      " : "   ";
-    let s = `${l.nivel ? "   " : ""}${l.texto}: ${brl(l.valor)}`;
-    if (l.detalhe) s += `\n${recuo}(${l.detalhe})`;
-    if (l.obs) s += `\n${recuo}${l.obs}`;
-    return s;
+export function criarCardapio(publicacao: PublicacaoAlhoaria) {
+  const produtosAtivos = publicacao.products.filter(produto => produto.available).sort((a, b) => a.sortOrder - b.sortOrder);
+  const porReferencia = new Map(produtosAtivos.map(produto => [produto.reference, produto]));
+  const personalizacao = porReferencia.get("personalizacao");
+  const OPCOES = tabela(ORDEM_GRUPOS.map(grupo => [grupo, escolher(personalizacao, grupo).flatMap(opcao => {
+    if (!opcao.reference) return [];
+    const texto = PREFIXOS_OPCAO[grupo] + (grupo === "queijo" ? opcao.name : opcao.name.toLocaleLowerCase("pt-BR"));
+    return [{ id: opcao.reference, nome: opcao.name, sub: "", texto, preco: opcao.priceCents }];
+  })] as const));
+  const OPCOES_PADRAO = tabela(ORDEM_GRUPOS.map(g => [g, OPCOES[g][0]?.id ?? (g === "pao" ? null : "sem")] as const));
+  const temIngredientes3D = ORDEM_GRUPOS.every(grupo =>
+    OPCOES[grupo].length > 0 && OPCOES[grupo].every(opcao => OPCOES_VISUAIS[grupo].includes(opcao.id)),
+  );
+  const lanches = produtosAtivos.flatMap(p => {
+    if (!contem(LANCHES_3D, p.reference)) return [];
+    return [{ id: p.reference, nome: p.name, descricao: p.description, foto: p.photos[0]?.url ?? "",
+      preco: p.priceCents, experiencia3D: p.reference === "dogalho" || temIngredientes3D }];
   });
-  return [`Olá! Quero fazer este pedido, montado no site de ${restaurante.nome}:`, ...linhas, `Total: ${brl(totalDoPedido(p))}`].join("\n");
+  const LANCHES_PRECO = tabela(lanches.map(lanche => [lanche.id, lanche] as const));
+  const produtos = produtosAtivos.filter(p => !p.reference || !REFERENCIAS_DE_MONTAGEM.has(p.reference));
+  const produtoPorId = new Map(produtos.map(p => [p.id, p]));
+
+  function itensExtras<T extends string>(grupo: string, limites: Record<T, number>) {
+    return tabela(escolher(personalizacao, grupo).flatMap(o => {
+      if (!o.reference || !Object.hasOwn(limites, o.reference)) return [];
+      const id = o.reference as T;
+      return [[id, { nome: o.name, curto: o.name, preco: o.priceCents, max: limites[id] }] as const];
+    }));
+  }
+  const adicionais = itensExtras("adicionais", LIMITES_ADICIONAIS);
+  const SEPARADOS = itensExtras("separados", LIMITES_SEPARADOS);
+  const ORDEM_ADICIONAIS = Object.keys(adicionais) as AdicionalId[];
+  const ORDEM_SEPARADOS = Object.keys(SEPARADOS) as SeparadoId[];
+  const ADICIONAIS = { ...adicionais, "queijo-dobro": adicionais["queijo-dobro"] ?? { nome: "Queijo em dobro", curto: "Queijo em dobro", preco: 0, max: 0 } };
+  const POTINHOS = ORDEM_ADICIONAIS.filter(id => id !== "queijo-dobro");
+  const lata = porReferencia.get("bebida-lata");
+  const avulsa = porReferencia.get("bebida-lata-avulsa");
+  const sabores = Object.keys(CORES_LATAS) as SaborLata[];
+  const SABORES_LATA = tabela((lata?.variants ?? []).flatMap(v => {
+    if (!v.available || !contem(sabores, v.reference)) return [];
+    return [[v.reference, { nome: v.label, preco: v.priceCents, cor: CORES_LATAS[v.reference] }] as const];
+  }));
+  const avulsas = tabela(escolher(avulsa, "sabores").flatMap(o => {
+    if (!avulsa || !contem(sabores, o.reference)) return [];
+    return [[o.reference, { nome: o.name, preco: avulsa.priceCents + o.priceCents }] as const];
+  }));
+  const ORDEM_SABORES_LATA = Object.keys(SABORES_LATA) as SaborLata[];
+  const SABORES_LATA_AVULSA = Object.keys(avulsas) as SaborLata[];
+  const bebidas = SABORES_LATA_AVULSA.map(sabor => ({ id: "lata", sabor }) as const);
+  const bebidasJunto = ORDEM_SABORES_LATA.map(sabor => ({ id: "lata", sabor }) as const);
+  const ORDEM_BEBIDAS: BebidaId[] = ORDEM_SABORES_LATA.length ? ["lata"] : [];
+  const BEBIDAS = {
+    lata: { nome: lata?.name ?? "", curto: "Refri lata", preco: lata?.priceCents ?? 0 },
+    chopp: { nome: "", curto: "", preco: 0 },
+    soda: { nome: "", curto: "", preco: 0 },
+  };
+  const SABORES_SODA = { "maca-verde": { nome: "", cor: "#8fcf3c" }, "frutas-vermelhas": { nome: "", cor: "#b5193a" } };
+  const ORDEM_SABORES_SODA: SaborSoda[] = [];
+  const PORCOES = tabela(produtosAtivos.flatMap(p => contem(PORCOES_3D, p.reference)
+    ? [[p.reference, { nome: p.name, curto: p.name, preco: p.priceCents, molho: p.description }] as const] : []));
+  const ORDEM_PORCOES = Object.keys(PORCOES) as PorcaoId[];
+  const precoLatasTrio = new Map<Trio["id"], Partial<Record<SaborLata, number>>>();
+  const TRIOS: Trio[] = TRIOS_3D.flatMap(id => {
+    const produto = porReferencia.get("trio-" + id);
+    if (!produto) return [];
+    const lanches = escolher(produto, "lanches").flatMap(o =>
+      contem(LANCHES_3D, o.reference) && LANCHES_PRECO[o.reference] ? [o.reference] : [],
+    );
+    const latas = escolher(produto, "latas").flatMap(o => contem(sabores, o.reference) ? [o.reference] : []);
+    if (!lanches.length || !latas.length) return [];
+    for (const opcao of escolher(produto, "latas")) {
+      if (contem(latas, opcao.reference) && !SABORES_LATA[opcao.reference]) {
+        SABORES_LATA[opcao.reference] = { nome: opcao.name, preco: 0, cor: CORES_LATAS[opcao.reference] };
+      }
+    }
+    const acrescimo = tabela(escolher(produto, "lanches").flatMap(o => contem(lanches, o.reference) ? [[o.reference, o.priceCents] as const] : []));
+    precoLatasTrio.set(id, tabela(escolher(produto, "latas").flatMap(o => contem(latas, o.reference) ? [[o.reference, o.priceCents] as const] : [])));
+    return [{ id, nome: produto.name, preco: produto.priceCents,
+      de: produto.variants.find(v => v.reference === "preco-anterior")?.priceCents ?? produto.priceCents,
+      batata: produto.description, lanches, acrescimo, latas }];
+  });
+  const trioDe = (id: LancheId) => TRIOS.find(trio => trio.lanches.includes(id)) ?? null;
+  const precoDoTrio = (trio: Trio, id: LancheId) => trio.preco + (trio.acrescimo[id] ?? 0);
+  const opcaoDe = (grupo: GrupoOpcao, id: string | null) => OPCOES[grupo].find(o => o.id === id) ?? null;
+  const precoBebida = (b: Bebida) => b.id === "lata" ? SABORES_LATA[b.sabor]?.preco ?? 0 : 0;
+  const precoBebidaAvulsa = (b: Bebida) => b.id === "lata" ? avulsas[b.sabor]?.preco ?? 0 : 0;
+  function nomeBebida(b: Bebida, solta = false) {
+    if (b.id !== "lata") return "";
+    const nome = solta ? avulsas[b.sabor]?.nome : SABORES_LATA[b.sabor]?.nome ?? avulsas[b.sabor]?.nome;
+    return b.sabor === "pureza" ? `${nome ?? "Pureza"} lata` : `Refri lata ${nome ?? b.sabor}`;
+  }
+  function lataContaNoTrio(pedido: Pedido) {
+    const trio = pedido.combo ? trioDe(pedido.lanche) : null;
+    return !!trio && pedido.bebida?.id === "lata" && trio.latas.includes(pedido.bebida.sabor);
+  }
+  function saborDaLataDoCombo(pedido: Pedido) {
+    if (pedido.bebida?.id === "lata" && lataContaNoTrio(pedido)) return pedido.bebida.sabor;
+    const trio = trioDe(pedido.lanche);
+    return pedido.lataCombo && trio?.latas.includes(pedido.lataCombo) ? pedido.lataCombo : null;
+  }
+  function economiaDoTrio(id: LancheId, sabor: SaborLata | null) {
+    const trio = trioDe(id);
+    const lanche = LANCHES_PRECO[id];
+    if (!trio || !lanche) return 0;
+    const precoLata = (sabor ? SABORES_LATA[sabor]?.preco : undefined) ?? BEBIDAS.lata.preco;
+    return lanche.preco + (PORCOES.batata?.preco ?? 0) + precoLata - precoDoTrio(trio, id);
+  }
+  function textoDasOpcoes(opcoes: Opcoes) {
+    return ORDEM_GRUPOS.flatMap(grupo => {
+      if (opcoes[grupo] === "sem" && grupo !== "pao") return [SEM_OPCAO[grupo].texto];
+      const opcao = opcaoDe(grupo, opcoes[grupo]);
+      return opcao ? [opcao.texto] : [];
+    }).join(" · ");
+  }
+  function pedidoPadrao(id: LancheId): Pedido {
+    return { ...novoPedido(id), opcoes: id === "dogalho" ? null : { ...OPCOES_PADRAO } };
+  }
+  function pedidoDaURL(q: URLSearchParams, id: LancheId) {
+    const pedido = novoPedido(id);
+    if (pedido.opcoes) for (const grupo of ORDEM_GRUPOS) {
+      const valor = q.get(grupo);
+      if (opcaoDe(grupo, valor) || (grupo !== "pao" && valor === "sem")) pedido.opcoes[grupo] = valor;
+    }
+    const sabor = q.get("sabor");
+    if (q.get("bebida") === "lata" && contem(ORDEM_SABORES_LATA, sabor)) pedido.bebida = { id: "lata", sabor };
+    const porcao = q.get("porcao");
+    if (contem(ORDEM_PORCOES, porcao)) pedido.porcao = porcao;
+    for (const id of ORDEM_ADICIONAIS) {
+      const n = Number(q.get(`adicional.${id}`));
+      if (Number.isInteger(n) && n > 0 && n <= ADICIONAIS[id].max) pedido.adicionais[id] = n;
+    }
+    for (const id of ORDEM_SEPARADOS) {
+      const n = Number(q.get(`separado.${id}`));
+      if (Number.isInteger(n) && n > 0 && n <= SEPARADOS[id].max) pedido.separados[id] = n;
+    }
+    const trio = trioDe(id);
+    const lataCombo = q.get("lataCombo");
+    pedido.combo = !!trio && q.get("combo") === "1";
+    if (trio && contem(trio.latas, lataCombo)) pedido.lataCombo = lataCombo;
+    return pedido;
+  }
+  function linhasDoPedido(pedido: Pedido): Linha[] {
+    const lanche = LANCHES_PRECO[pedido.lanche];
+    if (!lanche) return [];
+    const trio = pedido.combo ? trioDe(pedido.lanche) : null;
+    const obs = pedido.opcoes ? textoDasOpcoes(pedido.opcoes) || undefined : undefined;
+    const linhas: Linha[] = [];
+    if (trio) {
+      const sabor = saborDaLataDoCombo(pedido);
+      const lata = sabor ? nomeBebida({ id: "lata", sabor }) : "refri lata (falta o sabor)";
+      const acrescimo = sabor ? precoLatasTrio.get(trio.id)?.[sabor] ?? 0 : 0;
+      linhas.push({ texto: `1x ${trio.nome}`, valor: precoDoTrio(trio, pedido.lanche) + acrescimo, detalhe: `${lanche.nome} + ${trio.batata} + ${lata}`, obs, nivel: 0 });
+    } else linhas.push({ texto: `1x ${lanche.nome}`, valor: lanche.preco, obs, nivel: 0 });
+    if (pedido.opcoes) for (const grupo of ORDEM_GRUPOS) {
+      const opcao = opcaoDe(grupo, pedido.opcoes[grupo]);
+      if (opcao?.preco) linhas.push({ texto: `+ ${opcao.nome}`, valor: opcao.preco, nivel: 1 });
+    }
+    for (const id of ORDEM_ADICIONAIS) {
+      const item = ADICIONAIS[id];
+      const n = Math.min(item.max, pedido.adicionais[id] ?? 0);
+      if (n > 0) linhas.push({ texto: `+ ${item.nome}${n > 1 ? ` x${n}` : ""}`, valor: n * item.preco, nivel: 1 });
+    }
+    for (const id of ORDEM_SEPARADOS) {
+      const item = SEPARADOS[id];
+      const n = Math.min(item.max, pedido.separados[id] ?? 0);
+      if (n > 0) linhas.push({ texto: `+ ${item.nome} (separado)${n > 1 ? ` x${n}` : ""}`, valor: n * item.preco, nivel: 1 });
+    }
+    if (pedido.bebida?.id === "lata" && SABORES_LATA[pedido.bebida.sabor] && !lataContaNoTrio(pedido)) {
+      linhas.push({ texto: `1x ${nomeBebida(pedido.bebida)}`, valor: precoBebida(pedido.bebida), nivel: 0 });
+    }
+    const porcao = pedido.porcao && PORCOES[pedido.porcao];
+    if (porcao) linhas.push({ texto: `1x ${porcao.nome} (a partir de)`, valor: porcao.preco, detalhe: porcao.molho, nivel: 0 });
+    return linhas;
+  }
+  const totalDoPedido = (p: Pedido) => linhasDoPedido(p).reduce((s, l) => s + l.valor, 0);
+  function textoDoPedido(p: Pedido) {
+    const linhas = linhasDoPedido(p).flatMap(l => [
+      `${l.nivel ? "   " : ""}${l.texto}: ${brl(l.valor)}`,
+      ...(l.detalhe ? [`   (${l.detalhe})`] : []),
+      ...(l.obs ? [`   ${l.obs}`] : []),
+    ]);
+    return [`Olá! Quero fazer este pedido, montado no site de ${publicacao.company.brandName}:`, ...linhas, `Total: ${brl(totalDoPedido(p))}`].join("\n");
+  }
+  return {
+    companyId: publicacao.company.id, publicationId: publicacao.publicationId, publishedAt: publicacao.publishedAt,
+    lanches, produtos, produtoPorId, bebidas, bebidasJunto, brl, pedidoPadrao, pedidoDaURL, produtoPadrao, precoProduto,
+    AVISO: "Preços do cardápio publicado. Valor final e entrega são confirmados pela loja.",
+    ADICIONAIS, BEBIDAS, LANCHES_PRECO, OPCOES, OPCOES_PADRAO, ORDEM_ADICIONAIS, ORDEM_BEBIDAS,
+    ORDEM_GRUPOS, ORDEM_PORCOES, ORDEM_SABORES_LATA, ORDEM_SABORES_SODA, ORDEM_SEPARADOS, PORCOES, POTINHOS, SABORES_LATA,
+    SABORES_SODA, SABORES_LATA_AVULSA, SEM_OPCAO, SEPARADOS, economiaDoTrio, lataContaNoTrio, linhasDoPedido, novoPedido,
+    opcaoDe, precoBebida, precoBebidaAvulsa, nomeBebida, precoDoTrio, saborDaLataDoCombo, textoDasOpcoes, textoDoPedido,
+    totalDoPedido, trioDe,
+  };
 }
 
+export type CardapioAlhoaria = ReturnType<typeof criarCardapio>;
