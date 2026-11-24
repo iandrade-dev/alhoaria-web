@@ -7,8 +7,9 @@ import { restaurante } from "@/data/restaurante";
 import BotaoSacola from "./pedido/BotaoSacola";
 
 export default function Header() {
-  // O modo garçom é da equipe: sem a navegação pública nem a sacola do cliente.
-  if (usePathname()?.startsWith("/garcom")) return null;
+  const caminho = usePathname();
+  // A bancada usa os próprios controles, incluindo a mesma sacola do restante do site.
+  if (caminho?.startsWith("/garcom") || caminho === "/bancada" || caminho === "/ar") return null;
   return (
     <header className="fixed inset-x-0 top-0 z-50 h-16 sm:h-[72px] border-b border-carvao-borda bg-carvao">
       <div className="mx-auto flex h-full max-w-7xl items-center justify-between gap-2 px-4 sm:px-6 lg:px-8">

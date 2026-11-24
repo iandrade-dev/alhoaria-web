@@ -7,17 +7,17 @@ Landing de uma página para a Alhoaria, lanchonete de Palhoça/SC com lanches no
 `/pedir` oferece a escolha inicial entre cardápio simples (`/cardapio`) e experiência 3D (`/bancada`).
 A mesma sacola aceita vários lanches personalizados, bebidas e porções avulsas, com quantidade,
 edição, remoção e recuperação local após recarregar. Adicionar um lanche na bancada libera a escolha do próximo.
-O modo simples não monta um canvas 3D. Falhas de WebGL ou de carregamento oferecem recuperação nele.
+O modo simples não carrega a cena 3D. Se WebGL falhar, a própria bancada oferece montagem por fotos.
 
 Identidade, cores, domínio, unidades e destino do checkout ficam em `src/data/restaurante.ts`.
 O catálogo simples, o 3D, o AR e o modo garçom usam a publicação ativa da empresa no painel.
 O checkout externo pode ser trocado por WhatsApp
 em `src/lib/checkout.ts`. No Anota AI, a pessoa precisa refazer o pedido: não há transferência automática.
-As rotas importam `Bancada` de `@cardapios/bancada-3d/react` e fornecem as receitas,
-o cardápio e as ações da sacola. A renderização, as animações e os modelos vêm do
+As rotas importam `Bancada` de `@cardapios/bancada-3d/react`, passam a publicação
+do painel e ligam o resultado à sacola. A interface, as receitas visuais, as animações e os modelos vêm do
 [repositório compartilhado da bancada](https://github.com/iandrade-dev/bancada-3d).
 O desenvolvimento e o build materializam as versões instaladas dos modelos em `public/`.
-O GitHub Releases deste site distribui os pacotes da Alhoaria.
+O GitHub Releases deste site distribui o pacote de código usado também pelo Strawberry e os modelos para a Alhoaria.
 
 A home começa com foto e conteúdo renderizado no servidor. O vídeo principal só carrega ao tocar
 em “Ver a história do lanche”. A faixa de montagem usa imagem em economia de dados/aparelhos modestos;

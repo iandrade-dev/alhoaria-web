@@ -1,18 +1,9 @@
 import type { Metadata } from "next";
-import { CatalogoDaRota } from "@/components/CatalogoProvider";
-import Prototipo from "@/components/bancada-proto/Prototipo";
-import { criarCardapio } from "@/components/bancada-proto/cardapio";
 import { restaurante } from "@/data/restaurante";
-import { carregarPublicacao } from "@/lib/catalogo-publicado";
 import { metadataDaPagina } from "@/lib/seo";
-import { redirect } from "next/navigation";
+export { default } from "../bancada/page";
 
 export const metadata: Metadata = {
   ...metadataDaPagina(`Na sua mesa — ${restaurante.nome}`, "Monte seu lanche em realidade aumentada e guarde na mesma sacola do cardápio simples.", "/ar"),
   robots: { index: false, follow: true },
 };
-export default async function PaginaAR() {
-  const publicacao = await carregarPublicacao();
-  if (!restaurante.experiencias.montagem3D || !publicacao || !criarCardapio(publicacao).lanches.some((produto) => produto.experiencia3D)) redirect("/cardapio");
-  return <><CatalogoDaRota publicacao={publicacao} /><Prototipo /></>;
-}

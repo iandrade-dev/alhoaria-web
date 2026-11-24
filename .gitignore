@@ -2,6 +2,7 @@
 /node_modules
 /public/assets/models/bancada/
 /public/assets/bancada/
+/public/assets/strawberry-bancada/
 /public/draco/
 /.pnp
 .pnp.js

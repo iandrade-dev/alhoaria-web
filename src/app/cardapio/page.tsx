@@ -1,3 +1,4 @@
+import { catalogoDaBancadaAlhoaria } from "@cardapios/bancada-3d/react/alhoaria";
 import Image from "next/image";
 import Link from "next/link";
 import { CatalogoDaRota } from "@/components/CatalogoProvider";
@@ -13,6 +14,7 @@ export const metadata = metadataDaPagina(`Cardápio — ${restaurante.nome}`, "E
 export default async function PaginaCardapio({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const publicacao = await carregarPublicacao();
   const cardapio = publicacao ? criarCardapio(publicacao) : null;
+  const montagem = publicacao && restaurante.experiencias.montagem3D ? catalogoDaBancadaAlhoaria(publicacao) : null;
   const q = new URLSearchParams();
   for (const [nome, valor] of Object.entries(await searchParams)) for (const item of Array.isArray(valor) ? valor : valor === undefined ? [] : [valor]) q.append(nome, item);
   return <div className={styles.page}><div className={styles.inner}>
@@ -24,7 +26,7 @@ export default async function PaginaCardapio({ searchParams }: { searchParams: P
       : !publicacao.products.some((produto) => produto.available) ? <p className={styles.notice}>Nenhum item disponível no cardápio no momento.</p>
       : <CardapioRapido consulta={q.toString()}>{cardapio.lanches.map((produto) => <article className={styles.card} key={produto.id} data-busca={`${produto.nome} ${produto.descricao}`}>
       {produto.foto && <Image unoptimized src={produto.foto} alt={produto.nome} width={600} height={400} sizes="(max-width: 600px) 105px, (max-width: 1000px) 45vw, 340px" className={styles.photo} />}
-      <div className={styles.cardBody}><h3>{produto.nome}</h3><p className={styles.description}>{produto.descricao}</p><p className={styles.price}>{brl(produto.preco)}</p><AcoesLanche id={produto.id} />{produto.experiencia3D && restaurante.experiencias.montagem3D && <Link href={`/bancada?lanche=${produto.id}`} prefetch={false} className={styles.textButton}>Montar na experiência 3D</Link>}</div>
+      <div className={styles.cardBody}><h3>{produto.nome}</h3><p className={styles.description}>{produto.descricao}</p><p className={styles.price}>{brl(produto.preco)}</p><AcoesLanche id={produto.id} />{montagem?.produtoPorReferencia(produto.id) && <Link href={`/bancada?lanche=${produto.id}`} prefetch={false} className={styles.textButton}>Montar na experiência 3D</Link>}</div>
     </article>)}</CardapioRapido>}
     {publicacao && <noscript><p className={styles.notice}>Ative o JavaScript para personalizar e usar a sacola.</p></noscript>}
   </div></div>;
